@@ -1,0 +1,3 @@
+{
+  "functions": { "api/youtube-signals.js": { "maxDuration": 10 } }
+}
