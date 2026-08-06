@@ -28,7 +28,7 @@
   <section id="compare" class="card compare"><div class="compare-head"><div><h2>低粉爆款赛道对比</h2><p>保存当前筛选结果，在这台设备上比较赛道的百万、千万、亿级爆款密度。</p></div><button id="clearComparison" class="secondary">清空对比</button></div><div id="comparisonRows"></div></section>
 </main><script src="config.js"></script><script>
   const endpoint=window.YOUTUBE_ANALYZER_API_URL,$=id=>document.getElementById(id),nf=new Intl.NumberFormat('zh-CN');
-  const compact=n=>n>=1e9?`${(n/1e9).toFixed(1)}亿`:n>=1e8?`${(n/1e8).toFixed(1)}亿`:n>=1e4?`${(n/1e4).toFixed(1)}万`:nf.format(n);
+  const compact=n=>n>=1e8?`${(n/1e8).toFixed(1)}亿`:n>=1e4?`${(n/1e4).toFixed(1)}万`:nf.format(n);
   const escapeText=value=>String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const score=(name,value)=>`<div class="scoreline"><span>${name}</span><div class="track"><div class="fill" style="width:${value*10}%"></div></div><b>${value}/10</b></div>`;
   function renderLane(listId,countId,items,message){$(countId).textContent=`${items.length} / 10`;$(listId).innerHTML=items.map((item,index)=>`<a class="opp" href="${item.videoUrl}" target="_blank" rel="noreferrer"><img src="${item.thumbnail}" alt="${escapeText(item.title)}"><span class="rank">#${index+1}</span><span class="viral">${item.viralLabel}</span><div class="opp-body"><div class="opp-title">${escapeText(item.title)}</div><div class="opp-channel">${escapeText(item.channelTitle)} · 订阅 ${compact(item.subscribers)}</div><div class="opp-stats"><span>◉ ${compact(item.views)} · ${item.ageDays} 天前</span><span class="signal">${item.breakoutRatio.toFixed(1)}×</span></div></div></a>`).join('')||`<p class="empty">${escapeText(message)}</p>`}
