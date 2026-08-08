@@ -1,7 +1,7 @@
 import type { Channel, Video } from './types';
 
 type ApiOpportunity = {
-  title:string; channelTitle:string; thumbnail?:string; views:number; subscribers:number;
+  title:string; channelTitle:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
   format:'short'|'long'; breakoutRatio?:number; viralLabel?:string;
 };
@@ -32,7 +32,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;w
     const channelId=`yt-channel-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
     channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',subscribers:item.subscribers,language:input.language==='all'?'英语':input.language,region:'美国',medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
-    return {id:`yt-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:input.query,language:input.language==='all'?'英语':input.language,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail:item.thumbnail||'',publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    return {id:`yt-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:input.query,language:input.language==='all'?'英语':input.language,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail:item.thumbnail||'',sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
   return {videos,channels,requestedDays:payload.recentDays||days};
 }
