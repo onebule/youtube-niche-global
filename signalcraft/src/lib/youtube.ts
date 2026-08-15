@@ -16,6 +16,7 @@ type ApiResponse = {
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
+const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
@@ -36,7 +37,8 @@ export async function searchYouTubeSignals(input:{query:string;language:string;w
     const channelId=`yt-channel-${bucket}-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
     channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',subscribers:item.subscribers,language:input.language==='all'?'英语':input.language,region:'美国',medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
-    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:input.query,language:input.language==='all'?'英语':input.language,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail:item.thumbnail||'',sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
+    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:input.query,language:input.language==='all'?'英语':input.language,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
   return {videos,channels,requestedDays:payload.recentDays||days};
 }
