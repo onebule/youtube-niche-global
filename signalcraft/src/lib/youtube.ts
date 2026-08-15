@@ -19,11 +19,12 @@ const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;window:string;maxSubscribers?:string;format?:'short'|'long'}){
+export async function searchYouTubeSignals(input:{query:string;language:string;window:string;maxSubscribers?:string;format?:'short'|'long';ranking?:boolean}){
   const days = input.window==='24h'?1:input.window==='7d'?7:28;
   const maxSubscribers=input.maxSubscribers==='all'?'10000000':input.maxSubscribers||'100000';
   const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region:'US',recentDays:String(days),maxSubscribers});
   if(input.format) params.set('format',input.format);
+  if(input.ranking) params.set('ranking','1');
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json'}});
   const payload=await response.json() as ApiResponse;
   if(!response.ok) throw new Error(payload.error||'YouTube 公开数据请求失败。');
