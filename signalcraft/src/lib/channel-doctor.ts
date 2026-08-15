@@ -1,4 +1,4 @@
-export type DoctorStatus = 'suspected_healthy' | 'needs_attention' | 'insufficient_data';
+export type DoctorStatus = 'healthy' | 'warning' | 'critical' | 'insufficient_data';
 
 export type DoctorFinding = {
   id:string;
@@ -13,13 +13,18 @@ export type DoctorFinding = {
 
 export type ChannelDoctorReport = {
   mode:'public';
-  channel:{id:string;title:string;handle?:string;thumbnail?:string;subscriberCount:number;videoCount:number;viewCount:number};
+  channel:{id:string;title:string;handle?:string;thumbnail?:string;subscriberCount:number;videoCount:number;viewCount:number;createdAt?:string;latestPublishedAt?:string};
   summary:{healthSignalScore:number;confidence:number;status:DoctorStatus;primaryFinding:string};
-  metrics:{sampleSize:number;medianViews:number;recentMedianViews?:number;previousMedianViews?:number;trendPercent?:number;volatility?:number;breakoutRate?:number;postingIntervalDays?:number;engagementRate?:number;topicConsistency?:number};
+  metrics:{sampleSize:number;medianViews:number;recentMedianViews?:number;previousMedianViews?:number;trendPercent?:number;volatility?:number;breakoutRate?:number;postingIntervalDays?:number;engagementRate?:number;topicConsistency?:number;normalLow?:number;normalHigh?:number};
+  dimensions?:{traffic:number;recentPerformance:number;publishingStability:number;growthTrend:number;distribution:number};
+  zeroView?:{scope:number;zeroViews:number;veryLowViews:number;belowNormal:number;consecutiveLow:number;status:'normal'|'watch'|'critical'};
+  timeline?:{date:string;deviation:number;label:string}[];
+  diagnosis?:string;
+  recommendations?:{priority:'高'|'中'|'低';title:string;body:string}[];
   funnel:{key:string;label:string;status:'ok'|'watch'|'unknown';reason:string}[];
   findings:DoctorFinding[];
   topicClusters:{name:string;count:number;percent:number}[];
-  videos:{id:string;title:string;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long';thumbnail?:string;url?:string}[];
+  videos:{id:string;title:string;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long';thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
   dataLimitations:string[];
   oauthAvailable:boolean;
 };
