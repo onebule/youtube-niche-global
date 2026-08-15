@@ -61,7 +61,10 @@ function Discovery({mode,state,setState,openDetail}:{mode:'discover'|'rankings'|
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState('');
   const didLoadLive=useRef(false);
-  const source=remote||videos;
+  // The radar is a real-data surface. Never silently replace a failed API
+  // response with attractive demo cards, otherwise users cannot tell that
+  // the current YouTube quota or query has no usable samples.
+  const source=mode==='radar'?(remote||[]):(remote||videos);
   const runSearch=async()=>{
     if(!filters.q.trim()){setRemote(null);setError('请先输入关键词，例如 AI productivity。');return;}
     setLoading(true);setError('');
