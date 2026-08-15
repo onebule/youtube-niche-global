@@ -1,7 +1,7 @@
 import type { Channel, Video } from './types';
 
 type ApiOpportunity = {
-  title:string; topic?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
+  title:string; topic?:string; languageCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
   format:'short'|'long'; breakoutRatio?:number; viralLabel?:string;
 };
@@ -15,6 +15,7 @@ type ApiResponse = {
 };
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
+const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
 const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
 const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
 
@@ -39,9 +40,10 @@ export async function searchYouTubeSignals(input:{query:string;language:string;w
     const bucket=input.format||'all';
     const channelId=item.channelId||`yt-channel-${bucket}-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
-    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:input.language==='all'?'英语':input.language,region:'美国',medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
+    const videoLanguage=displayLanguage(item.languageCode);
+    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:'美国',medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
-    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:input.language==='all'?'英语':input.language,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
   return {videos,channels,requestedDays:payload.recentDays||days};
 }
