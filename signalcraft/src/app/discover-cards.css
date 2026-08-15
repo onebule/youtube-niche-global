@@ -1,0 +1,26 @@
+/* Discovery opportunity cards: keep the signal readable without covering the video. */
+.video-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 18px; }
+.video-card { border: 1px solid #e2e5ea; border-radius: 20px; background: #fff; box-shadow: 0 2px 10px rgba(18, 24, 38, .035); }
+.video-card:hover { transform: translateY(-3px); border-color: #ffbcb8; box-shadow: 0 16px 34px rgba(24, 26, 35, .10); }
+.thumb { height: 210px; padding: 12px; display: flex; align-items: flex-start; justify-content: space-between; isolation: isolate; background-position: center; background-size: cover; }
+.thumb:after { height: 34%; background: linear-gradient(180deg, transparent 12%, rgba(9, 13, 20, .44)); }
+.thumb > i { display: none !important; }
+.thumb > img { filter: none !important; transition: transform .35s ease; }
+.video-card:hover .thumb > img { transform: scale(1.035); }
+.thumb > span { min-height: 32px; display: inline-flex; align-items: center; border-radius: 9px; }
+.thumb > span:first-of-type { padding: 0 10px; background: rgba(16, 21, 29, .78); color: #fff; border-color: rgba(255,255,255,.25); font-size: 12px; letter-spacing: 0; }
+.thumb > span:nth-of-type(2) { margin-left: auto; border: 0; background: transparent; backdrop-filter: none; }
+.thumb .score { min-width: 64px; min-height: 42px; padding: 0 9px; border: 1px solid rgba(255,255,255,.84); border-radius: 10px; background: rgba(255,255,255,.96); box-shadow: 0 6px 18px rgba(9, 13, 20, .14); font-size: 16px; }
+.card-body { padding: 15px 16px 16px; }
+.card-body .eyebrow { margin-bottom: 8px; color: #ef302a; font-size: 10px; font-weight: 800; letter-spacing: .7px; }
+.video-title { min-height: 48px; margin: 0 0 8px; font-size: 17px; line-height: 1.42; letter-spacing: -.3px; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.channel-line { margin: 0; padding-bottom: 13px; border-bottom: 1px solid #edf0f3; font-size: 13px; color: #6f7784; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric-row { margin-top: 11px; gap: 8px; }
+.metric-row b { font-size: 18px; }
+.metric-row small { margin-top: 2px; font-size: 11px; }
+.metric-row .spark { color: #ff362e; }
+.card-actions { margin-top: 12px; gap: 8px; }
+.card-actions button { min-height: 40px; border-radius: 10px; font-size: 13px; }
+@media (max-width: 640px) { .video-grid { grid-template-columns: 1fr; gap: 14px; } .thumb { height: 208px; } .card-body { padding: 14px; } }
+[data-theme="dark"] .video-card { border-color: #4d3035; box-shadow: none; }
+[data-theme="dark"] .channel-line { border-color: #39272b; }
