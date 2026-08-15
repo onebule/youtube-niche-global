@@ -23,7 +23,10 @@ const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnai
 export async function searchYouTubeSignals(input:{query:string;language:string;window:string;maxSubscribers?:string;format?:'short'|'long';ranking?:boolean}){
   const days = input.window==='24h'?1:input.window==='7d'?7:28;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
-  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region:'US',recentDays:String(days),maxSubscribers});
+  // A 1M-view floor made newer, smaller channels disappear before the
+  // opportunity score could evaluate them. Keep the public sample broad,
+  // then let the UI's channel-size and score filters do the ranking.
+  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region:'US',recentDays:String(days),maxSubscribers,minimumViews:'10000'});
   if(input.format) params.set('format',input.format);
   if(input.ranking) params.set('ranking','1');
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json'}});
