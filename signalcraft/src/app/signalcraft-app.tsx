@@ -40,9 +40,9 @@ function DetailDrawer({video,state,setState,onClose,toast}:{video:Video;state:Pe
 
 function DemoDiscovery({mode,state,setState,openDetail}:{mode:'discover'|'rankings'|'radar';state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;openDetail:(v:Video)=>void}){const [filters,setFilters]=useState(()=>typeof window==='undefined'?parseFilters(''):parseFilters(location.search));const [page,setPage]=useState(1);const rows=useMemo(()=>videos.filter(v=>{const o=scoreFor(v),c=channelFor(v),text=`${v.title} ${v.topic} ${v.tags.join(' ')}`.toLowerCase();return (!filters.q||text.includes(filters.q.toLowerCase()))&&(filters.language==='all'||v.language===filters.language)&&(filters.format==='all'||v.format===filters.format)&&(filters.maxSubs==='all'||c.subscribers<=Number(filters.maxSubs))&&o.opportunityScore>=Number(filters.minScore)}).sort((a,b)=>mode==='rankings'?b.snapshots.at(-1)!.views-a.snapshots.at(-1)!.views:scoreFor(b).opportunityScore-scoreFor(a).opportunityScore),[filters,mode]);const clusters=useMemo(()=>Object.entries(rows.reduce<Record<string,Video[]>>((acc,v)=>{(acc[v.topic]??=[]).push(v);return acc},{})),[rows]);if(mode==='radar')return <main className="page"><PageIntro label="机会雷达" title="不是更多卡片，而是可行动的机会簇" body="按新出现、加速中、低粉爆发和可复刻形式组织样本；每个结论都能回到证据。"/><Filters filters={filters} setFilters={setFilters}/><div className="radar-tabs"><button className="active">加速中</button><button>新出现</button><button>低粉爆发</button><button>可复刻形式</button></div><div className="cluster-list">{clusters.map(([topic,items])=>{const avg=Math.round(items.reduce((n,v)=>n+scoreFor(v).opportunityScore,0)/items.length);return <section className="cluster" key={topic}><div className="cluster-head"><div><span className="eyebrow">机会簇</span><h2>{topic}</h2><p>{items.length} 个样本 · 平均机会评分 {avg} · 以 {items[0].format==='short'?'短视频钩子':'长视频结构'} 为主</p></div><ScorePill value={avg}/></div><div className="cluster-evidence"><b>共同模式</b><span>{items.slice(0,3).map(v=>v.tags[0]).join(' · ')}</span><button onClick={()=>openDetail(items[0])}>查看证据链 →</button></div><div className="mini-grid">{items.slice(0,3).map(v=><VideoCard key={v.id} video={v} state={state} setState={setState} onDetail={openDetail}/>)}</div></section>})}</div></main>;return <main className="page"><PageIntro label={mode==='rankings'?'排行榜':'公开发现'} title={mode==='rankings'?'按信号强度筛出值得研究的样本':'今天值得关注的公开信号'} body="使用可分享筛选器，先找低订阅、高增长，再决定是否深入跟进。"/><Filters filters={filters} setFilters={setFilters}/><div className="result-toolbar"><span>找到 <b>{rows.length}</b> 个样本</span><span>排序：{mode==='rankings'?'播放量':'机会评分'}</span><button onClick={()=>navigator.clipboard?.writeText(location.href)}>复制筛选链接</button></div>{rows.length?<div className="video-grid">{rows.slice(0,page*6).map(v=><VideoCard key={v.id} video={v} state={state} setState={setState} onDetail={openDetail}/>)}</div>:<Empty title="没有符合条件的样本" body="放宽评分或频道规模后再试。"/>}{mode!=='rankings'&&rows.length>page*6&&<button className="load-more" onClick={()=>setPage(p=>p+1)}>加载更多样本</button>}</main>}
 
-function RankingBoard({rows,state,setState,onDetail}:{rows:Video[];state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;onDetail:(v:Video)=>void}){
-  const longVideos=rows.filter(video=>video.format==='long').slice(0,10);
-  const shortVideos=rows.filter(video=>video.format==='short').slice(0,10);
+function RankingBoard({longRows,shortRows,onDetail}:{longRows:Video[];shortRows:Video[];onDetail:(v:Video)=>void}){
+  const longVideos=longRows.slice(0,10);
+  const shortVideos=shortRows.slice(0,10);
   const renderList=(items:Video[],format:'long'|'short')=>items.length?items.map((video,index)=>{const score=scoreFor(video),channel=channelFor(video);return <button className="ranking-row" key={video.id} onClick={()=>onDetail(video)}><span className={cn('ranking-position',index<3&&'top')}>{String(index+1).padStart(2,'0')}</span><span className="ranking-thumb" style={{backgroundImage:`url(${video.thumbnail})`}}><em>{format==='short'?'短':'长'}</em></span><span className="ranking-title"><b>{video.title}</b><small>{channel.title} · {video.topic} · {num.format(channel.subscribers)} 订阅</small></span><span className="ranking-stat"><b>{num.format(video.snapshots.at(-1)!.views)}</b><small>播放</small></span><span className="ranking-stat velocity"><b>↑ {num.format(score.viewsPerHour)}</b><small>/小时</small></span><ScorePill value={score.opportunityScore}/><span className="ranking-open">查看 →</span></button>}):<div className="ranking-empty">当前筛选范围内还没有{format==='short'?'短视频':'长视频'}样本。调整内容形态或关键词后再试。</div>;
   const section=(format:'long'|'short',items:Video[])=> <section className={cn('ranking-section',format)} key={format}><div className="ranking-section-head"><div><span className="eyebrow">TOP 10 · 公开样本</span><h2>{format==='long'?'长视频榜单':'短视频榜单'}</h2><p>{format==='long'?'适合拆解叙事、结构和选题深度。':'适合研究开头钩子、节奏和传播形式。'}</p></div><b>{items.length}<small>/10</small></b></div><div className="ranking-list">{renderList(items,format)}</div></section>;
   return <div className="ranking-board">{section('long',longVideos)}{section('short',shortVideos)}</div>
@@ -52,12 +52,13 @@ function Discovery({mode,state,setState,openDetail}:{mode:'discover'|'rankings'|
   const [filters,setFilters]=useState(()=>{const selected=typeof window==='undefined'?parseFilters(''):parseFilters(location.search);return (mode==='discover'||mode==='rankings')&&!selected.q?{...selected,q:'AI'}:selected});
   const [page,setPage]=useState(1);
   const [remote,setRemote]=useState<Video[]|null>(null);
+  const [rankingData,setRankingData]=useState<{short:Video[];long:Video[]}|null>(null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState('');
   const didLoadLive=useRef(false);
   const source=remote||videos;
   const runSearch=async()=>{
-    if(!filters.q.trim()){setError('请先输入关键词，例如 AI productivity。');return;}
+    if(!filters.q.trim()){setRemote(null);setError('请先输入关键词，例如 AI productivity。');return;}
     setLoading(true);setError('');
     try{
       const result=await searchYouTubeSignals({query:filters.q,language:filters.language,window:filters.window});
@@ -66,13 +67,31 @@ function Discovery({mode,state,setState,openDetail}:{mode:'discover'|'rankings'|
     }catch(reason){setError(reason instanceof Error?reason.message:'YouTube 公开数据暂时无法读取。');}
     finally{setLoading(false);}
   };
-  useEffect(()=>{if((mode!=='discover'&&mode!=='rankings')||didLoadLive.current)return;didLoadLive.current=true;void runSearch();},[mode]);
+  const runRankingSearch=async()=>{
+    const query=filters.q.trim()||'AI productivity';
+    const formats=(filters.format==='all'?['short','long']:[filters.format]) as Array<'short'|'long'>;
+    setLoading(true);setError('');
+    try{
+      const results=await Promise.all(formats.map(async format=>[format,await searchYouTubeSignals({query,language:filters.language,window:filters.window,maxSubscribers:filters.maxSubs,format})] as const));
+      const next:{short:Video[];long:Video[]}={short:[],long:[]};
+      results.forEach(([format,result])=>{
+        result.channels.forEach(channel=>{const index=channels.findIndex(item=>item.id===channel.id);if(index>=0)Object.assign(channels[index],channel);else channels.push(channel)});
+        next[format]=result.videos;
+      });
+      setRankingData(next);setRemote(null);setPage(1);
+    }catch(reason){setRankingData(null);setError(reason instanceof Error?reason.message:'YouTube 公开数据暂时无法读取。');}
+    finally{setLoading(false);}
+  };
+  useEffect(()=>{if((mode!=='discover'&&mode!=='rankings')||didLoadLive.current)return;didLoadLive.current=true;if(mode==='rankings')void runRankingSearch();else void runSearch();},[mode]);
   const rows=useMemo(()=>source.filter(v=>{
     const o=scoreFor(v),c=channelFor(v),text=`${v.title} ${v.topic} ${v.tags.join(' ')}`.toLowerCase();
     return (remote||!filters.q||text.includes(filters.q.toLowerCase()))&&(filters.language==='all'||v.language===filters.language)&&(filters.format==='all'||v.format===filters.format)&&(filters.maxSubs==='all'||c.subscribers<=Number(filters.maxSubs))&&o.opportunityScore>=Number(filters.minScore);
   }).sort((a,b)=>mode==='rankings'?b.snapshots.at(-1)!.views-a.snapshots.at(-1)!.views:scoreFor(b).opportunityScore-scoreFor(a).opportunityScore),[filters,mode,remote,source]);
+  const rankingLongRows=rankingData?.long||rows.filter(video=>video.format==='long');
+  const rankingShortRows=rankingData?.short||rows.filter(video=>video.format==='short');
+  const resultCount=mode==='rankings'?rankingLongRows.length+rankingShortRows.length:rows.length;
   if(mode==='radar') return <DemoDiscovery mode={mode} state={state} setState={setState} openDetail={openDetail}/>;
-  return <main className="page"><PageIntro label={mode==='rankings'?'排行榜':'公开发现'} title={mode==='rankings'?'按信号强度筛出值得研究的样本':'今天值得关注的公开信号'} body="可先用演示样本浏览；填写关键词后，直接查询 YouTube 公开 API。"/><Filters filters={filters} setFilters={setFilters}/><div className="result-toolbar"><span>找到 <b>{rows.length}</b> 个样本</span><span>{remote?'真实 YouTube 公开数据 · 单次快照':'演示样本'}</span><button className="primary" onClick={runSearch} disabled={loading}>{loading?'正在查询 YouTube…':'查询 YouTube 公开数据'}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}>复制筛选链接</button></div>{error&&<p className="api-error">{error}</p>}{remote&&<p className="api-note">真实 API 当前返回单次快照：播放/小时表示“发布至今平均播放”，增长趋势与置信度需持续采样后才会更准确。</p>}{mode==='rankings'?<RankingBoard rows={rows} state={state} setState={setState} onDetail={openDetail}/>:rows.length?<div className="video-grid">{rows.slice(0,page*6).map(v=><VideoCard key={v.id} video={v} state={state} setState={setState} onDetail={openDetail}/>)}</div>:<Empty title="没有符合条件的样本" body="尝试更换关键词、扩大时间窗口或放宽筛选条件。"/>}{mode!=='rankings'&&rows.length>page*6&&<button className="load-more" onClick={()=>setPage(p=>p+1)}>加载更多样本</button>}</main>
+  return <main className="page"><PageIntro label={mode==='rankings'?'排行榜':'公开发现'} title={mode==='rankings'?'按信号强度筛出值得研究的样本':'今天值得关注的公开信号'} body="可先用演示样本浏览；填写关键词后，直接查询 YouTube 公开 API。"/><Filters filters={filters} setFilters={setFilters}/><div className="result-toolbar"><span>找到 <b>{resultCount}</b> 个样本</span><span>{remote||rankingData?'真实 YouTube 公开数据 · 单次快照':'演示样本'}</span><button className="primary" onClick={mode==='rankings'?runRankingSearch:runSearch} disabled={loading}>{loading?'正在查询 YouTube…':'查询 YouTube 公开数据'}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}>复制筛选链接</button></div>{error&&<p className="api-error">{error}</p>}{(remote||rankingData)&&<p className="api-note">长视频与短视频会独立请求 YouTube 公开数据；单次快照中的播放/小时表示发布至今平均播放。</p>}{mode==='rankings'?<RankingBoard longRows={rankingLongRows} shortRows={rankingShortRows} onDetail={openDetail}/>:rows.length?<div className="video-grid">{rows.slice(0,page*6).map(v=><VideoCard key={v.id} video={v} state={state} setState={setState} onDetail={openDetail}/>)}</div>:<Empty title="没有符合条件的样本" body="尝试更换关键词、扩大时间窗口或放宽筛选条件。"/>}{mode!=='rankings'&&rows.length>page*6&&<button className="load-more" onClick={()=>setPage(p=>p+1)}>加载更多样本</button>}</main>
 }
 
 function PageIntro({label,title,body}:{label:string;title:string;body:string}){return <section className="page-intro"><span className="eyebrow">{label}</span><h1>{title}</h1><p>{body}</p></section>}
