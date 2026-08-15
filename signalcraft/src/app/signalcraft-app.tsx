@@ -54,7 +54,7 @@ function RankingBoard({longRows,shortRows,onDetail}:{longRows:Video[];shortRows:
 }
 
 function Discovery({mode,state,setState,openDetail}:{mode:'discover'|'rankings'|'radar';state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;openDetail:(v:Video)=>void}){
-  const [filters,setFilters]=useState(()=>{const selected=typeof window==='undefined'?parseFilters(''):parseFilters(location.search);if(mode==='rankings')return {...selected,q:''};return mode==='discover'&&!selected.q?{...selected,q:'AI'}:selected});
+  const [filters,setFilters]=useState(()=>{const selected=typeof window==='undefined'?parseFilters(''):parseFilters(location.search);if(mode==='rankings')return {...selected,q:'',maxSubs:'all',minScore:'0'};return mode==='discover'&&!selected.q?{...selected,q:'AI'}:selected});
   const [page,setPage]=useState(1);
   const [remote,setRemote]=useState<Video[]|null>(null);
   const [rankingData,setRankingData]=useState<{short:Video[];long:Video[]}|null>(null);
