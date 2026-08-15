@@ -16,18 +16,20 @@ type ApiResponse = {
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
+const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
 const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
 const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;window:string;maxSubscribers?:string;format?:'short'|'long';ranking?:boolean}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;format?:'short'|'long';ranking?:boolean}){
   const days = input.window==='24h'?1:input.window==='7d'?7:28;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
   // opportunity score could evaluate them. Keep the public sample broad,
   // then let the UI's channel-size and score filters do the ranking.
-  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region:'US',recentDays:String(days),maxSubscribers,minimumViews:'10000'});
+  const region=input.region||'US';
+  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews:'10000'});
   if(input.format) params.set('format',input.format);
   if(input.ranking) params.set('ranking','1');
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json'}});
@@ -41,9 +43,10 @@ export async function searchYouTubeSignals(input:{query:string;language:string;w
     const channelId=item.channelId||`yt-channel-${bucket}-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
     const videoLanguage=displayLanguage(item.languageCode);
-    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:'美国',medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
+    const market=displayRegion[region]||region;
+    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(Math.round(item.views/Math.max(item.breakoutRatio||1,1)),1),health:0,tags:['YouTube 公开数据'],owner:'未分配',lastSync:'刚刚'});
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
-    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:'美国',format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
   return {videos,channels,requestedDays:payload.recentDays||days};
 }
