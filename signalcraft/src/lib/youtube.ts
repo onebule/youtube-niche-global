@@ -23,9 +23,11 @@ const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',B
 // Some older Vercel environments still inject it, so explicitly ignore that
 // stale value instead of letting it override the verified production endpoint.
 const productionEndpoint='https://youtube-niche-global-h44ddja6n-pw820820-8728s-projects.vercel.app/api/youtube-signals';
-const configuredEndpoint=process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL;
-const endpoint=configuredEndpoint&&!/youtube-niche-global-api\.vercel\.app/i.test(configuredEndpoint)?configuredEndpoint:productionEndpoint;
-const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
+// Route browser requests through our own deployment. This removes browser CORS
+// from the equation and returns useful upstream errors instead of TypeError:
+// Failed to fetch.
+const endpoint='/api/youtube-signals';
+const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/api/thumbnail');
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
