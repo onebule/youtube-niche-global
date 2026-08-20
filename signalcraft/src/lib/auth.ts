@@ -1,7 +1,9 @@
 export type AccountSession={accessToken:string;email:string;name:string;expiresAt?:number};
 
 const key='signalcraft-auth-v1';
-const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/,'');
+// This URL is public by design. The hosted client only needs it to start the
+// OAuth redirect; it never contains a service-role key or OAuth secret.
+const supabaseUrl=(process.env.NEXT_PUBLIC_SUPABASE_URL||'https://fkapfjnecdcbggazyncb.supabase.co').replace(/\/$/,'');
 
 function payload(token:string){try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))}catch{return null}}
 
