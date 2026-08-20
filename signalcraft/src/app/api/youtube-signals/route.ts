@@ -9,12 +9,17 @@ export async function GET(request: NextRequest) {
   const target = new URL(upstream);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
   const authorization = request.headers.get('authorization');
+  const forwardedFor = request.headers.get('x-forwarded-for');
 
   try {
     const response = await fetch(target, {
       headers: {
         accept: 'application/json',
         ...(authorization ? { authorization } : {}),
+        // The quota service keys guests by IP. Preserve Vercel's original
+        // client address through this same-origin proxy so anonymous visitors
+        // do not share one server-side quota bucket.
+        ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}),
       },
       cache: 'no-store',
     });
