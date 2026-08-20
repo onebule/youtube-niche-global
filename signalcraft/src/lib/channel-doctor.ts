@@ -34,7 +34,10 @@ declare global { interface Window { YOUTUBE_ANALYZER_API_URL?:string } }
 function endpoint(){
   const configured=typeof window==='undefined'?'':window.YOUTUBE_ANALYZER_API_URL;
   if(configured?.includes('/api/youtube-signals')) return configured.replace('/api/youtube-signals','/api/channel-doctor');
-  return process.env.NEXT_PUBLIC_CHANNEL_DOCTOR_URL || 'https://youtube-niche-global-he83qxqh2-pw820820-8728s-projects.vercel.app/api/channel-doctor';
+  const configuredDoctor=process.env.NEXT_PUBLIC_CHANNEL_DOCTOR_URL;
+  return configuredDoctor&&!/youtube-niche-global-api\.vercel\.app/i.test(configuredDoctor)
+    ?configuredDoctor
+    :'https://youtube-niche-global-he83qxqh2-pw820820-8728s-projects.vercel.app/api/channel-doctor';
 }
 
 export async function diagnoseChannel(channel:string,limit=20):Promise<ChannelDoctorReport>{
