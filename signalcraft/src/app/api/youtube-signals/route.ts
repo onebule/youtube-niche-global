@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const upstream = 'https://youtube-niche-global-h44ddja6n-pw820820-8728s-projects.vercel.app/api/youtube-signals';
+const upstream = 'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
 
 export async function GET(request: NextRequest) {
   const target = new URL(upstream);

@@ -19,10 +19,10 @@ type ApiResponse = {
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
 const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
-// The historic `youtube-niche-global-api.vercel.app` alias no longer exists.
-// Some older Vercel environments still inject it, so explicitly ignore that
-// stale value instead of letting it override the verified production endpoint.
-const productionEndpoint='https://youtube-niche-global-h44ddja6n-pw820820-8728s-projects.vercel.app/api/youtube-signals';
+// Use the project alias rather than an immutable Vercel deployment URL. The
+// alias survives redeployments and is the only backend origin the frontend
+// should depend on in production.
+const productionEndpoint='https://youtube-niche-global-api.vercel.app/api/youtube-signals';
 // Route browser requests through our own deployment. This removes browser CORS
 // from the equation and returns useful upstream errors instead of TypeError:
 // Failed to fetch.

@@ -37,7 +37,7 @@ function endpoint(){
   const configuredDoctor=process.env.NEXT_PUBLIC_CHANNEL_DOCTOR_URL;
   return configuredDoctor&&!/youtube-niche-global-api\.vercel\.app/i.test(configuredDoctor)
     ?configuredDoctor
-    :'https://youtube-niche-global-h44ddja6n-pw820820-8728s-projects.vercel.app/api/channel-doctor';
+    :'https://youtube-niche-global-api.vercel.app/api/channel-doctor';
 }
 
 export async function diagnoseChannel(channel:string,limit=20):Promise<ChannelDoctorReport>{
