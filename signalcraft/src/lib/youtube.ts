@@ -19,7 +19,9 @@ type ApiResponse = {
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
 const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
-const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
+// The historic `youtube-niche-global-api.vercel.app` alias no longer exists.
+// Use the verified Production deployment unless a hosting environment overrides it.
+const endpoint = process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL || 'https://youtube-niche-global-he83qxqh2-pw820820-8728s-projects.vercel.app/api/youtube-signals';
 const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
