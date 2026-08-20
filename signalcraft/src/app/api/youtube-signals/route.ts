@@ -19,6 +19,18 @@ export async function GET(request: NextRequest) {
       cache: 'no-store',
     });
     const body = await response.text();
+    // Vercel returns a 401 JSON protection envelope when the upstream API
+    // project has Deployment Protection enabled. Surface the configuration
+    // fix directly instead of making the browser show a generic fetch error.
+    if (response.status === 401 && /Protected deployment|vercel_auth_enabled/i.test(body)) {
+      return Response.json(
+        {
+          error: '数据服务仍被 Vercel 部署保护拦截。请在后端项目 Settings → Deployment Protection 中关闭 Vercel Authentication，然后重新加载本页。',
+          code: 'BACKEND_DEPLOYMENT_PROTECTED',
+        },
+        { status: 503, headers: { 'cache-control': 'no-store' } },
+      );
+    }
     return new Response(body, {
       status: response.status,
       headers: {
