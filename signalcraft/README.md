@@ -1,19 +1,32 @@
 # SignalCraft
 
-中文优先的 YouTube 内容情报与选题决策 MVP。它用本地演示数据完整演示“公开发现 → 证据判断 → 保存/对标/监听 → 选题 → 复盘”的工作流。
+中文优先的 YouTube 内容情报与选题决策 MVP。它通过后端的 YouTube Data API 获取公开样本，支持“公开发现 → 榜单筛选 → 证据判断 → 收藏/对标/监听 → 选题 → 复盘”的工作流。
 
 ## 运行方式
 
 1. 安装 Node.js 22+ 与依赖：`pnpm install`。
-2. 复制 `.env.example` 为 `.env.local`；保持 `DATA_PROVIDER=mock` 即可运行。
+2. 复制 `.env.example` 为 `.env.local`，填写部署好的后端地址；如需 Google 登录，再填写 Supabase 项目地址。
 3. `pnpm dev` 后访问本地地址。
 4. `pnpm build` 构建，`pnpm test` 运行评分与筛选状态测试。
 
+## 上线配置
+
+前端可部署到 Vercel，环境变量如下：
+
+| 变量 | 是否必填 | 用途 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_YOUTUBE_SIGNALS_URL` | 是 | 后端 `youtube-signals` API 的完整地址 |
+| `NEXT_PUBLIC_SUPABASE_URL` | Google 登录时必填 | Supabase 项目 URL，不能填 service-role key |
+
+后端仓库需要先部署，并配置 `YOUTUBE_API_KEY`、`APP_ORIGIN`、`QUOTA_SALT`。如启用登录额度，再配置 Supabase 的 URL、anon key 与 service-role key。完整清单见后端的 [`AUTH_AND_QUOTA_SETUP.md`](../../live-backend/AUTH_AND_QUOTA_SETUP.md)。
+
+部署顺序：先发布后端，再将其生产 URL 写入前端环境变量，最后发布前端；随后在 Supabase 和 Google OAuth 中加入前端生产域名作为回调地址。
+
 ## 产品边界
 
-- 当前是 **可交互演示版**：保存、对标、选题、任务、监听和通知存储在浏览器本地，不是多设备同步。
+- 收藏、对标、选题、任务、监听和通知目前存储在浏览器本地，不是多设备同步。
 - 不使用抓取 YouTube 页面。未来真实数据仅通过 YouTube Data API、用户 OAuth 授权或符合政策的第三方数据源进入服务器端。
-- 不含支付、邮件、Slack、Webhook、认证、数据库或队列的真实发送/执行能力；界面均明确标注演示或占位。
+- Google 登录与每日查询额度可在配置 Supabase 后启用；支付、邮件、Slack、Webhook 和异步任务队列尚未接入。
 - 机会评分是可复算的排序辅助，不是关于爆款或收入的事实结论。
 
 ## 路由
