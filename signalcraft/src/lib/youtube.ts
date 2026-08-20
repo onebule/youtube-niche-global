@@ -22,7 +22,7 @@ const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',B
 // The historic `youtube-niche-global-api.vercel.app` alias no longer exists.
 // Some older Vercel environments still inject it, so explicitly ignore that
 // stale value instead of letting it override the verified production endpoint.
-const productionEndpoint='https://youtube-niche-global-he83qxqh2-pw820820-8728s-projects.vercel.app/api/youtube-signals';
+const productionEndpoint='https://youtube-niche-global-h44ddja6n-pw820820-8728s-projects.vercel.app/api/youtube-signals';
 const configuredEndpoint=process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL;
 const endpoint=configuredEndpoint&&!/youtube-niche-global-api\.vercel\.app/i.test(configuredEndpoint)?configuredEndpoint:productionEndpoint;
 const thumbnailEndpoint = endpoint.replace('/api/youtube-signals','/api/thumbnail');
