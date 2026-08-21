@@ -31,7 +31,7 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;format?:'short'|'long';category?:string;excludeMusic?:boolean;excludeMovies?:boolean;excludeEntertainment?:boolean;excludeGames?:boolean;excludeKids?:boolean;ranking?:boolean;limit?:number}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
@@ -41,11 +41,6 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews:'10000'});
   if(input.format) params.set('format',input.format);
   if(input.category && input.category!=='all') params.set('category',input.category);
-  if(input.excludeMusic) params.set('excludeMusic','1');
-  if(input.excludeMovies) params.set('excludeMovies','1');
-  if(input.excludeEntertainment) params.set('excludeEntertainment','1');
-  if(input.excludeGames) params.set('excludeGames','1');
-  if(input.excludeKids) params.set('excludeKids','1');
   if(input.ranking) params.set('ranking','1');
   if(input.limit) params.set('limit',String(Math.min(Math.max(Math.round(input.limit),1),100)));
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
