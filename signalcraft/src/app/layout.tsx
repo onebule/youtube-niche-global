@@ -9,6 +9,7 @@ import './ranking-rules.css';
 import './ranking-pagination.css';
 import './research-desk.css';
 import './login-page.css';
+import './upgrade-modal.css';
 
 
 export const metadata: Metadata = { title: 'SignalCraft · YouTube 内容情报', description: '面向创作者的 YouTube 内容情报与选题决策平台' };
