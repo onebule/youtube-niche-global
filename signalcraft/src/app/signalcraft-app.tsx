@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { channels, getOpportunity, initialAlerts, initialCollections, initialIdeas, initialTasks, promptTemplates, videos, watchRules } from '@/src/lib/mock';
 import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
@@ -8,9 +9,11 @@ import { searchYouTubeSignals } from '@/src/lib/youtube';
 import { captureOAuthReturn, signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
 import { hasOwnerAccess } from '@/src/lib/owner-admin';
-import ChannelDoctor from './channel-doctor';
-import OwnerConsole from './owner-console';
 import UpgradeModal, { type UpgradePlan } from './upgrade-modal';
+
+const RouteLoading = () => <main className="page"><div className="empty" aria-live="polite"><div className="empty-icon">◇</div><b>正在打开页面…</b><p>正在准备所需功能，不会重新读取或替换公开数据。</p></div></main>;
+const ChannelDoctor = dynamic(() => import('./channel-doctor'), { loading: RouteLoading });
+const OwnerConsole = dynamic(() => import('./owner-console'), { loading: RouteLoading });
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || 'SignalCraft';
 const cn = (...names:(string|false|undefined)[]) => names.filter(Boolean).join(' ');
