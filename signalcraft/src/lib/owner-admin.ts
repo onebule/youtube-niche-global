@@ -2,6 +2,17 @@ import { authHeaders } from './auth';
 
 export type OwnerOverview = {
   owner: { email: string; ownerCount: number };
+  users: {
+    available: boolean;
+    total: number | null;
+    recent: Array<{
+      email: string;
+      createdAt: string | null;
+      lastSignInAt: string | null;
+      provider: string;
+      isOwner: boolean;
+    }>;
+  };
   collection: {
     schedule: string;
     videos: number | null;
