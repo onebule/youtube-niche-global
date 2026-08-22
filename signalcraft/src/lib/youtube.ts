@@ -31,14 +31,15 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
   // opportunity score could evaluate them. Keep the public sample broad,
   // then let the UI's channel-size and score filters do the ranking.
   const region=input.region||'US';
-  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews:'10000'});
+  const minimumViews=Number(input.minimumViews||0)>0?String(input.minimumViews):'10000';
+  const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews});
   if(input.format) params.set('format',input.format);
   if(input.category && input.category!=='all') params.set('category',input.category);
   if(input.ranking) params.set('ranking','1');

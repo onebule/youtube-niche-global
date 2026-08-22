@@ -5,6 +5,7 @@ import './doctor.css';
 import './red-theme.css';
 import './discover-cards.css';
 import './rankings.css';
+import './ranking-rules.css';
 import './research-desk.css';
 
 

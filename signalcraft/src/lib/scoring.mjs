@@ -23,5 +23,10 @@ export function serializeFilters(filters) {
 
 export function parseFilters(search) {
   const p = new URLSearchParams(search);
-  return { q: p.get('q') || '', window: p.get('window') || '7d', region: p.get('region') || 'US', language: p.get('language') || 'all', format: p.get('format') || 'all', category: p.get('category') || 'all', maxSubs: p.get('maxSubs') || '100000', minScore: p.get('minScore') || '70', sort: p.get('sort') || 'score' };
+  return {
+    q: p.get('q') || '', window: p.get('window') || '7d', region: p.get('region') || 'US', language: p.get('language') || 'all',
+    format: p.get('format') || 'all', category: p.get('category') || 'all', maxSubs: p.get('maxSubs') || '100000', minSubs: p.get('minSubs') || '0',
+    minViews: p.get('minViews') || '0', maxViews: p.get('maxViews') || 'all', entity: p.get('entity') || 'videos', display: p.get('display') || 'list',
+    minScore: p.get('minScore') || '70', sort: p.get('sort') || 'score'
+  };
 }
