@@ -44,6 +44,17 @@ export const localizedMarket = (value: string, locale: UiLocale) =>
 export const localizedContentLanguage = (value: string, locale: UiLocale) =>
   interfaceLanguage[value as keyof typeof interfaceLanguage]?.[locale === 'zh' ? 0 : 1] ?? value;
 
+export const localizedTopic = (value: string, locale: UiLocale) => {
+  const match = Object.values(categories).find(([label]) => label === value);
+  return match?.[locale === 'zh' ? 0 : 1] ?? value;
+};
+
+export const formatCompactNumber = (value: number, locale: UiLocale) =>
+  new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+
 export const languageCopy = {
   zh: {
     nav: ['发现', '排行榜', '机会雷达', '频道诊断', '定价'],
