@@ -24,9 +24,14 @@ const defaultState:Persisted={saved:[],collections:initialCollections,ideas:init
 const categoryOptions=[['all','全部类别'],['1','影视动画'],['2','汽车'],['15','宠物动物'],['17','体育'],['19','旅行'],['20','游戏'],['22','人物生活'],['23','喜剧'],['24','娱乐'],['25','新闻政治'],['26','生活技巧'],['27','教育'],['28','科技'],['29','公益']];
 const categoryLabel=(value:string)=>categoryOptions.find(([id])=>id===value)?.[1];
 const matchesContentScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>video.topic!=='音乐'&&!video.tags.includes('儿童内容')&&(filters.category==='all'||video.topic===categoryLabel(filters.category));
+const isLivePublicVideo=(value:unknown):value is Video=>{
+  if(!value||typeof value!=='object')return false;
+  const video=value as Partial<Video>;
+  return typeof video.sourceUrl==='string'&&/youtube\.com\/(?:watch\?|shorts\/)/.test(video.sourceUrl)&&Array.isArray(video.tags)&&video.tags.includes('YouTube 公开数据');
+};
 
 function usePersisted(){
-  const [state,setState]=useState<Persisted>(()=>{if(typeof window==='undefined')return defaultState;const raw=localStorage.getItem('signalcraft-workspace-v2');try{return raw?{...defaultState,...JSON.parse(raw)}:defaultState}catch{return defaultState}});
+  const [state,setState]=useState<Persisted>(()=>{if(typeof window==='undefined')return defaultState;const raw=localStorage.getItem('signalcraft-workspace-v2');try{const saved=raw?JSON.parse(raw):null;return {...defaultState,...saved,saved:Array.isArray(saved?.saved)?saved.saved.filter(isLivePublicVideo):[]}}catch{return defaultState}});
   useEffect(()=>{localStorage.setItem('signalcraft-workspace-v2',JSON.stringify(state))},[state]);
   return [state,setState] as const;
 }
