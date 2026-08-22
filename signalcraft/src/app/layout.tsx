@@ -7,6 +7,7 @@ import './discover-cards.css';
 import './rankings.css';
 import './ranking-rules.css';
 import './ranking-pagination.css';
+import './ranking-performance.css';
 import './research-desk.css';
 import './login-page.css';
 import './upgrade-modal.css';

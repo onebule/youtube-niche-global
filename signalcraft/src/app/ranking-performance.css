@@ -1,0 +1,7 @@
+/* Keep the first screen responsive when daily collection expands a ranking
+ * beyond one page. Off-screen rows retain a stable layout estimate while the
+ * browser defers their paint and layout work. */
+.ranking-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 90px;
+}
