@@ -33,8 +33,12 @@ export function authHeaders():Record<string,string>{const session=getSession();r
 
 export function signOut(){if(typeof window!=='undefined')localStorage.removeItem(key)}
 
-export function startGoogleSignIn(){
+export function startGoogleSignIn({direct=false}:{direct?:boolean}={}){
   if(!supabaseUrl)return false;
+  if(typeof window!=='undefined'&&!direct&&location.pathname!=='/login'){
+    location.assign('/login');
+    return true;
+  }
   const redirectTo=`${location.origin}${location.pathname}`;
   location.assign(`${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`);
   return true;
