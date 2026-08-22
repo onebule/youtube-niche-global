@@ -12,6 +12,7 @@ type ApiResponse = {
   shortOpportunities?:ApiOpportunity[];
   recentDays?:number;
   noCandidatesMessage?:string;
+  nextPageToken?:string|null;
   error?:string;
   quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number;configured?:boolean;account?:{email?:string}|null};
 };
@@ -31,7 +32,7 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number;pageToken?:string}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
@@ -44,11 +45,12 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   if(input.category && input.category!=='all') params.set('category',input.category);
   if(input.ranking) params.set('ranking','1');
   if(input.limit) params.set('limit',String(Math.min(Math.max(Math.round(input.limit),1),100)));
+  if(input.pageToken) params.set('pageToken',input.pageToken);
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
   const payload=await response.json() as ApiResponse;
   if(!response.ok) throw new Error(payload.error||'YouTube 公开数据请求失败。');
   const source=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])];
-  if(!source.length) throw new Error(payload.noCandidatesMessage||'没有找到符合条件的公开样本。');
+  if(!source.length&&!input.pageToken) throw new Error(payload.noCandidatesMessage||'没有找到符合条件的公开样本。');
   const channels:Channel[]=[];
   const videos:Video[]=source.map((item,index)=>{
     const bucket=input.format||'all';
@@ -61,7 +63,8 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     // that turns the subscriber count into a misleading performance baseline.
     channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
-    return {id:`yt-${bucket}-${index}-${item.title.slice(0,18)}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    const sourceId=(item.videoUrl||`${bucket}-${index}`).split('v=').at(-1)||`${bucket}-${index}`;
+    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
-  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota};
+  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null};
 }

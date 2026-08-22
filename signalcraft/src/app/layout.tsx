@@ -6,6 +6,7 @@ import './red-theme.css';
 import './discover-cards.css';
 import './rankings.css';
 import './ranking-rules.css';
+import './ranking-pagination.css';
 import './research-desk.css';
 
 
