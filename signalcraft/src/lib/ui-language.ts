@@ -63,8 +63,8 @@ export const languageCopy = {
     backHome: '返回首页',
     enterStudio: '进入工作室',
     publicDiscovery: '公开发现',
-    signIn: 'Google 登录 · 12次/日',
-    signInTitle: '登录后每天可查询 12 次',
+    signIn: '登录',
+    signInTitle: '使用 Google 登录 · 登录后每天可查询 12 次',
     signOut: '退出当前账号',
     interfaceLanguage: '界面语言',
     ranking: {
@@ -162,8 +162,8 @@ export const languageCopy = {
     backHome: 'Back to home',
     enterStudio: 'Open studio',
     publicDiscovery: 'Public discovery',
-    signIn: 'Sign in with Google · 12/day',
-    signInTitle: 'Sign in for 12 searches per day',
+    signIn: 'Sign in',
+    signInTitle: 'Continue with Google · 12 searches per day after sign-in',
     signOut: 'Sign out',
     interfaceLanguage: 'Interface language',
     ranking: {
