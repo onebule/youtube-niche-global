@@ -25,7 +25,11 @@ export function parseFilters(search) {
   const p = new URLSearchParams(search);
   return {
     q: p.get('q') || '', window: p.get('window') || '7d', region: p.get('region') || 'US', language: p.get('language') || 'all',
-    format: p.get('format') || 'all', category: p.get('category') || 'all', maxSubs: p.get('maxSubs') || '100000', minSubs: p.get('minSubs') || '0',
+    // Rankings should start broad. A legacy 100K subscriber cap made the
+    // default "all categories" view look like a sparse data failure even
+    // though real public samples were available. Users can still choose a
+    // smaller channel band explicitly and shared URLs preserve that choice.
+    format: p.get('format') || 'all', category: p.get('category') || 'all', maxSubs: p.get('maxSubs') || 'all', minSubs: p.get('minSubs') || '0',
     minViews: p.get('minViews') || '0', maxViews: p.get('maxViews') || 'all', entity: p.get('entity') || 'videos', display: p.get('display') || 'list',
     minScore: p.get('minScore') || '70', sort: p.get('sort') || 'score'
   };
