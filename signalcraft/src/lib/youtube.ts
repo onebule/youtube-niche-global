@@ -4,7 +4,7 @@ import { authHeaders } from './auth';
 type ApiOpportunity = {
   title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
-  format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean;
+  format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
 };
 
 export type PublicRankingScope = {
@@ -14,6 +14,7 @@ export type PublicRankingScope = {
   publishedWindowDays:number;
   collectionLookbackDays:number;
   latestCapturedAt:string|null;
+  growthComparableCount?:number;
 };
 
 const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
@@ -24,7 +25,8 @@ const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
     && Number.isFinite(scope.marketCount)
     && Number.isFinite(scope.publishedWindowDays)
     && Number.isFinite(scope.collectionLookbackDays)
-    && (scope.latestCapturedAt===null||typeof scope.latestCapturedAt==='string');
+    && (scope.latestCapturedAt===null||typeof scope.latestCapturedAt==='string')
+    && (scope.growthComparableCount===undefined||Number.isFinite(scope.growthComparableCount));
 };
 
 type ApiResponse = {
@@ -85,7 +87,12 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
     const sourceId=(item.videoUrl||`${bucket}-${index}`).split('v=').at(-1)||`${bucket}-${index}`;
-    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
+    const currentCapturedAt=typeof item.latestCapturedAt==='string'&&Number.isFinite(new Date(item.latestCapturedAt).getTime())?item.latestCapturedAt:new Date().toISOString();
+    const hasBaseline=Number.isFinite(Number(item.baselineViews))&&Number(item.baselineViews)>=0&&Number(item.baselineViews)<=item.views&&typeof item.baselineCapturedAt==='string'&&Number.isFinite(new Date(item.baselineCapturedAt).getTime())&&new Date(item.baselineCapturedAt).getTime()<new Date(currentCapturedAt).getTime();
+    const snapshots=hasBaseline
+      ? [{capturedAt:item.baselineCapturedAt!,views:Number(item.baselineViews),likes:0,comments:0,subscribers:item.subscribers},{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]
+      : [{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}];
+    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
   });
   return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null};
 }

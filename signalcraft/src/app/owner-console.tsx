@@ -35,7 +35,10 @@ export default function OwnerConsole({ account, onSignIn }: { account: AccountSe
     finally { setLoading(false); }
   };
 
-  useEffect(() => { void refresh(); }, [account?.accessToken]);
+  useEffect(() => {
+    const task = window.setTimeout(() => { void refresh(); }, 0);
+    return () => window.clearTimeout(task);
+  }, [account?.accessToken]);
 
   if (!account) return <main className="page owner-console"><section className="owner-gate"><span className="eyebrow">OWNER ACCESS</span><h1>先登录，再验证站点主人权限。</h1><p>管理台不会根据浏览器里的邮箱显示权限；它会在服务器验证你的 Google / Supabase 会话和主人白名单。</p><button className="primary" onClick={onSignIn}>使用 Google 登录</button></section></main>;
 

@@ -10,9 +10,12 @@ export default function LoginRoute() {
   const [locale, setLocale] = useState<UiLocale>('zh');
 
   useEffect(() => {
-    setAccount(captureOAuthReturn());
-    const saved = localStorage.getItem('signalcraft-interface-locale');
-    if (saved === 'zh' || saved === 'en') setLocale(saved);
+    const task = window.setTimeout(() => {
+      setAccount(captureOAuthReturn());
+      const saved = localStorage.getItem('signalcraft-interface-locale');
+      if (saved === 'zh' || saved === 'en') setLocale(saved);
+    }, 0);
+    return () => window.clearTimeout(task);
   }, []);
 
   const changeLocale = (value: UiLocale) => {
