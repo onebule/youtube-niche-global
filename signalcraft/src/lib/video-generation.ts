@@ -10,6 +10,7 @@ export type VideoModel = {
   provider?: string;
   enabled: boolean;
   creditsCost?: number | null;
+  ownerUnlimited?: boolean;
   callback?: boolean;
   reason?: string | null;
 };

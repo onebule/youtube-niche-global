@@ -51,6 +51,8 @@ function copy(locale: UiLocale) {
     ratio: zh ? '画幅' : 'Aspect ratio',
     resolution: zh ? '分辨率' : 'Resolution',
     estimate: zh ? '预计冻结积分' : 'Credits held on submit',
+    ownerCredits: zh ? '主人权限' : 'Owner access',
+    ownerUnlimited: zh ? '主人账号 · 不限积分' : 'Owner account · Unlimited credits',
     generate: zh ? '生成视频' : 'Generate video',
     generating: zh ? '正在创建任务…' : 'Creating task…',
     current: zh ? '当前任务' : 'Current task',
@@ -310,7 +312,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
             <label>{text.ratio}<select name="aspectRatio" value={aspectRatio} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></label>
             <label>{text.resolution}<select name="resolution" value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
           </div>
-          <div className="studio-submit"><div><span>{text.estimate}</span><b>{selectedModel?.creditsCost ? `${selectedModel.creditsCost} credits` : '—'}</b><small>{selectedModel?.reason || (locale === 'zh' ? '成功后扣除；模型失败将自动退回。' : 'Charged on success; released if the model fails.')}</small></div><button type="submit" className="primary" disabled={!canCreate}>{submitting ? text.generating : text.generate}</button></div>
+          <div className="studio-submit"><div><span>{selectedModel?.ownerUnlimited ? text.ownerCredits : text.estimate}</span><b>{selectedModel?.ownerUnlimited ? (locale === 'zh' ? '不限' : 'Unlimited') : selectedModel?.creditsCost ? `${selectedModel.creditsCost} credits` : '—'}</b><small>{selectedModel?.ownerUnlimited ? text.ownerUnlimited : selectedModel?.reason || (locale === 'zh' ? '成功后扣除；模型失败将自动退回。' : 'Charged on success; released if the model fails.')}</small></div><button type="submit" className="primary" disabled={!canCreate}>{submitting ? text.generating : text.generate}</button></div>
         </form>
 
         <aside className="studio-current" aria-label={text.current}>
