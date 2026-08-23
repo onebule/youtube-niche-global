@@ -75,7 +75,7 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
         </div>
 
         <figure className="upgrade-qr">
-          <div className="upgrade-qr-frame"><img src="/payment/wechat-service-panwei.jpg" alt="微信客服二维码，潘伟，广东广州" /></div>
+          <div className="upgrade-qr-frame"><img src="/payment/wechat-service-panwei.jpg" alt="微信客服二维码，潘伟，广东广州" width={1083} height={1470} decoding="async" /></div>
           <figcaption>微信客服 · 潘伟</figcaption>
         </figure>
       </div>
