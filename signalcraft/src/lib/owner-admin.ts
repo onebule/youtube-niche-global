@@ -35,13 +35,20 @@ export type OwnerOverview = {
   };
 };
 
+export class OwnerOverviewError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'OwnerOverviewError';
+  }
+}
+
 export async function loadOwnerOverview(): Promise<OwnerOverview> {
   const response = await fetch('/api/owner-status', {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
   });
   const payload = await response.json() as OwnerOverview & { error?: string };
-  if (!response.ok) throw new Error(payload.error || '无法读取站点管理概览。');
+  if (!response.ok) throw new OwnerOverviewError(payload.error || '无法读取站点管理概览。', response.status);
   return payload;
 }
 
