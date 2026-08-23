@@ -7,12 +7,33 @@ type ApiOpportunity = {
   format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean;
 };
 
+export type PublicRankingScope = {
+  source:'stored-corpus'|'live-chart';
+  markets:string[];
+  marketCount:number;
+  publishedWindowDays:number;
+  collectionLookbackDays:number;
+  latestCapturedAt:string|null;
+};
+
+const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
+  if(!value||typeof value!=='object')return false;
+  const scope=value as Partial<PublicRankingScope>;
+  return (scope.source==='stored-corpus'||scope.source==='live-chart')
+    && Array.isArray(scope.markets)
+    && Number.isFinite(scope.marketCount)
+    && Number.isFinite(scope.publishedWindowDays)
+    && Number.isFinite(scope.collectionLookbackDays)
+    && (scope.latestCapturedAt===null||typeof scope.latestCapturedAt==='string');
+};
+
 type ApiResponse = {
   longOpportunities?:ApiOpportunity[];
   shortOpportunities?:ApiOpportunity[];
   recentDays?:number;
   noCandidatesMessage?:string;
   nextPageToken?:string|null;
+  dataScope?:PublicRankingScope;
   error?:string;
   quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number;configured?:boolean;account?:{email?:string}|null};
 };
@@ -66,5 +87,5 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     const sourceId=(item.videoUrl||`${bucket}-${index}`).split('v=').at(-1)||`${bucket}-${index}`;
     return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据','单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots:[{capturedAt:new Date().toISOString(),views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]};
   });
-  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null};
+  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null};
 }
