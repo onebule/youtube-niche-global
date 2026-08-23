@@ -6,7 +6,8 @@ import { channels, getOpportunity, initialAlerts, initialCollections, initialIde
 import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
 import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from '@/src/lib/types';
 import { searchYouTubeSignals, type PublicRankingScope } from '@/src/lib/youtube';
-import { captureOAuthReturn, signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
+import { signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
+import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
 import { hasOwnerAccess } from '@/src/lib/owner-admin';
 import { getRecordedGrowth } from '@/src/lib/growth';
@@ -119,7 +120,7 @@ function VideoCard({video,state,setState,onDetail}:{video:Video;state:Persisted;
   const duration=video.durationSeconds<60?`${video.durationSeconds} 秒`:`${Math.round(video.durationSeconds/60)} 分钟`;
   return <article className="video-card">
     <div className="thumb" role="link" tabIndex={0} onClick={watch} onKeyDown={event=>event.key==='Enter'&&watch()} title="打开并观看此视频" style={{position:'relative',overflow:'hidden',background:'linear-gradient(130deg,#352b2a,#8e3127)',cursor:'pointer'}}>
-      {video.thumbnail&&<img src={video.thumbnail} alt={`${video.title} 视频缩略图`} loading="lazy" onError={event=>{event.currentTarget.style.display='none'}} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',zIndex:1}}/>}
+      {video.thumbnail&&<img src={video.thumbnail} alt={`${video.title} 视频缩略图`} width={480} height={270} loading="lazy" onError={event=>{event.currentTarget.style.display='none'}} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',zIndex:1}}/>}
       <div aria-hidden="true" className="thumb-fallback"><b>▶</b><span>{video.topic}</span></div>
       <i aria-hidden="true" style={{position:'absolute',inset:0,zIndex:2,background:'linear-gradient(180deg,rgba(13,13,15,.03) 24%,rgba(13,13,15,.72))',pointerEvents:'none'}}/>
       <span className="video-format" style={{position:'relative',zIndex:3}}>{video.format==='short'?'短视频':'长视频'} · {duration}</span><span style={{position:'relative',zIndex:3}}><ScorePill value={o.opportunityScore}/></span>
@@ -223,7 +224,7 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
   const rankingLongRows=rankingData?.long||rows.filter(video=>video.format==='long');
   const rankingShortRows=rankingData?.short||rows.filter(video=>video.format==='short');
   const resultCount=mode==='rankings'?rankingLongRows.length+rankingShortRows.length:rows.length;
-  const radarRows=useMemo(()=>{const now=Date.now();const ageHours=(video:Video)=>Math.max(1,(now-new Date(video.publishedAt).getTime())/3600000);const byVelocity=(a:Video,b:Video)=>scoreFor(b).viewsPerHour-scoreFor(a).viewsPerHour;const byNewest=(a:Video,b:Video)=>new Date(b.publishedAt).getTime()-new Date(a.publishedAt).getTime();if(radarView==='new')return rows.filter(video=>ageHours(video)<=72).sort(byNewest);if(radarView==='breakout')return rows.filter(video=>channelFor(video).subscribers<=100000&&scoreFor(video).viewsPerSubscriber>=1).sort((a,b)=>scoreFor(b).viewsPerSubscriber-scoreFor(a).viewsPerSubscriber);if(radarView==='repeatable')return rows.filter(video=>video.format==='long'&&video.durationSeconds>=180&&video.durationSeconds<=1800).sort((a,b)=>scoreFor(b).opportunityScore-scoreFor(a).opportunityScore);return [...rows].sort(byVelocity)},[radarView,rows]);
+  const radarRows=useMemo(()=>{const ageHours=(video:Video)=>{const capturedAt=video.snapshots.at(-1)?.capturedAt||video.publishedAt;return Math.max(1,(new Date(capturedAt).getTime()-new Date(video.publishedAt).getTime())/3600000)};const byVelocity=(a:Video,b:Video)=>scoreFor(b).viewsPerHour-scoreFor(a).viewsPerHour;const byNewest=(a:Video,b:Video)=>new Date(b.publishedAt).getTime()-new Date(a.publishedAt).getTime();if(radarView==='new')return rows.filter(video=>ageHours(video)<=72).sort(byNewest);if(radarView==='breakout')return rows.filter(video=>channelFor(video).subscribers<=100000&&scoreFor(video).viewsPerSubscriber>=1).sort((a,b)=>scoreFor(b).viewsPerSubscriber-scoreFor(a).viewsPerSubscriber);if(radarView==='repeatable')return rows.filter(video=>video.format==='long'&&video.durationSeconds>=180&&video.durationSeconds<=1800).sort((a,b)=>scoreFor(b).opportunityScore-scoreFor(a).opportunityScore);return [...rows].sort(byVelocity)},[radarView,rows]);
   if(mode==='radar'){const clusters=Object.entries(radarRows.reduce<Record<string,Video[]>>((acc,video)=>{(acc[video.topic]??=[]).push(video);return acc},{}));const radarCopy={velocity:['加速中','按发布至今的平均播放速度排序；单次快照不能证明实时加速。'],new:['新出现','只展示最近 72 小时发布的公开样本。'],breakout:['低粉爆发','订阅不超过 10 万且播放 / 订阅 ≥ 1 的样本。'],repeatable:['可复刻形式','优先展示 3–30 分钟、便于拆解结构的长视频；仍需人工复核。']} as const;return <main className="page"><PageIntro label="机会雷达" title="把公开信号变成可观看、可行动的样本" body="无需关键词，按时间、语言、频道规模和内容形态读取已采集的 YouTube 公开视频；点击缩略图或标题可直接打开原视频。"/><Filters filters={filters} setFilters={setFilters} hideKeyword/><div className="result-toolbar"><span>当前视图找到 <b>{radarRows.length}</b> 个公开样本</span><span>{remote?'已采集 YouTube 公开数据 · 每日快照':'正在加载公开视频'}</span><button className="primary" onClick={runSearch} disabled={loading}>{loading?'正在更新…':'更新机会雷达'}</button></div>{error&&<p className="api-error">{error}</p>}{remote&&<p className="api-note">筛选项改变时会从已采集样本池重新筛选；缩略图由服务端代理，点击缩略图或标题会直接打开对应 YouTube 视频。</p>}<div className="radar-tabs" role="tablist" aria-label="机会雷达视图">{(['velocity','new','breakout','repeatable'] as const).map(view=><button key={view} role="tab" aria-selected={radarView===view} className={radarView===view?'active':''} onClick={()=>setRadarView(view)}>{radarCopy[view][0]}</button>)}</div><p className="api-note">{radarCopy[radarView][1]}</p><div className="cluster-list">{clusters.length?clusters.map(([topic,items])=>{const average=Math.round(items.reduce((sum,video)=>sum+scoreFor(video).opportunityScore,0)/items.length);return <section className="cluster" key={topic}><div className="cluster-head"><div><span className="eyebrow">机会簇</span><h2>{topic||'公开视频机会簇'}</h2><p>{items.length} 个样本 · 平均机会评分 {average}</p></div><ScorePill value={average}/></div><div className="mini-grid">{items.slice(0,6).map(video=><VideoCard key={video.id} video={video} state={state} setState={setState} onDetail={openDetail}/>)}</div></section>}):<Empty title="当前视图没有符合条件的公开视频" body="可切换雷达视图、扩大时间窗口、切换内容形态或放宽频道订阅上限后自动重新取样。"/>}</div></main>}
   if(mode==='rankings'){const selectedFormat=filters.format==='short'||filters.format==='long'?filters.format:'all';const scopedVideos=[...rankingLongRows,...rankingShortRows].filter(video=>matchesRankingScope(video,filters)).filter(video=>selectedFormat==='all'||video.format===selectedFormat);const scopedCount=filters.entity==='channels'?new Set(scopedVideos.map(video=>video.channelId)).size:scopedVideos.length;const copy=languageCopy[locale].ranking;const scopeLabel=rankingData?.dataScope?(rankingData.dataScope.source==='stored-corpus'?copy.storedCorpus:copy.liveChart):copy.loadingSamples;return <main className="page rankings-page"><PageIntro label={copy.introLabel} title={copy.introTitle} body={copy.introBody}/><div className="rankings-layout"><RankingFilters filters={filters} setFilters={setFilters} locale={locale}/><div className="rankings-content"><div className="result-toolbar"><span>{copy.found} <b>{scopedCount}</b> {filters.entity==='channels'?(locale==='zh'?'个频道':'channels'):copy.publicSamples}</span><span>{scopeLabel}</span><button className="primary" onClick={runRankingSearch} disabled={loading}>{loading?copy.updating:copy.refresh}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}>{copy.copyLink}</button></div>{error&&<p className="api-error">{error}</p>}{rankingData?.dataScope&&<RankingDataScope scope={rankingData.dataScope} locale={locale}/>} {rankingData&&<p className="api-note">{copy.note}</p>}<RankingBoard longRows={rankingLongRows} shortRows={rankingShortRows} selectedFormat={selectedFormat} filters={filters} onDetail={openDetail} locale={locale} loadedCount={rankingData?.loadedCount||0} canLoadMore={Boolean(rankingData?.nextPageToken)} loadingMore={loadingMore} onLoadMore={loadMoreRanking}/></div></div></main>;}
   const isResearch=mode==='research';return <main className={isResearch?'app-page':'page'}><PageIntro label={isResearch?'深度检索':'公开发现'} title={isResearch?'把一个赛道缩小到可验证的公开样本':'自动发现近期值得关注的视频'} body={isResearch?'输入关键词后，按时间、语言、频道规模和内容形态检索真实 YouTube 公开数据。':'无需关键词；按时间、语言、频道规模和内容形态自动筛出真实 YouTube 公开视频。'}/><Filters filters={filters} setFilters={setFilters} hideKeyword={!isResearch}/><div className="result-toolbar"><span>找到 <b>{resultCount}</b> 个样本</span><span>{remote?'真实 YouTube 公开数据 · 单次快照':isResearch?'输入关键词后开始检索':'正在加载公开视频'}</span><button className="primary" onClick={runSearch} disabled={loading}>{loading?(isResearch?'正在检索…':'正在更新…'):(isResearch?'检索公开数据':'更新公开发现')}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}>复制筛选链接</button></div>{error&&<p className="api-error">{error}</p>}{remote&&<p className="api-note">真实 API 当前返回单次快照：播放/小时表示“发布至今平均播放”，增长趋势与置信度需持续采样后才会更准确。</p>}{rows.length?<div className="video-grid">{rows.slice(0,page*6).map(v=><VideoCard key={v.id} video={v} state={state} setState={setState} onDetail={openDetail}/>)}</div>:<Empty title={isResearch?'输入关键词开始检索':'当前条件没有公开视频样本'} body={isResearch?'例如输入 AI productivity、history documentary 或 fitness tips。':'可扩大时间窗口、切换内容形态或放宽频道订阅上限后自动重新取样。'}/>} {rows.length>page*6&&<button className="load-more" onClick={()=>setPage(p=>p+1)}>加载更多样本</button>}</main>
@@ -247,4 +248,114 @@ function Ideas({state,setState}:{state:Persisted;setState:React.Dispatch<React.S
 function Prompts({toast}:{toast:(t:string)=>void}){return <main className="app-page"><PageIntro label="提示词库" title="把研究方法沉淀成可复用模板。" body="提示词会在真实 AI 接入后带入选题上下文。"/>{promptTemplates.length?<div className="prompt-list">{promptTemplates.map(p=><article key={p.id}><div><span className="tag">{p.category}</span><h2>{p.title}</h2><p>{p.body}</p><small>{p.version} · {p.enabled?'已启用':'已停用'}</small></div><button className="primary" onClick={()=>navigator.clipboard?.writeText(p.body).then(()=>toast('提示词模板已复制'))}>复制模板</button></article>)}</div>:<Empty title="暂无自定义提示词" body="创建与保存提示词需要账户数据库接入，暂不展示预置样本。"/>}</main>}
 function Settings(){return <main className="app-page"><PageIntro label="配置" title="为真实服务保留安全边界。" body="敏感密钥仅配置在服务器环境变量中，不会显示在浏览器或保存到当前设备。"/><div className="settings-grid"><section><h2>数据源</h2><p><b>YouTube Data API</b> · 服务端已连接</p><p>公开发现、排行榜、机会雷达与频道诊断均读取当前公开数据。</p></section><section><h2>刷新计划</h2><p>当前为用户打开页面时按需获取公开数据。</p><p>后台定时采样与增长曲线需要数据库和任务队列后启用。</p></section><section><h2>团队成员</h2><p>登录、成员角色与跨设备数据同步需要接入认证和数据库。</p></section><section><h2>通知渠道</h2><p>规则暂存当前设备；邮件、Slack、Webhook 尚未启用。</p></section></div></main>}
 
-export default function SignalCraftApp(){const [path,setPath]=useState('/');const [theme,setTheme]=useState('light');const [locale,setLocale]=useState<UiLocale>('zh');const [state,setState]=usePersisted();const [drawer,setDrawer]=useState<Video|null>(null);const [toast,setToast]=useState<Toast>(null);const [account,setAccount]=useState<AccountSession|null>(null);const [isOwner,setIsOwner]=useState(false);useEffect(()=>{const read=()=>setPath(location.pathname);read();setAccount(captureOAuthReturn());const savedLocale=localStorage.getItem('signalcraft-interface-locale');if(savedLocale==='en'||savedLocale==='zh')setLocale(savedLocale);addEventListener('popstate',read);addEventListener('signalcraft:navigate',read);return()=>{removeEventListener('popstate',read);removeEventListener('signalcraft:navigate',read)}},[]);useEffect(()=>{let active=true;if(!account){setIsOwner(false);return()=>{active=false}}void hasOwnerAccess().then(value=>{if(active)setIsOwner(value)}).catch(()=>{if(active)setIsOwner(false)});return()=>{active=false}},[account?.accessToken]);useEffect(()=>{document.documentElement.dataset.theme=theme},[theme]);useEffect(()=>{document.documentElement.lang=locale==='zh'?'zh-CN':'en';localStorage.setItem('signalcraft-interface-locale',locale)},[locale]);const notify=(message:string)=>{setToast({message});setTimeout(()=>setToast(null),2400)};const beginLogin=()=>{if(startGoogleSignIn())return;notify('Google 登录尚未配置。请先在环境变量中填写 NEXT_PUBLIC_SUPABASE_URL。')};const endSession=()=>{signOut();setAccount(null);setIsOwner(false);notify('已退出账号')};const content=path==='/'?<Home locale={locale}/>:path==='/discover'?<Discovery mode="discover" state={state} setState={setState} openDetail={setDrawer} locale={locale}/>:path==='/rankings'?<Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale}/>:path==='/radar'?<Discovery mode="radar" state={state} setState={setState} openDetail={setDrawer} locale={locale}/>:path==='/doctor'||path==='/app/doctor'?<ChannelDoctor/>:path==='/methodology'?<Methodology/>:path==='/pricing'?<Pricing/>:path==='/owner'?<OwnerConsole account={account} onSignIn={beginLogin}/>:path==='/app'?<AppHome state={state} setState={setState} openDetail={setDrawer}/>:path==='/app/library/channels'?<Library kind="channels" state={state} setState={setState} openDetail={setDrawer}/>:path==='/app/library/videos'?<Library kind="videos" state={state} setState={setState} openDetail={setDrawer}/>:path==='/app/thumbnails'?<ThumbnailLab state={state} openDetail={setDrawer}/>:path==='/app/research'?<Research state={state} setState={setState} openDetail={setDrawer} locale={locale}/>:path==='/app/watchlists'?<Watchlists state={state} setState={setState} toast={notify}/>:path==='/app/benchmarks'||path==='/app/compare'?<Benchmarks state={state} toast={notify}/>:path==='/app/ideas'?<Ideas state={state} setState={setState}/>:path==='/app/prompts'?<Prompts toast={notify}/>:path==='/app/settings'?<Settings/>:<Home locale={locale}/>;return <div className="app-shell"><Header path={path} onTheme={()=>setTheme(t=>t==='light'?'dark':'light')} account={account} onSignIn={beginLogin} onSignOut={endSession} locale={locale} onLocaleChange={setLocale} isOwner={isOwner}/>{content}{drawer&&<DetailDrawer video={drawer} state={state} setState={setState} onClose={()=>setDrawer(null)} toast={notify}/>} {toast&&<div className="toast">✓ {toast.message}</div>}</div>}
+export default function SignalCraftApp() {
+  const path = useBrowserPath();
+  const [theme, setTheme] = useState('light');
+  const { account, clearAccount, locale, setLocale } = useBrowserSession();
+  const [state, setState] = usePersisted();
+  const [drawer, setDrawer] = useState<Video | null>(null);
+  const [toast, setToast] = useState<Toast>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const accessToken = account?.accessToken;
+
+  useEffect(() => {
+    let active = true;
+    if (!accessToken) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void hasOwnerAccess()
+      .then(value => {
+        if (active) setIsOwner(value);
+      })
+      .catch(() => {
+        if (active) setIsOwner(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
+    localStorage.setItem('signalcraft-interface-locale', locale);
+  }, [locale]);
+
+  const notify = (message: string) => {
+    setToast({ message });
+    setTimeout(() => setToast(null), 2400);
+  };
+
+  const beginLogin = () => {
+    if (startGoogleSignIn()) return;
+    notify('Google 登录尚未配置。请先在环境变量中填写 NEXT_PUBLIC_SUPABASE_URL。');
+  };
+
+  const endSession = () => {
+    signOut();
+    clearAccount();
+    setIsOwner(false);
+    notify('已退出账号');
+  };
+
+  const content = path === '/'
+    ? <Home locale={locale} />
+    : path === '/discover'
+      ? <Discovery mode="discover" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+      : path === '/rankings'
+        ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+        : path === '/radar'
+          ? <Discovery mode="radar" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+          : path === '/doctor' || path === '/app/doctor'
+            ? <ChannelDoctor />
+            : path === '/methodology'
+              ? <Methodology />
+              : path === '/pricing'
+                ? <Pricing />
+                : path === '/owner'
+                  ? <OwnerConsole account={account} onSignIn={beginLogin} />
+                  : path === '/app'
+                    ? <AppHome state={state} setState={setState} openDetail={setDrawer} />
+                    : path === '/app/library/channels'
+                      ? <Library kind="channels" state={state} setState={setState} openDetail={setDrawer} />
+                      : path === '/app/library/videos'
+                        ? <Library kind="videos" state={state} setState={setState} openDetail={setDrawer} />
+                        : path === '/app/thumbnails'
+                          ? <ThumbnailLab state={state} openDetail={setDrawer} />
+                          : path === '/app/research'
+                            ? <Research state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+                            : path === '/app/watchlists'
+                              ? <Watchlists state={state} setState={setState} toast={notify} />
+                              : path === '/app/benchmarks' || path === '/app/compare'
+                                ? <Benchmarks state={state} toast={notify} />
+                                : path === '/app/ideas'
+                                  ? <Ideas state={state} setState={setState} />
+                                  : path === '/app/prompts'
+                                    ? <Prompts toast={notify} />
+                                    : path === '/app/settings'
+                                      ? <Settings />
+                                      : <Home locale={locale} />;
+
+  return <div className="app-shell">
+    <Header
+      path={path}
+      onTheme={() => setTheme(current => current === 'light' ? 'dark' : 'light')}
+      account={account}
+      onSignIn={beginLogin}
+      onSignOut={endSession}
+      locale={locale}
+      onLocaleChange={setLocale}
+      isOwner={isOwner}
+    />
+    {content}
+    {drawer && <DetailDrawer video={drawer} state={state} setState={setState} onClose={() => setDrawer(null)} toast={notify} />}
+    {toast && <div className="toast" aria-live="polite">✓ {toast.message}</div>}
+  </div>;
+}
