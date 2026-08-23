@@ -11,16 +11,20 @@ import {
   loadVideoModels,
   refreshVideoGeneration,
   uploadVideoInput,
+  VideoGenerationClientError,
   type VideoGeneration,
-  type VideoGenerationClientError,
   type VideoModel,
   type VideoModelId,
 } from '@/src/lib/video-generation';
 
-type UploadedInput = { assetId: string; name: string; previewUrl: string };
+type UploadedInput = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type UploadSlot = 'start' | 'end' | null;
 
 const MAX_HISTORY = 20;
+const H3_MIN_IMAGE_SIDE = 256;
+const H3_MAX_IMAGE_SIDE = 5760;
+const H3_MIN_IMAGE_RATIO = 0.4;
+const H3_MAX_IMAGE_RATIO = 2.5;
 
 function copy(locale: UiLocale) {
   const zh = locale === 'zh';
@@ -50,6 +54,7 @@ function copy(locale: UiLocale) {
     duration: zh ? '时长' : 'Duration',
     ratio: zh ? '画幅' : 'Aspect ratio',
     resolution: zh ? '分辨率' : 'Resolution',
+    h3FrameRule: zh ? 'MiniMax H3 以 START 图片决定画幅；图片须为 256–5760 px，长宽比 0.4–2.5。' : 'MiniMax H3 follows the START frame. Images must be 256–5760 px with a 0.4–2.5 aspect ratio.',
     estimate: zh ? '预计冻结积分' : 'Credits held on submit',
     ownerCredits: zh ? '主人权限' : 'Owner access',
     ownerUnlimited: zh ? '主人账号 · 不限积分' : 'Owner account · Unlimited credits',
@@ -89,8 +94,38 @@ function formatTime(value: string, locale: UiLocale) {
 }
 
 function asClientMessage(error: unknown) {
+  if (error && typeof error === 'object' && 'code' in error && (error as VideoGenerationClientError).code === 'APIMART_INVALID_REQUEST') {
+    return '所选模型没有接受这组输入。请先只保留 START 图片后重试；若使用 MiniMax H3，图片需为 256–5760 px、长宽比 0.4–2.5。END 图片只在必须锁定结尾画面时添加。';
+  }
   if (error && typeof error === 'object' && 'message' in error) return String((error as VideoGenerationClientError).message);
   return '操作暂时无法完成，请稍后重试。';
+}
+
+async function imageDimensions(file: File) {
+  if (typeof createImageBitmap !== 'function') {
+    throw new VideoGenerationClientError('当前浏览器无法读取图片尺寸，请更换为 JPG、PNG 或 WEBP 图片后重试。', 422, 'VIDEO_INPUT_DIMENSIONS_UNAVAILABLE');
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    return { width: bitmap.width, height: bitmap.height };
+  } finally {
+    bitmap.close();
+  }
+}
+
+function assertH3ImageDimensions(frame: UploadedInput, label: 'START' | 'END') {
+  const ratio = frame.width / frame.height;
+  if (
+    frame.width < H3_MIN_IMAGE_SIDE || frame.height < H3_MIN_IMAGE_SIDE ||
+    frame.width > H3_MAX_IMAGE_SIDE || frame.height > H3_MAX_IMAGE_SIDE ||
+    ratio < H3_MIN_IMAGE_RATIO || ratio > H3_MAX_IMAGE_RATIO
+  ) {
+    throw new VideoGenerationClientError(
+      `${label} 图片为 ${frame.width}×${frame.height}px，不符合 MiniMax H3 要求：单边 256–5760px，长宽比 0.4–2.5。`,
+      422,
+      'MINIMAX_IMAGE_DIMENSIONS_UNSUPPORTED',
+    );
+  }
 }
 
 function StatusBadge({ status, locale }: { status: VideoGeneration['status']; locale: UiLocale }) {
@@ -230,8 +265,11 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     setUploading(slot);
     setError('');
     try {
+      // Verify the browser can decode the chosen file before creating a
+      // private storage asset. That avoids leaving an unusable upload behind.
+      const dimensions = await imageDimensions(file);
       const assetId = await uploadVideoInput(file);
-      const next = { assetId, name: file.name, previewUrl: URL.createObjectURL(file) };
+      const next = { assetId, name: file.name, previewUrl: URL.createObjectURL(file), ...dimensions };
       if (slot === 'start') setStartFrame(next); else setEndFrame(next);
       notify(locale === 'zh' ? '图片已上传到私有工作区。' : 'Image uploaded to the private workspace.');
     } catch (cause) {
@@ -247,6 +285,10 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     setSubmitting(true);
     setError('');
     try {
+      if (model === 'minimax-h3') {
+        assertH3ImageDimensions(startFrame, 'START');
+        if (endFrame) assertH3ImageDimensions(endFrame, 'END');
+      }
       const generation = await createVideoGeneration({
         model,
         prompt: prompt.trim(),
@@ -309,9 +351,10 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
           <div className="studio-controls">
             <label>{text.model}<select name="model" value={model} onChange={event => { const next = event.target.value as VideoModelId; setModel(next); if (next === 'minimax-h3' && !['768P', '2K'].includes(resolution)) setResolution('768P'); if (next === 'seedance-2' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p'); }}><option value="auto" disabled>Auto · {locale === 'zh' ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ` · ${locale === 'zh' ? '未就绪' : 'Not ready'}`}</option>)}</select></label>
             <label>{text.duration}<select name="duration" value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label>
-            <label>{text.ratio}<select name="aspectRatio" value={aspectRatio} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></label>
+            <label>{text.ratio}<select name="aspectRatio" value={aspectRatio} disabled={model === 'minimax-h3'} aria-describedby={model === 'minimax-h3' ? 'minimax-h3-frame-rule' : undefined} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></label>
             <label>{text.resolution}<select name="resolution" value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
           </div>
+          {model === 'minimax-h3' && <p id="minimax-h3-frame-rule" className="studio-model-note">{text.h3FrameRule}</p>}
           <div className="studio-submit"><div><span>{selectedModel?.ownerUnlimited ? text.ownerCredits : text.estimate}</span><b>{selectedModel?.ownerUnlimited ? (locale === 'zh' ? '不限' : 'Unlimited') : selectedModel?.creditsCost ? `${selectedModel.creditsCost} credits` : '—'}</b><small>{selectedModel?.ownerUnlimited ? text.ownerUnlimited : selectedModel?.reason || (locale === 'zh' ? '成功后扣除；模型失败将自动退回。' : 'Charged on success; released if the model fails.')}</small></div><button type="submit" className="primary" disabled={!canCreate}>{submitting ? text.generating : text.generate}</button></div>
         </form>
 
