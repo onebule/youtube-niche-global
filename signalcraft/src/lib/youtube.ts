@@ -2,7 +2,7 @@ import type { Channel, Video } from './types';
 import { authHeaders } from './auth';
 
 type ApiOpportunity = {
-  title:string; topic?:string; languageCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
+  title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
   format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean;
 };
@@ -19,7 +19,7 @@ type ApiResponse = {
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
-const displayRegion:Record<string,string>={US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
+const displayRegion:Record<string,string>={all:'全部国家',US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
 // Use the project alias rather than an immutable Vercel deployment URL. The
 // alias survives redeployments and is the only backend origin the frontend
 // should depend on in production.
@@ -57,7 +57,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     const channelId=item.channelId||`yt-channel-${bucket}-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
     const videoLanguage=displayLanguage(item.languageCode);
-    const market=displayRegion[region]||region;
+    const market=displayRegion[item.marketCode||region]||item.marketCode||region;
     // A search/ranking response contains one video per channel, not a channel
     // history. Do not manufacture a "median" by reversing views/subscribers:
     // that turns the subscriber count into a misleading performance baseline.

@@ -19,6 +19,7 @@ const categories = {
 } as const;
 
 const markets = {
+  all: ['全部国家', 'All markets'],
   US: ['美国', 'United States'],
   GB: ['英国', 'United Kingdom'],
   JP: ['日本', 'Japan'],
