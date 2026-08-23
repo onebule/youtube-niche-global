@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { channels, getOpportunity, initialAlerts, initialCollections, initialIdeas, initialTasks, promptTemplates, watchRules } from '@/src/lib/mock';
 import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
 import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from '@/src/lib/types';
@@ -175,7 +175,7 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
   // failed API response with attractive demo cards, otherwise users cannot
   // tell that the current YouTube quota has no usable samples.
   const source=remote??EMPTY_VIDEO_LIST;
-  const runSearch=async()=>{
+  const runSearch=useCallback(async()=>{
     if(mode==='research'&&!filters.q.trim()){setRemote(null);setError('请输入一个赛道关键词，例如 AI productivity。');return;}
     setLoading(true);setError('');
     try{
@@ -185,8 +185,8 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
       setRemote(result.videos);setPage(1);
     }catch(reason){setError(reason instanceof Error?reason.message:'YouTube 公开数据暂时无法读取。');}
     finally{setLoading(false);}
-  };
-  const runRankingSearch=async()=>{
+  },[mode,filters.q,filters.language,filters.region,filters.window,filters.maxSubs,filters.minViews,filters.format,filters.category]);
+  const runRankingSearch=useCallback(async()=>{
     setLoading(true);setError('');
     try{
       const selectedFormat=filters.format==='short'||filters.format==='long'?filters.format:undefined;
@@ -196,7 +196,7 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
       setRankingData({short:fetched.filter(video=>video.format==='short'),long:fetched.filter(video=>video.format==='long'),nextPageToken:result.nextPageToken,loadedCount:fetched.length,dataScope:result.dataScope});setRemote(null);setPage(1);
     }catch(reason){setRankingData(null);setError(reason instanceof Error?reason.message:'YouTube 公开数据暂时无法读取。');}
     finally{setLoading(false);}
-  };
+  },[filters.language,filters.region,filters.window,filters.maxSubs,filters.minViews,filters.format,filters.category]);
   const loadMoreRanking=async()=>{
     const pageToken=rankingData?.nextPageToken;
     if(!pageToken||loadingMore)return;
@@ -213,8 +213,8 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
     }catch(reason){setError(reason instanceof Error?reason.message:'下一页 YouTube 公开数据暂时无法读取。');}
     finally{setLoadingMore(false);}
   };
-  useEffect(()=>{if(mode!=='discover'&&mode!=='radar')return;const task=window.setTimeout(()=>{void runSearch()},0);return()=>window.clearTimeout(task)},[mode,filters.window,filters.region,filters.language,filters.format,filters.category,filters.maxSubs]);
-  useEffect(()=>{if(mode!=='rankings')return;const task=window.setTimeout(()=>{void runRankingSearch()},0);return()=>window.clearTimeout(task)},[mode,filters.window,filters.region,filters.language,filters.format,filters.category,filters.maxSubs,filters.minViews]);
+  useEffect(()=>{if(mode!=='discover'&&mode!=='radar')return;const task=window.setTimeout(()=>{void runSearch()},0);return()=>window.clearTimeout(task)},[mode,runSearch]);
+  useEffect(()=>{if(mode!=='rankings')return;const task=window.setTimeout(()=>{void runRankingSearch()},0);return()=>window.clearTimeout(task)},[mode,runRankingSearch]);
   const rows=useMemo(()=>source.filter(v=>{
     const o=scoreFor(v),c=channelFor(v),text=`${v.title} ${v.topic} ${v.tags.join(' ')}`.toLowerCase();
     const matchesQuery=mode==='discover'||mode==='radar'||Boolean(remote)||!filters.q||text.includes(filters.q.toLowerCase());
