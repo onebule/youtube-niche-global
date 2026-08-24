@@ -4,6 +4,7 @@ export type OwnerOverview = {
   owner: { email: string; ownerCount: number };
   users: {
     available: boolean;
+    teamAccessAvailable: boolean;
     total: number | null;
     recent: Array<{
       email: string;
@@ -11,6 +12,12 @@ export type OwnerOverview = {
       lastSignInAt: string | null;
       provider: string;
       isOwner: boolean;
+      teamAccess: {
+        status: 'owner' | 'environment' | 'active' | 'expired' | 'none';
+        active: boolean;
+        expiresAt: string | null;
+        updatedAt?: string | null;
+      };
     }>;
   };
   collection: {
@@ -35,6 +42,8 @@ export type OwnerOverview = {
   };
 };
 
+export type TeamAccessDuration = '7d' | '30d' | 'permanent';
+
 export class OwnerOverviewError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -58,4 +67,23 @@ export async function hasOwnerAccess(): Promise<boolean> {
     cache: 'no-store',
   });
   return response.ok;
+}
+
+export async function updateVideoTeamAccess({
+  email,
+  action,
+  duration,
+}: {
+  email: string;
+  action: 'grant' | 'revoke';
+  duration?: TeamAccessDuration;
+}): Promise<void> {
+  const response = await fetch('/api/owner-access', {
+    method: action === 'grant' ? 'POST' : 'DELETE',
+    headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ email, ...(action === 'grant' ? { duration } : {}) }),
+    cache: 'no-store',
+  });
+  const payload = await response.json() as { error?: string };
+  if (!response.ok) throw new OwnerOverviewError(payload.error || '无法更新 Team 权限。', response.status);
 }
