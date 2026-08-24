@@ -85,6 +85,8 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     // history. Do not manufacture a "median" by reversing views/subscribers:
     // that turns the subscriber count into a misleading performance baseline.
     channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
+    // The API already selects a card-appropriate thumbnail URL. The proxy
+    // keeps that public YouTube URL off the client and preserves its cache.
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
     const sourceId=(item.videoUrl||`${bucket}-${index}`).split('v=').at(-1)||`${bucket}-${index}`;
     const currentCapturedAt=typeof item.latestCapturedAt==='string'&&Number.isFinite(new Date(item.latestCapturedAt).getTime())?item.latestCapturedAt:new Date().toISOString();
