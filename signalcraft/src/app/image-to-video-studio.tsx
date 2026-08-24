@@ -66,6 +66,10 @@ function copy(locale: UiLocale) {
     loadPreview: zh ? '加载视频预览' : 'Load video preview',
     download: zh ? '下载视频' : 'Download video',
     again: zh ? '再次生成' : 'Generate again',
+    syncOutput: zh ? '重新同步成片' : 'Sync generated video',
+    syncingOutput: zh ? '正在同步成片…' : 'Syncing generated video…',
+    syncOutputHint: zh ? '中转站已生成同一个任务；这只会同步现有结果，不会再次调用模型或产生新的 API 消耗。' : 'The same provider task is complete. This syncs the existing result without calling the model or creating new API usage.',
+    syncOutputPending: zh ? '正在读取中转站的已有结果，请稍后再次打开此任务。' : 'The existing provider result is still being read. Please reopen this task shortly.',
     nextStart: zh ? '用作下一镜 START' : 'Use as next START',
     nextStartHint: zh ? '等待模型返回可保存的尾帧后开放。' : 'Available when the model returns a storable final frame.',
     history: zh ? 'Generation History' : 'Generation History',
@@ -177,6 +181,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ generationId: string; url: string } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [syncingOutput, setSyncingOutput] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
@@ -185,6 +190,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const currentId = current?.id || null;
   const currentStatus = current?.status || null;
   const previewUrl = preview?.generationId === currentId ? preview.url : '';
+  const canSyncExistingOutput = current?.status === 'failed' && current.errorCode === 'VIDEO_OUTPUT_SOURCE_REJECTED';
   const canCreate = Boolean(startFrame && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
 
   const upsertGeneration = useCallback((next: VideoGeneration) => {
@@ -323,6 +329,25 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     catch (cause) { setError(asClientMessage(cause)); }
   };
 
+  const syncExistingOutput = async () => {
+    if (!current || !canSyncExistingOutput) return;
+    setSyncingOutput(true);
+    setError('');
+    try {
+      const next = await refreshVideoGeneration(current.id);
+      upsertGeneration(next);
+      if (next.status === 'completed') {
+        notify(locale === 'zh' ? '已同步中转站完成的视频，可以预览或下载。' : 'The completed provider video is now synced and ready to preview or download.');
+      } else {
+        setError(text.syncOutputPending);
+      }
+    } catch (cause) {
+      setError(asClientMessage(cause));
+    } finally {
+      setSyncingOutput(false);
+    }
+  };
+
   const loadMore = async () => {
     setLoadingMore(true);
     try {
@@ -360,7 +385,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
 
         <aside className="studio-current" aria-label={text.current}>
           <div className="studio-current-head"><div><span>02</span><h2>{text.current}</h2></div>{current && <StatusBadge status={current.status} locale={locale}/>}</div>
-          {!current ? <div className="current-empty"><i aria-hidden="true">✦</i><b>{text.noTask}</b><p>{text.noTaskBody}</p></div> : <div className="current-body"><div className="current-meta"><span>{modelName(current.model)}</span><span>{current.duration} · {current.aspectRatio} · {current.resolution}</span></div><p id={`video-prompt-${current.id}`} className="current-prompt">{current.prompt}</p>{current.status === 'processing' || current.status === 'queued' ? <div className="progress-line" aria-label={`${current.progress}%`}><i style={{ width: `${Math.max(4, current.progress)}%` }} /><span>{current.progress}%</span></div> : null}{current.status === 'failed' && <p className="current-failure">{current.errorMessage || (locale === 'zh' ? '生成未完成，已自动退回冻结积分。' : 'Generation did not complete. Held credits were released.')}</p>}{current.status === 'completed' && <>{previewUrl ? <video className="video-preview" controls playsInline preload="metadata" aria-label={locale === 'zh' ? '生成视频预览' : 'Generated video preview'} aria-describedby={`video-prompt-${current.id}`} src={previewUrl}><span>{locale === 'zh' ? '当前浏览器无法播放该视频。' : 'This browser cannot play this video.'}</span></video> : <button type="button" className="preview-empty" onClick={() => { void loadPreview(); }} disabled={loadingPreview}>{loadingPreview ? (locale === 'zh' ? '正在加载预览…' : 'Loading preview…') : text.loadPreview}</button>}<div className="current-actions"><button type="button" onClick={download}>{text.download}</button><button type="button" onClick={() => { setPrompt(current.prompt); setModel(current.model); }}>{text.again}</button><button type="button" disabled title={text.nextStartHint}>{text.nextStart}</button></div></>}</div>}
+          {!current ? <div className="current-empty"><i aria-hidden="true">✦</i><b>{text.noTask}</b><p>{text.noTaskBody}</p></div> : <div className="current-body"><div className="current-meta"><span>{modelName(current.model)}</span><span>{current.duration} · {current.aspectRatio} · {current.resolution}</span></div><p id={`video-prompt-${current.id}`} className="current-prompt">{current.prompt}</p>{current.status === 'processing' || current.status === 'queued' ? <div className="progress-line" aria-label={`${current.progress}%`}><i style={{ width: `${Math.max(4, current.progress)}%` }} /><span>{current.progress}%</span></div> : null}{current.status === 'failed' && <><p className="current-failure">{current.errorMessage || (locale === 'zh' ? '生成未完成，已自动退回冻结积分。' : 'Generation did not complete. Held credits were released.')}</p>{canSyncExistingOutput && <div className="current-actions sync-output-actions"><button type="button" onClick={() => { void syncExistingOutput(); }} disabled={syncingOutput}>{syncingOutput ? text.syncingOutput : text.syncOutput}</button><span className="sync-output-note">{text.syncOutputHint}</span></div>}</>}{current.status === 'completed' && <>{previewUrl ? <video className="video-preview" controls playsInline preload="metadata" aria-label={locale === 'zh' ? '生成视频预览' : 'Generated video preview'} aria-describedby={`video-prompt-${current.id}`} src={previewUrl}><span>{locale === 'zh' ? '当前浏览器无法播放该视频。' : 'This browser cannot play this video.'}</span></video> : <button type="button" className="preview-empty" onClick={() => { void loadPreview(); }} disabled={loadingPreview}>{loadingPreview ? (locale === 'zh' ? '正在加载预览…' : 'Loading preview…') : text.loadPreview}</button>}<div className="current-actions"><button type="button" onClick={download}>{text.download}</button><button type="button" onClick={() => { setPrompt(current.prompt); setModel(current.model); }}>{text.again}</button><button type="button" disabled title={text.nextStartHint}>{text.nextStart}</button></div></>}</div>}
         </aside>
       </div>
 

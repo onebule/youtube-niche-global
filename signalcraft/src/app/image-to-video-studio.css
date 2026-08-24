@@ -259,6 +259,10 @@
   outline:2px solid var(--cyan);
   outline-offset:2px
 }
+.video-studio button:focus-visible,.generation-row:focus-visible{
+  outline:2px solid var(--cyan);
+  outline-offset:2px
+}
 .studio-controls{
   display:grid;
   grid-template-columns:1.45fr repeat(3,1fr);
@@ -439,6 +443,15 @@
 .current-actions button:disabled{
   cursor:not-allowed;
   opacity:.52
+}
+.sync-output-actions{
+  align-items:flex-start
+}
+.sync-output-note{
+  flex-basis:100%;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.5
 }
 .generation-history{
   margin-top:18px;
