@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const upstream = 'https://youtube-niche-global-api.vercel.app/api/owner-access';
+const upstream = 'https://youtube-niche-global-api.vercel.app/api/owner-status?view=team-access';
 
 async function forward(request: NextRequest) {
   const authorization = request.headers.get('authorization');
