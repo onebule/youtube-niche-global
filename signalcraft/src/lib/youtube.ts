@@ -15,6 +15,8 @@ export type PublicRankingScope = {
   collectionLookbackDays:number;
   latestCapturedAt:string|null;
   growthComparableCount?:number;
+  freshness?:'verified'|'snapshot';
+  revalidatedCount?:number;
 };
 
 const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
@@ -26,7 +28,9 @@ const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
     && Number.isFinite(scope.publishedWindowDays)
     && Number.isFinite(scope.collectionLookbackDays)
     && (scope.latestCapturedAt===null||typeof scope.latestCapturedAt==='string')
-    && (scope.growthComparableCount===undefined||Number.isFinite(scope.growthComparableCount));
+    && (scope.growthComparableCount===undefined||Number.isFinite(scope.growthComparableCount))
+    && (scope.freshness===undefined||scope.freshness==='verified'||scope.freshness==='snapshot')
+    && (scope.revalidatedCount===undefined||Number.isFinite(scope.revalidatedCount));
 };
 
 type ApiResponse = {
@@ -55,7 +59,7 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;limit?:number;pageToken?:string}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
@@ -67,6 +71,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   if(input.format) params.set('format',input.format);
   if(input.category && input.category!=='all') params.set('category',input.category);
   if(input.ranking) params.set('ranking','1');
+  if(input.refresh) params.set('refresh','1');
   if(input.limit) params.set('limit',String(Math.min(Math.max(Math.round(input.limit),1),100)));
   if(input.pageToken) params.set('pageToken',input.pageToken);
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
