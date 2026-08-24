@@ -3,7 +3,7 @@ export type IdeaStatus = '收集' | '验证' | '制作中' | '已发布' | '复�
 export type VideoFormat = 'short' | 'long';
 export interface User { id:string; name:string; email:string; role:Role; avatar?:string }
 export interface Workspace { id:string; name:string; brandName:string; timezone:string }
-export interface Channel { id:string; title:string; handle:string; url?:string; subscribers:number; language:string; region:string; medianViews:number; health:number; tags:string[]; owner:string; lastSync:string }
+export interface Channel { id:string; title:string; handle:string; url?:string; thumbnail?:string; subscribers:number; language:string; region:string; medianViews:number; health:number; tags:string[]; owner:string; lastSync:string }
 export interface VideoSnapshot { capturedAt:string; views:number; likes:number; comments:number; subscribers?:number }
 export interface Video { id:string; channelId:string; title:string; topic:string; language:string; region:string; format:VideoFormat; publishedAt:string; durationSeconds:number; thumbnail:string; sourceUrl?:string; risk:'low'|'medium'|'high'; snapshots:VideoSnapshot[]; tags:string[]; }
 export interface Opportunity { videoId:string; opportunityScore:number; velocityScore:number; outlierScore:number; confidence:number; viewsPerHour:number; viewsPerSubscriber:number; growthRate:number; reasons:string[]; }
