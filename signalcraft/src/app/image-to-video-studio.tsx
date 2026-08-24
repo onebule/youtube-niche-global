@@ -78,6 +78,7 @@ function copy(locale: UiLocale) {
     more: zh ? '加载更多' : 'Load more',
     retry: zh ? '重试读取' : 'Retry',
     team: zh ? 'Team 内测' : 'Team preview',
+    syncReady: zh ? '可同步成片' : 'Ready to sync',
     status: {
       queued: zh ? '排队中' : 'Queued',
       processing: zh ? '生成中' : 'Generating',
@@ -132,8 +133,13 @@ function assertH3ImageDimensions(frame: UploadedInput, label: 'START' | 'END') {
   }
 }
 
-function StatusBadge({ status, locale }: { status: VideoGeneration['status']; locale: UiLocale }) {
-  return <span className={`video-status ${status}`}>{copy(locale).status[status]}</span>;
+function canSyncProviderOutput(status: VideoGeneration['status'], errorCode?: string | null) {
+  return status === 'failed' && errorCode === 'VIDEO_OUTPUT_SOURCE_REJECTED';
+}
+
+function StatusBadge({ status, errorCode, locale }: { status: VideoGeneration['status']; errorCode?: string | null; locale: UiLocale }) {
+  const readyToSync = canSyncProviderOutput(status, errorCode);
+  return <span className={`video-status ${readyToSync ? 'sync-ready' : status}`}>{readyToSync ? copy(locale).syncReady : copy(locale).status[status]}</span>;
 }
 
 function FrameUploader({
@@ -190,7 +196,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const currentId = current?.id || null;
   const currentStatus = current?.status || null;
   const previewUrl = preview?.generationId === currentId ? preview.url : '';
-  const canSyncExistingOutput = current?.status === 'failed' && current.errorCode === 'VIDEO_OUTPUT_SOURCE_REJECTED';
+  const canSyncExistingOutput = Boolean(current && canSyncProviderOutput(current.status, current.errorCode));
   const canCreate = Boolean(startFrame && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
 
   const upsertGeneration = useCallback((next: VideoGeneration) => {
@@ -384,12 +390,12 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
         </form>
 
         <aside className="studio-current" aria-label={text.current} aria-live="polite">
-          <div className="studio-current-head"><div><span>02</span><h2>{text.current}</h2></div>{current && <StatusBadge status={current.status} locale={locale}/>}</div>
+          <div className="studio-current-head"><div><span>02</span><h2>{text.current}</h2></div>{current && <StatusBadge status={current.status} errorCode={current.errorCode} locale={locale}/>}</div>
           {!current ? <div className="current-empty"><i aria-hidden="true">✦</i><b>{text.noTask}</b><p>{text.noTaskBody}</p></div> : <div className="current-body"><div className="current-meta"><span>{modelName(current.model)}</span><span>{current.duration} · {current.aspectRatio} · {current.resolution}</span></div><p id={`video-prompt-${current.id}`} className="current-prompt">{current.prompt}</p>{current.status === 'processing' || current.status === 'queued' ? <div className="progress-line" aria-label={`${current.progress}%`}><i style={{ width: `${Math.max(4, current.progress)}%` }} /><span>{current.progress}%</span></div> : null}{current.status === 'failed' && <><p className="current-failure">{current.errorMessage || (locale === 'zh' ? '生成未完成，已自动退回冻结积分。' : 'Generation did not complete. Held credits were released.')}</p>{canSyncExistingOutput && <div className="current-actions sync-output-actions"><button type="button" onClick={() => { void syncExistingOutput(); }} disabled={syncingOutput}>{syncingOutput ? text.syncingOutput : text.syncOutput}</button><span className="sync-output-note">{text.syncOutputHint}</span></div>}</>}{current.status === 'completed' && <>{previewUrl ? <video className="video-preview" controls playsInline preload="metadata" aria-label={locale === 'zh' ? '生成视频预览' : 'Generated video preview'} aria-describedby={`video-prompt-${current.id}`} src={previewUrl}><span>{locale === 'zh' ? '当前浏览器无法播放该视频。' : 'This browser cannot play this video.'}</span></video> : <button type="button" className="preview-empty" onClick={() => { void loadPreview(); }} disabled={loadingPreview}>{loadingPreview ? (locale === 'zh' ? '正在加载预览…' : 'Loading preview…') : text.loadPreview}</button>}<div className="current-actions"><button type="button" onClick={download}>{text.download}</button><button type="button" onClick={() => { setPrompt(current.prompt); setModel(current.model); }}>{text.again}</button><button type="button" disabled title={text.nextStartHint}>{text.nextStart}</button></div></>}</div>}
         </aside>
       </div>
 
-      <section className="generation-history"><div className="generation-history-head"><div><span className="eyebrow">03 · HISTORY</span><h2>{text.history}</h2><p>{text.historyBody}</p></div><span>{history.length}</span></div>{history.length ? <div className="generation-list">{history.map(item => <button type="button" key={item.id} className={`generation-row ${current?.id === item.id ? 'selected' : ''}`} onClick={() => setSelectedId(item.id)}><span className="generation-status-dot" data-status={item.status} aria-hidden="true"/><span className="generation-row-main"><b>{item.prompt}</b><small>{modelName(item.model)} · {item.duration} · {formatTime(item.createdAt, locale)}</small></span><StatusBadge status={item.status} locale={locale}/><span className="generation-row-cost">{item.creditsCost || '—'} cr</span></button>)}</div> : <p className="history-empty">{text.emptyHistory}</p>}{hasMoreHistory && <button type="button" className="history-more" onClick={() => { void loadMore(); }} disabled={loadingMore}>{loadingMore ? (locale === 'zh' ? '正在加载…' : 'Loading…') : text.more}</button>}</section>
+      <section className="generation-history"><div className="generation-history-head"><div><span className="eyebrow">03 · HISTORY</span><h2>{text.history}</h2><p>{text.historyBody}</p></div><span>{history.length}</span></div>{history.length ? <div className="generation-list">{history.map(item => <button type="button" key={item.id} className={`generation-row ${current?.id === item.id ? 'selected' : ''}`} onClick={() => setSelectedId(item.id)}><span className="generation-status-dot" data-status={item.status} aria-hidden="true"/><span className="generation-row-main"><b>{item.prompt}</b><small>{modelName(item.model)} · {item.duration} · {formatTime(item.createdAt, locale)}</small></span><StatusBadge status={item.status} errorCode={item.errorCode} locale={locale}/><span className="generation-row-cost">{item.creditsCost || '—'} cr</span></button>)}</div> : <p className="history-empty">{text.emptyHistory}</p>}{hasMoreHistory && <button type="button" className="history-more" onClick={() => { void loadMore(); }} disabled={loadingMore}>{loadingMore ? (locale === 'zh' ? '正在加载…' : 'Loading…') : text.more}</button>}</section>
     </>}
   </main>;
 }

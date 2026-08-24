@@ -344,6 +344,11 @@
   border-color:var(--brand);
   color:var(--brand)
 }
+.video-status.sync-ready{
+  border-color:color-mix(in srgb,var(--cyan) 55%,var(--line));
+  background:color-mix(in srgb,var(--cyan) 8%,transparent);
+  color:#0b7d75
+}
 .current-empty{
   display:grid;
   min-height:310px;
