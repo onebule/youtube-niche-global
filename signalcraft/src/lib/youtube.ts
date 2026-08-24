@@ -73,7 +73,6 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   const payload=await response.json() as ApiResponse;
   if(!response.ok) throw new Error(payload.error||'YouTube 公开数据请求失败。');
   const source=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])];
-  if(!source.length&&!input.pageToken) throw new Error(payload.noCandidatesMessage||'没有找到符合条件的公开样本。');
   const channels:Channel[]=[];
   const videos:Video[]=source.map((item,index)=>{
     const bucket=input.format||'all';
@@ -96,5 +95,5 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
       : [{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}];
     return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
   });
-  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null};
+  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null,noCandidatesMessage:source.length||input.pageToken?null:payload.noCandidatesMessage||'当前筛选范围没有可用的公开视频样本。'};
 }
