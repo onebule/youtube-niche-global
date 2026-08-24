@@ -68,7 +68,7 @@ function copy(locale: UiLocale) {
     again: zh ? '再次生成' : 'Generate again',
     syncOutput: zh ? '重新同步成片' : 'Sync generated video',
     syncingOutput: zh ? '正在同步成片…' : 'Syncing generated video…',
-    syncOutputHint: zh ? '中转站已生成同一个任务；这只会同步现有结果，不会再次调用模型或产生新的 API 消耗。' : 'The same provider task is complete. This syncs the existing result without calling the model or creating new API usage.',
+    syncOutputHint: zh ? '中转站已生成同一个任务；这只会查询并同步现有结果，不会再次提交模型或产生新的生成费用。' : 'The same provider task is complete. This only reads and syncs the existing result; it does not submit the model again or create another generation charge.',
     syncOutputPending: zh ? '正在读取中转站的已有结果，请稍后再次打开此任务。' : 'The existing provider result is still being read. Please reopen this task shortly.',
     nextStart: zh ? '用作下一镜 START' : 'Use as next START',
     nextStartHint: zh ? '等待模型返回可保存的尾帧后开放。' : 'Available when the model returns a storable final frame.',
