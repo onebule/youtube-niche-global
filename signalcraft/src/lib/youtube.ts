@@ -2,7 +2,7 @@ import type { Channel, Video } from './types';
 import { authHeaders } from './auth';
 
 type ApiOpportunity = {
-  title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
+  title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
   format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
 };
@@ -59,7 +59,7 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
+export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;entity?:'videos'|'channels';ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
@@ -71,24 +71,26 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   if(input.format) params.set('format',input.format);
   if(input.category && input.category!=='all') params.set('category',input.category);
   if(input.ranking) params.set('ranking','1');
+  if(input.entity==='channels') params.set('entity','channels');
   if(input.refresh) params.set('refresh','1');
   if(input.limit) params.set('limit',String(Math.min(Math.max(Math.round(input.limit),1),100)));
   if(input.pageToken) params.set('pageToken',input.pageToken);
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
   const payload=await response.json() as ApiResponse;
   if(!response.ok) throw new Error(payload.error||'YouTube 公开数据请求失败。');
-  const source=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])];
+  const source=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])].filter(item=>Boolean(item.channelId&&item.channelTitle&&item.channelUrl)&&Number.isFinite(Number(item.subscribers))&&Number(item.subscribers)>0);
   const channels:Channel[]=[];
   const videos:Video[]=source.map((item,index)=>{
     const bucket=input.format||'all';
     const channelId=item.channelId||`yt-channel-${bucket}-${index}`;
     const publishedAt=item.publishedAt || new Date(Date.now()-Math.max(item.ageDays,1)*86400000).toISOString();
+    const channelThumbnail=item.channelThumbnail?thumbnailEndpoint+'?url='+encodeURIComponent(item.channelThumbnail):'';
     const videoLanguage=displayLanguage(item.languageCode);
     const market=displayRegion[item.marketCode||region]||item.marketCode||region;
     // A search/ranking response contains one video per channel, not a channel
     // history. Do not manufacture a "median" by reversing views/subscribers:
     // that turns the subscriber count into a misleading performance baseline.
-    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
+    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,thumbnail:channelThumbnail,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
     // The API already selects a card-appropriate thumbnail URL. The proxy
     // keeps that public YouTube URL off the client and preserves its cache.
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
