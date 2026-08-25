@@ -98,3 +98,17 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 @media(max-width:760px){.owner-header{align-items:start;flex-direction:column}.owner-identity,.owner-summary,.owner-grid{grid-template-columns:1fr}.owner-identity-facts{grid-template-columns:1fr}.owner-summary{gap:1px}.owner-console{padding-top:32px}.collection-panel dl{grid-template-columns:92px 1fr}.owner-link{font-size:0;padding:8px}.owner-link:before{content:"管理";font-size:12px}}
 [data-theme="dark"] .owner-identity,[data-theme="dark"] .owner-summary,[data-theme="dark"] .owner-panel,[data-theme="dark"] .owner-gate{border-color:var(--desk-line);background:var(--desk-paper)}[data-theme="dark"] .owner-summary{background:var(--desk-line)}[data-theme="dark"] .owner-identity h2,[data-theme="dark"] .owner-identity-facts dd,[data-theme="dark"] .owner-summary b,[data-theme="dark"] .owner-panel h2,[data-theme="dark"] .owner-service b,[data-theme="dark"] .collection-panel dd,[data-theme="dark"] .owner-limits b{color:var(--desk-ink)}[data-theme="dark"] .owner-identity-facts div,[data-theme="dark"] .owner-limits{background:#2b2520}
 
+/* Ranking → Studio: reuse saved research assets without adding another store. */
+.rankings-page .ranking-row{grid-template-columns:36px 112px minmax(210px,1fr) 84px 108px 72px 104px}
+.rankings-page .ranking-title,.ranking-card-title{color:inherit;text-decoration:none}
+.rankings-page .ranking-title:hover b,.ranking-card-title:hover strong{color:#a82f26;text-decoration:underline;text-underline-offset:3px}
+.ranking-studio-action,.ranking-card-studio{border:1px solid #c83a2e;background:#fffdf9;color:#a82f26;font:800 11px/1.2 inherit;white-space:nowrap}
+.ranking-studio-action{justify-self:end;padding:8px 9px}
+.ranking-card-studio{width:100%;margin-top:3px;padding:8px 10px}
+.ranking-studio-action:hover,.ranking-card-studio:hover{background:#c83a2e;color:#fff}
+.ranking-studio-action.saved,.ranking-card-studio.saved{border-color:#30675b;background:#eef7f3;color:#24584e}
+.rankings-page .ranking-thumb:focus-visible,.rankings-page .ranking-title:focus-visible,.channel-rank-avatar:focus-visible,.ranking-card-image:focus-visible,.ranking-card-title:focus-visible,.ranking-studio-action:focus-visible,.ranking-card-studio:focus-visible{outline:2px solid #1f6f63;outline-offset:2px}
+[data-theme="dark"] .ranking-studio-action,[data-theme="dark"] .ranking-card-studio{background:#24151a;color:#ff8278}
+[data-theme="dark"] .ranking-studio-action.saved,[data-theme="dark"] .ranking-card-studio.saved{background:#183b34;color:#9ee0cf}
+@media(max-width:880px){.rankings-page .ranking-row{grid-template-columns:34px 82px minmax(170px,1fr) 72px 70px 94px}.rankings-page .ranking-stat.velocity,.rankings-page .channel-sample-count{display:none}.rankings-page .ranking-studio-action{display:block}}
+@media(max-width:600px){.rankings-page .ranking-row{grid-template-columns:30px 64px minmax(0,1fr) 62px 84px}.ranking-studio-action{padding:7px 6px;font-size:10px}}
