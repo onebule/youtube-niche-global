@@ -541,6 +541,39 @@
   line-height: 1.5;
 }
 
+.canvas-task-state {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid #c9c0b4;
+  background: #f4efe6;
+  color: #655d54;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.canvas-task-state > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9a9084;
+}
+
+.canvas-task-state.queued > span,
+.canvas-task-state.processing > span {
+  background: #c98b19;
+}
+
+.canvas-task-state.completed > span {
+  background: #0b756f;
+}
+
+.canvas-task-state.failed > span {
+  background: #c83b2d;
+}
+
 .canvas-result-body {
   display: grid;
   gap: 14px;
@@ -688,6 +721,243 @@
   line-height: 1.5;
 }
 
+.video-canvas-composer {
+  position: absolute;
+  z-index: 30;
+  right: clamp(14px, 3vw, 38px);
+  bottom: clamp(14px, 3vw, 30px);
+  left: clamp(14px, 3vw, 38px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px;
+  border: 1px solid rgba(23, 33, 39, .28);
+  border-radius: 22px;
+  background: rgba(255, 253, 248, .96);
+  box-shadow: 0 20px 60px rgba(23, 33, 39, .22), 0 0 0 1px rgba(255, 255, 255, .7) inset;
+  cursor: default;
+  backdrop-filter: blur(18px);
+}
+
+.canvas-composer-media {
+  display: flex;
+  gap: 8px;
+}
+
+.canvas-reference-chip {
+  position: relative;
+  display: grid;
+  width: 78px;
+  min-height: 112px;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  overflow: hidden;
+  border: 1px dashed #9f9588;
+  border-radius: 14px;
+  background: #eee7dc;
+  color: #172127;
+  cursor: pointer;
+}
+
+.canvas-reference-chip:focus-within {
+  outline: 3px solid rgba(11, 117, 111, .28);
+  outline-offset: 2px;
+}
+
+.canvas-reference-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.canvas-reference-chip > span {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.canvas-reference-chip b {
+  font: 900 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .08em;
+}
+
+.canvas-reference-chip small {
+  color: #786e62;
+  font-size: 9px;
+}
+
+.canvas-reference-chip.has-media {
+  border-style: solid;
+  background: #172127;
+  color: #fff;
+}
+
+.canvas-reference-chip img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: .72;
+}
+
+.canvas-reference-chip.has-media b,
+.canvas-reference-chip.has-media small {
+  position: relative;
+  z-index: 1;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: rgba(15, 22, 26, .78);
+  color: #fff;
+}
+
+.canvas-composer-main {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.canvas-composer-prompt {
+  position: relative;
+}
+
+.canvas-composer-prompt textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 54px 9px 12px;
+  resize: none;
+  border: 0;
+  border-bottom: 1px solid #d1c8bb;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: #172127;
+  font: 600 14px/1.5 inherit;
+}
+
+.canvas-composer-prompt textarea:focus {
+  border-color: #0b756f;
+}
+
+.canvas-composer-prompt > span {
+  position: absolute;
+  right: 8px;
+  bottom: 10px;
+  color: #857b70;
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.canvas-composer-controls {
+  display: flex;
+  gap: 7px;
+  align-items: stretch;
+}
+
+.canvas-composer-controls label,
+.canvas-reference-mode,
+.canvas-composer-cost {
+  display: grid;
+  min-width: 108px;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid #d4cabe;
+  border-radius: 10px;
+  background: #f4efe6;
+}
+
+.canvas-composer-controls label > span,
+.canvas-composer-cost small {
+  color: #796f64;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.canvas-composer-controls select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #172127;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.canvas-reference-mode {
+  grid-template-columns: auto 1fr;
+  min-width: 130px;
+  place-items: center start;
+  color: #0b756f;
+}
+
+.canvas-reference-mode b {
+  font-size: 10px;
+}
+
+.canvas-composer-cost {
+  min-width: 66px;
+  text-align: center;
+}
+
+.canvas-composer-cost b {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 17px;
+}
+
+.canvas-composer-generate {
+  display: grid;
+  width: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border: 1px solid #172127;
+  border-radius: 14px;
+  background: #ff5a47;
+  color: #111;
+  font-size: 23px;
+  font-weight: 900;
+  box-shadow: 3px 3px 0 #172127;
+  cursor: pointer;
+}
+
+.canvas-composer-generate:hover:not(:disabled),
+.canvas-composer-generate:focus-visible:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 #172127;
+}
+
+.canvas-composer-generate:disabled {
+  border-color: #c6bdb1;
+  background: #ddd6cc;
+  color: #9c9287;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.canvas-submit-spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(23, 33, 39, .3);
+  border-top-color: #172127;
+  border-radius: 50%;
+  animation: canvas-spin .8s linear infinite;
+}
+
+.canvas-composer-main > p {
+  margin: 0 2px;
+  color: #72685d;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+@keyframes canvas-spin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 900px) {
   .video-canvas-page {
     padding: 18px 12px 36px;
@@ -719,16 +989,70 @@
     top: 10px;
     right: 10px;
   }
+
+  .video-canvas-composer {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    max-height: 44vh;
+    overflow-y: auto;
+    border-radius: 17px;
+  }
+
+  .canvas-composer-media {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+  }
+
+  .canvas-reference-chip {
+    width: 54px;
+    min-height: 54px;
+    border-radius: 10px;
+  }
+
+  .canvas-reference-chip small {
+    display: none;
+  }
+
+  .canvas-composer-main {
+    padding-top: 58px;
+  }
+
+  .canvas-composer-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .canvas-composer-controls label,
+  .canvas-reference-mode,
+  .canvas-composer-cost {
+    min-width: 0;
+  }
+
+  .canvas-composer-generate {
+    width: 100%;
+    min-height: 46px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .canvas-progress i,
-  .canvas-generate {
+  .canvas-generate,
+  .canvas-composer-generate {
     transition: none;
   }
 
   .canvas-generate:hover:not(:disabled),
   .canvas-generate:focus-visible:not(:disabled) {
     transform: none;
+  }
+
+  .canvas-composer-generate:hover:not(:disabled),
+  .canvas-composer-generate:focus-visible:not(:disabled) {
+    transform: none;
+  }
+
+  .canvas-submit-spinner {
+    animation: none;
   }
 }

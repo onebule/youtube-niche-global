@@ -39,11 +39,11 @@ type SavedCanvas = {
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
 const STAGE_SIZE = { width: 1900, height: 1080 };
 const INITIAL_NODES: NodePositions = {
-  source: { x: 70, y: 180 },
+  source: { x: 80, y: 150 },
   prompt: { x: 430, y: 90 },
   model: { x: 450, y: 445 },
-  task: { x: 830, y: 240 },
-  result: { x: 1190, y: 160 },
+  task: { x: 600, y: 210 },
+  result: { x: 1040, y: 135 },
 };
 const NODE_SIZE: Record<NodeId, { width: number; height: number }> = {
   source: { width: 290, height: 470 },
@@ -53,9 +53,7 @@ const NODE_SIZE: Record<NodeId, { width: number; height: number }> = {
   result: { width: 360, height: 500 },
 };
 const CONNECTIONS: Array<[NodeId, NodeId]> = [
-  ['source', 'prompt'],
-  ['prompt', 'task'],
-  ['model', 'task'],
+  ['source', 'task'],
   ['task', 'result'],
 ];
 
@@ -370,7 +368,7 @@ export default function VideoCanvasStudio({
     }
   };
 
-  const useAsNextStart = async () => {
+  const continueWithResult = async () => {
     if (!generation?.thumbnailAssetId) return;
     setError('');
     try {
@@ -427,7 +425,7 @@ export default function VideoCanvasStudio({
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('.video-canvas-node, .video-canvas-toolbar')) return;
+    if ((event.target as HTMLElement).closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     panRef.current = { clientX: event.clientX, clientY: event.clientY, origin: { x: viewport.x, y: viewport.y } };
   };
@@ -522,45 +520,21 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node prompt-node" style={{ left: nodes.prompt.x, top: nodes.prompt.y, width: NODE_SIZE.prompt.width, minHeight: NODE_SIZE.prompt.height }}>
-            <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'prompt')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>Motion Prompt</b><i>⋮⋮</i></div>
-            <div className="canvas-node-body"><textarea value={prompt} maxLength={1200} rows={7} onChange={event => setPrompt(event.target.value)} placeholder={zh ? '主体如何运动？镜头如何移动？光线和节奏如何变化？' : 'How should the subject, camera, light, and pacing move?'} /><small>{prompt.length}/1200</small></div>
-            <span className="node-port output" aria-hidden="true" />
-          </article>
-
-          <article className="video-canvas-node model-node" style={{ left: nodes.model.x, top: nodes.model.y, width: NODE_SIZE.model.width, minHeight: NODE_SIZE.model.height }}>
-            <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'model')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '模型与画幅' : 'Model and format'}</b><i>⋮⋮</i></div>
-            <div className="canvas-node-body canvas-model-fields">
-              <label>{zh ? '模型' : 'Model'}<select value={model} onChange={event => {
-                const next = event.target.value as VideoModelId;
-                setModel(next);
-                if (next === 'minimax-h3') setResolution('768P');
-                if (next === 'seedance-2' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
-              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
-              <div><label>{zh ? '时长' : 'Duration'}<select value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label><label>{zh ? '画幅' : 'Ratio'}<select value={aspectRatio} disabled={model === 'minimax-h3'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label></div>
-              <label>{zh ? '分辨率' : 'Resolution'}<select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
-              {model === 'minimax-h3' && <small>{zh ? 'H3 沿用 START 图片比例。' : 'H3 follows the START image ratio.'}</small>}
-            </div>
-            <span className="node-port output" aria-hidden="true" />
-          </article>
-
           <article className="video-canvas-node task-node" style={{ left: nodes.task.x, top: nodes.task.y, width: NODE_SIZE.task.width, minHeight: NODE_SIZE.task.height }}>
-            <span className="node-port input input-a" aria-hidden="true" /><span className="node-port input input-b" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
+            <span className="node-port input" aria-hidden="true" />
+            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : selectedModel?.creditsCost ? selectedModel.creditsCost + ' cr' : '—'}</b></div>
               <ul><li className={startFrame ? 'done' : ''}>{zh ? 'START 图片' : 'START frame'}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
-              <button type="button" className="canvas-generate" disabled={!canGenerate} onClick={() => void generate()}>{submitting ? (zh ? '正在提交…' : 'Submitting…') : (zh ? '生成视频' : 'Generate video')}</button>
-              <small>{zh ? '仅成功后扣除积分；失败自动解冻。' : 'Credits settle only on success and release on failure.'}</small>
+              <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh) : (zh ? '等待提交' : 'Ready to submit')}</div>
+              <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
             </div>
             <span className="node-port output" aria-hidden="true" />
           </article>
 
           <article className="video-canvas-node result-node" style={{ left: nodes.result.x, top: nodes.result.y, width: NODE_SIZE.result.width, minHeight: NODE_SIZE.result.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>05</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
                 <div className={'canvas-status ' + generation.status}><b>{statusLabel(generation.status, zh)}</b><span>{generation.progress}%</span></div>
@@ -568,12 +542,49 @@ export default function VideoCanvasStudio({
                 {videoUrl ? <video src={videoUrl} controls playsInline preload="metadata" /> : generation.status === 'completed' ? <div className="canvas-media-loading">{zh ? '正在读取私有视频…' : 'Loading private video…'}</div> : null}
                 {generation.status === 'failed' && <p className="canvas-failure">{generation.errorMessage || (zh ? '模型未完成本次生成。' : 'The model did not finish this generation.')}</p>}
                 <dl><div><dt>{zh ? '模型' : 'Model'}</dt><dd>{modelName(generation.model)}</dd></div><div><dt>{zh ? '规格' : 'Format'}</dt><dd>{generation.duration} · {generation.aspectRatio} · {generation.resolution}</dd></div></dl>
-                <div className="canvas-result-actions"><button type="button" disabled={!generation.videoAssetId} onClick={() => void download()}>{zh ? '下载' : 'Download'}</button><button type="button" disabled={!generation.thumbnailAssetId} onClick={() => void useAsNextStart()}>{zh ? '设为下一镜头 START' : 'Use as next START'}</button></div>{generation.thumbnailAssetId && <small>{zh ? '下一镜头将使用结果缩略帧作为 START。' : 'The next shot will use the result thumbnail as START.'}</small>}
+                <div className="canvas-result-actions"><button type="button" disabled={!generation.videoAssetId} onClick={() => void download()}>{zh ? '下载' : 'Download'}</button><button type="button" disabled={!generation.thumbnailAssetId} onClick={() => void continueWithResult()}>{zh ? '设为下一镜头 START' : 'Use as next START'}</button></div>{generation.thumbnailAssetId && <small>{zh ? '下一镜头将使用结果缩略帧作为 START。' : 'The next shot will use the result thumbnail as START.'}</small>}
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
             </div>
           </article>
         </div>
+
+        <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
+          <div className="canvas-composer-media" aria-label={zh ? '参考图片' : 'Reference images'}>
+            <label className={'canvas-reference-chip ' + (startFrame ? 'has-media' : '')}>
+              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload('start', file); event.currentTarget.value = ''; }} />
+              {startFrame?.previewUrl ? <img src={startFrame.previewUrl} alt="" /> : <span aria-hidden="true">＋</span>}
+              <b>START</b><small>{startFrame ? (zh ? '更换' : 'Replace') : (zh ? '必需' : 'Required')}</small>
+            </label>
+            <label className={'canvas-reference-chip ' + (endFrame ? 'has-media' : '')}>
+              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload('end', file); event.currentTarget.value = ''; }} />
+              {endFrame?.previewUrl ? <img src={endFrame.previewUrl} alt="" /> : <span aria-hidden="true">＋</span>}
+              <b>END</b><small>{endFrame ? (zh ? '更换' : 'Replace') : (zh ? '可选' : 'Optional')}</small>
+            </label>
+          </div>
+
+          <div className="canvas-composer-main">
+            <div className="canvas-composer-prompt">
+              <textarea value={prompt} maxLength={1200} rows={2} onChange={event => setPrompt(event.target.value)} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} aria-label="Motion Prompt" />
+              <span>{prompt.length}/1200</span>
+            </div>
+            <div className="canvas-composer-controls">
+              <label><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => {
+                const next = event.target.value as VideoModelId;
+                setModel(next);
+                if (next === 'minimax-h3') setResolution('768P');
+                if (next === 'seedance-2' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+              <div className="canvas-reference-mode"><span aria-hidden="true">◇</span><b>{zh ? '首尾帧参考' : 'Start / end reference'}</b></div>
+              <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
+              <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
+              <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label>
+              <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : selectedModel?.creditsCost || '—'}</b></div>
+              <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>
+            </div>
+            <p>{model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
+          </div>
+        </section>
       </div>
     </section>
   </main>;
