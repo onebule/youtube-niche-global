@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import {
@@ -29,7 +29,7 @@ type NodePositions = Record<NodeId, Point>;
 type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type ReferenceMode = 'start-end' | 'omni';
 type SavedCanvas = {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -45,22 +45,23 @@ type SavedCanvas = {
 };
 
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
-const STAGE_SIZE = { width: 1900, height: 1080 };
+const STAGE_SIZE = { width: 1900, height: 900 };
+const INITIAL_VIEWPORT: Viewport = { x: 46, y: 28, scale: 0.82 };
 const INITIAL_NODES: NodePositions = {
-  source: { x: 80, y: 150 },
+  source: { x: 70, y: 110 },
   prompt: { x: 430, y: 90 },
   model: { x: 450, y: 445 },
-  agent: { x: 430, y: 420 },
-  task: { x: 600, y: 210 },
-  result: { x: 1040, y: 135 },
+  agent: { x: 420, y: 135 },
+  task: { x: 790, y: 135 },
+  result: { x: 1115, y: 90 },
 };
 const NODE_SIZE: Record<NodeId, { width: number; height: number }> = {
-  source: { width: 290, height: 470 },
+  source: { width: 300, height: 370 },
   prompt: { width: 320, height: 280 },
   model: { width: 320, height: 310 },
-  agent: { width: 320, height: 280 },
-  task: { width: 280, height: 330 },
-  result: { width: 360, height: 500 },
+  agent: { width: 320, height: 290 },
+  task: { width: 275, height: 300 },
+  result: { width: 350, height: 410 },
 };
 const CONNECTIONS: Array<[NodeId, NodeId]> = [
   ['source', 'agent'],
@@ -193,7 +194,7 @@ export default function VideoCanvasStudio({
 }) {
   const zh = locale === 'zh';
   const [nodes, setNodes] = useState<NodePositions>(INITIAL_NODES);
-  const [viewport, setViewport] = useState<Viewport>({ x: 56, y: 34, scale: 0.82 });
+  const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [models, setModels] = useState<VideoModel[]>([]);
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [error, setError] = useState('');
@@ -222,6 +223,13 @@ export default function VideoCanvasStudio({
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
+  const nodeSize = useMemo<Record<NodeId, { width: number; height: number }>>(() => ({
+    ...NODE_SIZE,
+    source: {
+      ...NODE_SIZE.source,
+      height: referenceMode === 'omni' ? 250 : NODE_SIZE.source.height,
+    },
+  }), [referenceMode]);
   // Keep auth transitions derived during render so signing out cannot leave a
   // briefly actionable composer while the account-loading effect settles.
   const hasAccount = Boolean(account);
@@ -229,6 +237,18 @@ export default function VideoCanvasStudio({
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
   const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
+  const agentPlanBlockedReason = !prompt.trim()
+    ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
+    : '';
+  const generationBlockedReason = (() => {
+    if (submitting) return zh ? '正在提交任务' : 'Submitting the task';
+    if (uploading) return zh ? '参考图正在上传' : 'A reference image is uploading';
+    if (!hasReferenceInput) return zh ? '先加入至少 1 张参考图' : 'Add at least one reference image';
+    if (!prompt.trim()) return zh ? '填写 Motion Prompt 后即可生成' : 'Add a Motion Prompt to generate';
+    if (!referenceModeSupported) return zh ? '当前模型不支持这个参考模式' : 'This model does not support the selected reference mode';
+    if (!selectedModel?.enabled) return zh ? '选择一个已就绪的模型' : 'Choose a model that is ready';
+    return '';
+  })();
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
@@ -238,11 +258,13 @@ export default function VideoCanvasStudio({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1 || saved.version === 2) {
+        if (saved.version === 1 || saved.version === 2 || saved.version === 3) {
           // Hydration intentionally mirrors an external localStorage snapshot
           // after mount; this is the one synchronous state sync in this effect.
+          // v3 reserves a dedicated composer row, so older layouts need the
+          // new compact positions once instead of restoring covered nodes.
           // eslint-disable-next-line react-hooks/set-state-in-effect
-          setNodes(restoreNodePositions(saved.nodes));
+          setNodes(saved.version === 3 ? restoreNodePositions(saved.nodes) : INITIAL_NODES);
           setPrompt(saved.prompt || '');
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
@@ -274,7 +296,7 @@ export default function VideoCanvasStudio({
       height: frame.height,
     } : null;
     const saved: SavedCanvas = {
-      version: 2,
+      version: 3,
       nodes,
       prompt,
       model,
@@ -590,14 +612,32 @@ export default function VideoCanvasStudio({
     setNodes(previous => ({
       ...previous,
       [drag.id]: {
-        x: clamp(drag.origin.x + dx, 0, STAGE_SIZE.width - NODE_SIZE[drag.id].width),
-        y: clamp(drag.origin.y + dy, 0, STAGE_SIZE.height - NODE_SIZE[drag.id].height),
+        x: clamp(drag.origin.x + dx, 0, STAGE_SIZE.width - nodeSize[drag.id].width),
+        y: clamp(drag.origin.y + dy, 0, STAGE_SIZE.height - nodeSize[drag.id].height),
       },
     }));
   };
   const endNodeDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
+  };
+  const moveNodeWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>, id: NodeId) => {
+    const direction = {
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+    }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const distance = event.shiftKey ? 48 : 16;
+    setNodes(previous => ({
+      ...previous,
+      [id]: {
+        x: clamp(previous[id].x + direction.x * distance, 0, STAGE_SIZE.width - nodeSize[id].width),
+        y: clamp(previous[id].y + direction.y * distance, 0, STAGE_SIZE.height - nodeSize[id].height),
+      },
+    }));
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -637,19 +677,19 @@ export default function VideoCanvasStudio({
 
   const edges = useMemo(() => CONNECTIONS.map(([from, to]) => {
     const start = {
-      x: nodes[from].x + NODE_SIZE[from].width,
-      y: nodes[from].y + NODE_SIZE[from].height / 2,
+      x: nodes[from].x + nodeSize[from].width,
+      y: nodes[from].y + nodeSize[from].height / 2,
     };
     const end = {
       x: nodes[to].x,
-      y: nodes[to].y + NODE_SIZE[to].height / 2,
+      y: nodes[to].y + nodeSize[to].height / 2,
     };
     const curve = Math.max(90, Math.abs(end.x - start.x) * 0.45);
     return {
       id: from + '-' + to,
       d: 'M ' + start.x + ' ' + start.y + ' C ' + (start.x + curve) + ' ' + start.y + ', ' + (end.x - curve) + ' ' + end.y + ', ' + end.x + ' ' + end.y,
     };
-  }), [nodes]);
+  }), [nodeSize, nodes]);
 
   if (effectiveAccess === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
   if (effectiveAccess === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
@@ -657,7 +697,7 @@ export default function VideoCanvasStudio({
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
       <div><span>AI STUDIO · SHOT CANVAS</span><h1>{zh ? '把镜头思路铺开，再交给模型。' : 'Lay out the shot before handing it to the model.'}</h1><p>{zh ? '拖拽节点组织一次图生视频任务；底层仍复用现有 Provider、异步任务、积分和媒体存储。' : 'Arrange one image-to-video task with draggable nodes while reusing the existing providers, task lifecycle, credits, and storage.'}</p></div>
-      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(INITIAL_NODES); setViewport({ x: 56, y: 34, scale: 0.82 }); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
+      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(INITIAL_NODES); setViewport(INITIAL_VIEWPORT); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
     </header>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
@@ -687,15 +727,15 @@ export default function VideoCanvasStudio({
           <button type="button" onClick={() => zoomAt(viewport.scale / 1.12)} aria-label={zh ? '缩小' : 'Zoom out'}>−</button>
           <button type="button" onClick={() => zoomAt(1)}>{Math.round(viewport.scale * 100)}%</button>
           <button type="button" onClick={() => zoomAt(viewport.scale * 1.12)} aria-label={zh ? '放大' : 'Zoom in'}>＋</button>
-          <button type="button" onClick={() => setViewport({ x: 56, y: 34, scale: 0.82 })}>{zh ? '回到流程' : 'Fit'}</button>
+          <button type="button" onClick={() => setViewport(INITIAL_VIEWPORT)}>{zh ? '回到流程' : 'Fit'}</button>
         </div>
         <div className="video-canvas-stage" style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">
             {edges.map(edge => <g key={edge.id}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
-          <article className="video-canvas-node source-node" style={{ left: nodes.source.x, top: nodes.source.y, width: NODE_SIZE.source.width, minHeight: NODE_SIZE.source.height }}>
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
+          <article className="video-canvas-node source-node" style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'start-end' ? <>
                 <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => setStartFrame(null)} />
@@ -712,32 +752,34 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node agent-node" style={{ left: nodes.agent.x, top: nodes.agent.y, width: NODE_SIZE.agent.width, minHeight: NODE_SIZE.agent.height }}>
+          <article className="video-canvas-node agent-node" style={{ left: nodes.agent.x, top: nodes.agent.y, width: nodeSize.agent.width, minHeight: nodeSize.agent.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'Agent 导演节点。拖动，或使用方向键移动。' : 'Agent director node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
               {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `References: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}{typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
-              <button type="button" className="canvas-agent-plan-button" disabled={planning || !prompt.trim()} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? '让 Agent 规划' : 'Ask Agent to plan')}</button>
+              <button type="button" className="canvas-agent-plan-button" disabled={planning || !prompt.trim()} title={agentPlanBlockedReason || undefined} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? '根据 Prompt 规划' : 'Plan from prompt')}</button>
+              {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}
             </div>
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node task-node" style={{ left: nodes.task.x, top: nodes.task.y, width: NODE_SIZE.task.width, minHeight: NODE_SIZE.task.height }}>
+          <article className="video-canvas-node task-node" style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '生成任务节点。拖动，或使用方向键移动。' : 'Generation task node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh) : (zh ? '等待提交' : 'Ready to submit')}</div>
+              {!generation && <strong className={'canvas-task-next ' + (canGenerate ? 'ready' : '')}>{canGenerate ? (zh ? '参数已齐，可以生成' : 'Ready to generate') : generationBlockedReason}</strong>}
               <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
             </div>
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node result-node" style={{ left: nodes.result.x, top: nodes.result.y, width: NODE_SIZE.result.width, minHeight: NODE_SIZE.result.height }}>
+          <article className="video-canvas-node result-node" style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
                 <div className={'canvas-status ' + generation.status}><b>{statusLabel(generation.status, zh)}</b><span>{generation.progress}%</span></div>
@@ -751,8 +793,9 @@ export default function VideoCanvasStudio({
             </div>
           </article>
         </div>
+      </div>
 
-        <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
+      <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
           <div className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
             {referenceMode === 'start-end' ? <>
             <label className={'canvas-reference-chip ' + (startFrame ? 'has-media' : '')}>
@@ -773,8 +816,9 @@ export default function VideoCanvasStudio({
 
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
-              <textarea value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} aria-label="Motion Prompt" />
-              <span>{prompt.length}/1200</span>
+              <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
+              <textarea id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} />
+              <span className="canvas-composer-count">{prompt.length}/1200</span>
             </div>
             <div className="canvas-composer-controls">
               <label><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
@@ -783,14 +827,13 @@ export default function VideoCanvasStudio({
               <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
               <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(model).map(value => <option key={value}>{value}</option>)}</select></label>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
-              <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
-              <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>
+              <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} title={agentPlanBlockedReason || undefined} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
+              <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>
             </div>
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite"><div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small>{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join('、')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join(', ')}`}</small>}{agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}{agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}</div>}
             <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。MiniMax H3、Seedance 2.0 / 2.5 均可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. MiniMax H3 and Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 首尾帧模式将沿用 START 图片比例。' : 'MiniMax H3 start/end mode follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
         </section>
-      </div>
     </section>
   </main>;
 }
