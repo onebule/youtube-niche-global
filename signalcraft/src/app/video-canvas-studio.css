@@ -1816,7 +1816,7 @@
   .canvas-preferences-panel {
     right: auto;
     left: 0;
-    width: min(520px, calc(100vw - 24px));
+    width: min(520px, calc(100vw - 48px));
   }
 
   .canvas-composer-controls label,
