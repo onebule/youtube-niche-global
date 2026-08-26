@@ -74,6 +74,90 @@
   cursor: pointer;
 }
 
+.video-canvas-model-pill {
+  display: flex;
+  max-width: 1480px;
+  min-height: 54px;
+  margin: 0 auto 14px;
+  padding: 8px 14px 8px 9px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d3c9bb;
+  border-radius: 16px;
+  background: rgba(255, 253, 248, .9);
+  box-shadow: 0 8px 20px rgba(23, 33, 39, .05);
+}
+
+.video-canvas-model-mark {
+  display: grid;
+  width: 35px;
+  height: 35px;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #1a2028, #6d4bc4);
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(109, 75, 196, .2);
+}
+
+.video-canvas-model-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.video-canvas-model-copy b {
+  overflow: hidden;
+  color: #172127;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-canvas-model-copy small {
+  overflow: hidden;
+  color: #7a7065;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-canvas-model-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 8px;
+  border-radius: 99px;
+  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.video-canvas-model-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.video-canvas-model-state.ready {
+  background: #e1f5ef;
+  color: #0b756f;
+}
+
+.video-canvas-model-state.pending {
+  background: #f1ece5;
+  color: #887d70;
+}
+
+.video-canvas-model-spec {
+  padding-left: 10px;
+  border-left: 1px solid #dfd6ca;
+  color: #6f665c;
+  font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .video-canvas-error {
   display: flex;
   justify-content: space-between;
@@ -1260,6 +1344,22 @@
 
   .video-canvas-caption p {
     max-width: 500px;
+  }
+
+  .video-canvas-model-pill {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .video-canvas-model-state {
+    margin-left: auto;
+  }
+
+  .video-canvas-model-spec {
+    width: 100%;
+    margin-left: 45px;
+    padding-left: 0;
+    border-left: 0;
   }
 
   .video-canvas-viewport {

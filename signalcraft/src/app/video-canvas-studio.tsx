@@ -658,6 +658,13 @@ export default function VideoCanvasStudio({
       <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(INITIAL_NODES); setViewport({ x: 56, y: 34, scale: 0.82 }); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
     </header>
 
+    <div className="video-canvas-model-pill" role="status" aria-live="polite">
+      <span className="video-canvas-model-mark" aria-hidden="true">✦</span>
+      <span className="video-canvas-model-copy"><b>{modelName(model)}</b><small>{selectedModel?.enabled ? (zh ? '已就绪 · Team 可用' : 'Ready · Team access') : (zh ? '待配置服务端模型' : 'Provider configuration required')}</small></span>
+      <span className={'video-canvas-model-state ' + (selectedModel?.enabled ? 'ready' : 'pending')}><i />{selectedModel?.enabled ? (zh ? '已上线' : 'Online') : (zh ? '待配置' : 'Pending')}</span>
+      <span className="video-canvas-model-spec">{duration} · {resolution}</span>
+    </div>
+
     {error && <div className="video-canvas-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError('')}>{zh ? '关闭' : 'Dismiss'}</button></div>}
 
     <section className="video-canvas-shell" aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
