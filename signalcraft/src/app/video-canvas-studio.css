@@ -746,6 +746,14 @@
   gap: 8px;
 }
 
+.canvas-composer-media.is-omni {
+  width: min(330px, 32vw);
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-color: #8b8074 transparent;
+  scrollbar-width: thin;
+}
+
 .canvas-reference-chip {
   position: relative;
   display: grid;
@@ -812,6 +820,149 @@
   border-radius: 5px;
   background: rgba(15, 22, 26, .78);
   color: #fff;
+}
+
+.canvas-omni-reference {
+  position: relative;
+  width: 76px;
+  min-width: 76px;
+  height: 112px;
+  overflow: hidden;
+  border: 1px solid #172127;
+  border-radius: 14px;
+  background: #172127;
+  scroll-snap-align: start;
+}
+
+.canvas-omni-reference img,
+.canvas-omni-reference > .canvas-media-loading {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.canvas-omni-reference > .canvas-media-loading {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 9px;
+}
+
+.canvas-reference-mention,
+.canvas-reference-remove {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, .58);
+  background: rgba(15, 22, 26, .82);
+  color: #fff;
+  cursor: pointer;
+}
+
+.canvas-reference-mention {
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  padding: 4px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.canvas-reference-remove {
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 18px;
+}
+
+.canvas-reference-mention:focus-visible,
+.canvas-reference-remove:focus-visible {
+  outline: 3px solid rgba(11, 117, 111, .45);
+  outline-offset: 2px;
+}
+
+.canvas-omni-node {
+  display: grid;
+  gap: 10px;
+}
+
+.canvas-omni-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.canvas-omni-node-head b {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 18px;
+}
+
+.canvas-omni-node-head span {
+  padding: 3px 7px;
+  border: 1px solid #c9beb1;
+  border-radius: 999px;
+  color: #0b756f;
+  font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.canvas-omni-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.canvas-omni-grid .canvas-omni-reference {
+  width: 100%;
+  min-width: 0;
+  height: 82px;
+  border-radius: 9px;
+}
+
+.canvas-omni-add {
+  display: grid;
+  min-height: 82px;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  border: 1px dashed #9f9588;
+  border-radius: 9px;
+  background: #eee7dc;
+  color: #172127;
+  cursor: pointer;
+}
+
+.canvas-omni-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.canvas-omni-add:focus-within {
+  outline: 3px solid rgba(11, 117, 111, .28);
+  outline-offset: 2px;
+}
+
+.canvas-omni-add span {
+  font-size: 22px;
+}
+
+.canvas-omni-add b,
+.canvas-omni-node > small {
+  font-size: 9px;
+}
+
+.canvas-omni-node > small {
+  color: #776e64;
+  line-height: 1.45;
+}
+
+.canvas-omni-composer-add {
+  flex: 0 0 78px;
 }
 
 .canvas-composer-main {
@@ -889,14 +1040,8 @@
 }
 
 .canvas-reference-mode {
-  grid-template-columns: auto 1fr;
-  min-width: 130px;
-  place-items: center start;
+  min-width: 148px;
   color: #0b756f;
-}
-
-.canvas-reference-mode b {
-  font-size: 10px;
 }
 
 .canvas-composer-cost {
@@ -1004,10 +1149,40 @@
     left: 12px;
   }
 
+  .canvas-composer-media.is-omni {
+    right: 12px;
+    width: auto;
+    max-width: calc(100% - 24px);
+    scroll-snap-type: x proximity;
+  }
+
   .canvas-reference-chip {
     width: 54px;
     min-height: 54px;
     border-radius: 10px;
+  }
+
+  .canvas-omni-reference {
+    width: 54px;
+    min-width: 54px;
+    height: 54px;
+    border-radius: 10px;
+  }
+
+  .canvas-reference-mention {
+    right: 3px;
+    bottom: 3px;
+    left: 3px;
+    padding: 2px;
+    font-size: 7px;
+  }
+
+  .canvas-reference-remove {
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
   }
 
   .canvas-reference-chip small {

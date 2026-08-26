@@ -94,6 +94,8 @@ export async function createVideoGeneration(input: {
   prompt: string;
   startImageAssetId: string;
   endImageAssetId?: string | null;
+  referenceMode?: 'start-end' | 'omni';
+  referenceImageAssetIds?: string[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;

@@ -22,8 +22,9 @@ type Viewport = Point & { scale: number };
 type NodeId = 'source' | 'prompt' | 'model' | 'task' | 'result';
 type NodePositions = Record<NodeId, Point>;
 type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
+type ReferenceMode = 'start-end' | 'omni';
 type SavedCanvas = {
-  version: 1;
+  version: 1 | 2;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -33,6 +34,8 @@ type SavedCanvas = {
   shot: number;
   startFrame: Omit<UploadedFrame, 'previewUrl'> | null;
   endFrame: Omit<UploadedFrame, 'previewUrl'> | null;
+  referenceMode?: ReferenceMode;
+  referenceFrames?: Array<Omit<UploadedFrame, 'previewUrl'>>;
   generationId: string | null;
 };
 
@@ -145,6 +148,28 @@ function UploadControl({
   </div>;
 }
 
+function OmniReferenceChip({
+  frame,
+  mentionLabel,
+  loadingLabel,
+  removeLabel,
+  onMention,
+  onRemove,
+}: {
+  frame: UploadedFrame;
+  mentionLabel: string;
+  loadingLabel: string;
+  removeLabel: string;
+  onMention: () => void;
+  onRemove: () => void;
+}) {
+  return <div className="canvas-omni-reference">
+    {frame.previewUrl ? <img src={frame.previewUrl} alt={frame.name} /> : <div className="canvas-media-loading">{loadingLabel}</div>}
+    <button type="button" className="canvas-reference-mention" onClick={onMention}>{mentionLabel}</button>
+    <button type="button" className="canvas-reference-remove" onClick={onRemove} aria-label={removeLabel}>×</button>
+  </div>;
+}
+
 export default function VideoCanvasStudio({
   account,
   locale,
@@ -168,9 +193,11 @@ export default function VideoCanvasStudio({
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16');
   const [resolution, setResolution] = useState('720p');
   const [shot, setShot] = useState(1);
+  const [referenceMode, setReferenceMode] = useState<ReferenceMode>('start-end');
   const [startFrame, setStartFrame] = useState<UploadedFrame | null>(null);
   const [endFrame, setEndFrame] = useState<UploadedFrame | null>(null);
-  const [uploading, setUploading] = useState<'start' | 'end' | null>(null);
+  const [referenceFrames, setReferenceFrames] = useState<UploadedFrame[]>([]);
+  const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | null>(null);
   const [generation, setGeneration] = useState<VideoGeneration | null>(null);
   const [restoredGenerationId, setRestoredGenerationId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -179,9 +206,12 @@ export default function VideoCanvasStudio({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
+  const referenceFramesRef = useRef<UploadedFrame[]>([]);
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
-  const canGenerate = Boolean(access === 'ready' && startFrame && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
+  const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
+  const referenceModeSupported = referenceMode !== 'omni' || model === 'seedance-2';
+  const canGenerate = Boolean(access === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
   const progress = generation?.progress || 0;
 
   useEffect(() => {
@@ -189,16 +219,19 @@ export default function VideoCanvasStudio({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1) {
+        if (saved.version === 1 || saved.version === 2) {
           setNodes(restoreNodePositions(saved.nodes));
           setPrompt(saved.prompt || '');
-          setModel(saved.model || 'seedance-2');
+          const restoredReferenceMode = saved.referenceMode || 'start-end';
+          setModel(restoredReferenceMode === 'omni' ? 'seedance-2' : saved.model || 'seedance-2');
           setDuration(saved.duration || '5s');
           setAspectRatio(saved.aspectRatio || '9:16');
           setResolution(saved.resolution || '720p');
           setShot(saved.shot || 1);
           if (saved.startFrame) setStartFrame({ ...saved.startFrame, previewUrl: '' });
           if (saved.endFrame) setEndFrame({ ...saved.endFrame, previewUrl: '' });
+          setReferenceMode(restoredReferenceMode);
+          setReferenceFrames((saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })));
           setRestoredGenerationId(saved.generationId || null);
         }
       }
@@ -218,7 +251,7 @@ export default function VideoCanvasStudio({
       height: frame.height,
     } : null;
     const saved: SavedCanvas = {
-      version: 1,
+      version: 2,
       nodes,
       prompt,
       model,
@@ -228,10 +261,12 @@ export default function VideoCanvasStudio({
       shot,
       startFrame: stripUrl(startFrame),
       endFrame: stripUrl(endFrame),
+      referenceMode,
+      referenceFrames: referenceFrames.map(frame => stripUrl(frame)).filter((frame): frame is Omit<UploadedFrame, 'previewUrl'> => Boolean(frame)),
       generationId: generation?.id || restoredGenerationId,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [aspectRatio, duration, endFrame, generation?.id, hydrated, model, nodes, prompt, resolution, restoredGenerationId, shot, startFrame]);
+  }, [aspectRatio, duration, endFrame, generation?.id, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, shot, startFrame]);
 
   useEffect(() => {
     if (!account) {
@@ -272,6 +307,14 @@ export default function VideoCanvasStudio({
           const url = await loadVideoAssetUrl(endFrame.assetId);
           if (!cancelled) setEndFrame(current => current ? { ...current, previewUrl: url } : current);
         }
+        const missingReferences = referenceFrames.filter(frame => !frame.previewUrl);
+        if (missingReferences.length) {
+          const urls = await Promise.all(missingReferences.map(async frame => [frame.assetId, await loadVideoAssetUrl(frame.assetId)] as const));
+          if (!cancelled) {
+            const byAssetId = new Map(urls);
+            setReferenceFrames(current => current.map(frame => ({ ...frame, previewUrl: frame.previewUrl || byAssetId.get(frame.assetId) || '' })));
+          }
+        }
         if (restoredGenerationId && !generation) {
           const next = await refreshVideoGeneration(restoredGenerationId);
           if (!cancelled) setGeneration(next);
@@ -282,7 +325,7 @@ export default function VideoCanvasStudio({
     };
     void restore();
     return () => { cancelled = true; };
-  }, [access, endFrame?.assetId, generation, restoredGenerationId, startFrame?.assetId]);
+  }, [access, endFrame, generation, referenceFrames, restoredGenerationId, startFrame]);
 
   useEffect(() => {
     if (!generation || !['queued', 'processing'].includes(generation.status)) return;
@@ -323,13 +366,27 @@ export default function VideoCanvasStudio({
     if (endFrame?.previewUrl.startsWith('blob:')) URL.revokeObjectURL(endFrame.previewUrl);
   }, [endFrame?.previewUrl]);
 
+  useEffect(() => {
+    referenceFramesRef.current = referenceFrames;
+  }, [referenceFrames]);
+
+  useEffect(() => () => {
+    referenceFramesRef.current.forEach(frame => {
+      if (frame.previewUrl.startsWith('blob:')) URL.revokeObjectURL(frame.previewUrl);
+    });
+  }, []);
+
+  const uploadFrame = async (file: File): Promise<UploadedFrame> => {
+    const dimensions = await imageDimensions(file);
+    const assetId = await uploadVideoInput(file);
+    return { assetId, name: file.name, previewUrl: URL.createObjectURL(file), ...dimensions };
+  };
+
   const upload = async (slot: 'start' | 'end', file: File) => {
     setUploading(slot);
     setError('');
     try {
-      const dimensions = await imageDimensions(file);
-      const assetId = await uploadVideoInput(file);
-      const next = { assetId, name: file.name, previewUrl: URL.createObjectURL(file), ...dimensions };
+      const next = await uploadFrame(file);
       if (slot === 'start') setStartFrame(next); else setEndFrame(next);
       notify(zh ? '图片已上传到私有工作区。' : 'Image uploaded to the private workspace.');
     } catch (cause) {
@@ -339,21 +396,69 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const uploadReferences = async (files: File[]) => {
+    const capacity = 9 - referenceFrames.length;
+    if (capacity <= 0) {
+      setError(zh ? '全能参考最多支持 9 张图片。' : 'Omni reference supports up to 9 images.');
+      return;
+    }
+    const selected = files.slice(0, capacity);
+    setUploading('reference');
+    setError('');
+    try {
+      const settled = await Promise.allSettled(selected.map(uploadFrame));
+      const uploaded = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+      const failed = settled.find(result => result.status === 'rejected');
+      if (uploaded.length) {
+        setReferenceFrames(current => [...current, ...uploaded].slice(0, 9));
+        notify(zh ? `已加入 ${uploaded.length} 张全能参考图片。` : `${uploaded.length} omni reference images added.`);
+      }
+      if (failed?.status === 'rejected') setError(clientMessage(failed.reason));
+      if (files.length > capacity) setError(zh ? `已达到 9 张上限，未加入其余 ${files.length - capacity} 张。` : `The 9-image limit was reached; ${files.length - capacity} files were skipped.`);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const removeReference = (index: number) => {
+    setReferenceFrames(current => {
+      const target = current[index];
+      if (target?.previewUrl.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
+  };
+
+  const mentionReference = (index: number) => {
+    const mention = zh ? `@图片${index + 1}` : `@image${index + 1}`;
+    setPrompt(current => current.includes(mention) ? current : `${current.trim()} ${mention} `.trimStart());
+  };
+
+  const changeReferenceMode = (next: ReferenceMode) => {
+    setReferenceMode(next);
+    if (next === 'omni') {
+      setModel('seedance-2');
+      if (!['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+    }
+  };
+
   const generate = async () => {
-    if (!canGenerate || !startFrame) return;
+    const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
+    if (!canGenerate || !primaryFrame) return;
     setSubmitting(true);
     setError('');
     setVideoUrl('');
     try {
-      if (model === 'minimax-h3') {
+      if (model === 'minimax-h3' && startFrame) {
         assertMiniMaxFrame(startFrame, 'START');
         if (endFrame) assertMiniMaxFrame(endFrame, 'END');
       }
       const next = await createVideoGeneration({
         model,
         prompt: prompt.trim(),
-        startImageAssetId: startFrame.assetId,
-        endImageAssetId: endFrame?.assetId || null,
+        startImageAssetId: primaryFrame.assetId,
+        endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
+        referenceMode,
+        referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
         duration,
         aspectRatio,
         resolution,
@@ -380,6 +485,8 @@ export default function VideoCanvasStudio({
         width: 1280,
         height: 720,
       });
+      setReferenceMode('start-end');
+      setReferenceFrames([]);
       setEndFrame(null);
       setPrompt('');
       setGeneration(null);
@@ -514,8 +621,17 @@ export default function VideoCanvasStudio({
           <article className="video-canvas-node source-node" style={{ left: nodes.source.x, top: nodes.source.y, width: NODE_SIZE.source.width, minHeight: NODE_SIZE.source.height }}>
             <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
-              <UploadControl label="START" value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => setStartFrame(null)} />
-              <UploadControl label="END" optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => setEndFrame(null)} />
+              {referenceMode === 'start-end' ? <>
+                <UploadControl label="START" value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => setStartFrame(null)} />
+                <UploadControl label="END" optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => setEndFrame(null)} />
+              </> : <div className="canvas-omni-node">
+                <div className="canvas-omni-node-head"><b>{zh ? '全能参考' : 'Omni reference'}</b><span>{referenceFrames.length}/9</span></div>
+                <div className="canvas-omni-grid">
+                  {referenceFrames.map((frame, index) => <OmniReferenceChip key={frame.assetId} frame={frame} mentionLabel={zh ? `@图片${index + 1}` : `@image${index + 1}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${index + 1}` : `Remove image ${index + 1}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />)}
+                  {referenceFrames.length < 9 && <label className="canvas-omni-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span>＋</span><b>{uploading === 'reference' ? (zh ? '上传中' : 'Uploading') : (zh ? '加入图片' : 'Add images')}</b></label>}
+                </div>
+                <small>{zh ? '点击 @图片编号，把素材引用插入提示词。' : 'Use an @image label to reference a source in the prompt.'}</small>
+              </div>}
             </div>
             <span className="node-port output" aria-hidden="true" />
           </article>
@@ -525,7 +641,7 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : selectedModel?.creditsCost ? selectedModel.creditsCost + ' cr' : '—'}</b></div>
-              <ul><li className={startFrame ? 'done' : ''}>{zh ? 'START 图片' : 'START frame'}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
+              <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh) : (zh ? '等待提交' : 'Ready to submit')}</div>
               <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
             </div>
@@ -550,7 +666,8 @@ export default function VideoCanvasStudio({
         </div>
 
         <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
-          <div className="canvas-composer-media" aria-label={zh ? '参考图片' : 'Reference images'}>
+          <div className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
+            {referenceMode === 'start-end' ? <>
             <label className={'canvas-reference-chip ' + (startFrame ? 'has-media' : '')}>
               <input type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload('start', file); event.currentTarget.value = ''; }} />
               {startFrame?.previewUrl ? <img src={startFrame.previewUrl} alt="" /> : <span aria-hidden="true">＋</span>}
@@ -561,6 +678,10 @@ export default function VideoCanvasStudio({
               {endFrame?.previewUrl ? <img src={endFrame.previewUrl} alt="" /> : <span aria-hidden="true">＋</span>}
               <b>END</b><small>{endFrame ? (zh ? '更换' : 'Replace') : (zh ? '可选' : 'Optional')}</small>
             </label>
+            </> : <>
+              {referenceFrames.map((frame, index) => <OmniReferenceChip key={frame.assetId} frame={frame} mentionLabel={zh ? `@图片${index + 1}` : `@image${index + 1}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${index + 1}` : `Remove image ${index + 1}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />)}
+              {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
+            </>}
           </div>
 
           <div className="canvas-composer-main">
@@ -574,15 +695,15 @@ export default function VideoCanvasStudio({
                 setModel(next);
                 if (next === 'minimax-h3') setResolution('768P');
                 if (next === 'seedance-2' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
-              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
-              <div className="canvas-reference-mode"><span aria-hidden="true">◇</span><b>{zh ? '首尾帧参考' : 'Start / end reference'}</b></div>
+              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto' && (referenceMode !== 'omni' || item.id === 'seedance-2')).map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+              <label className="canvas-reference-mode"><span>{zh ? '参考模式' : 'Reference'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
               <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
               <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
               <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : selectedModel?.creditsCost || '—'}</b></div>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>
             </div>
-            <p>{model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
+            <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。当前仅 Seedance 2.0 可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. Seedance 2.0 only.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
         </section>
       </div>
