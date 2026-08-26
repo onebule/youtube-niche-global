@@ -4779,6 +4779,115 @@
   box-shadow: inset 3px 0 0 var(--canvas-purple);
 }
 
+/* Semantic refinement: use accent color as a signal, never as a surface. */
+.agent-node .canvas-node-grip {
+  border-bottom: 3px solid var(--canvas-purple);
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+}
+
+.agent-node .canvas-node-grip span {
+  border-color: var(--canvas-purple);
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+}
+
+.agent-node .canvas-node-grip i {
+  color: var(--canvas-muted);
+}
+
+.canvas-agent-body {
+  border-left: 3px solid var(--canvas-purple);
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+}
+
+.canvas-agent-body p,
+.canvas-agent-confidence,
+.canvas-agent-prerequisite,
+.canvas-agent-badge small {
+  color: var(--canvas-muted);
+}
+
+.canvas-agent-badge {
+  color: var(--canvas-purple);
+}
+
+.canvas-agent-badge span {
+  box-shadow: none;
+}
+
+.task-node .canvas-node-grip {
+  border-bottom: 3px solid var(--canvas-line);
+  background: var(--canvas-line);
+}
+
+.task-node .canvas-node-grip span {
+  border-color: rgba(255, 255, 255, .72);
+  background: transparent;
+  color: #ffffff;
+}
+
+.canvas-task-body {
+  background: var(--canvas-paper);
+}
+
+.canvas-task-model {
+  background: var(--canvas-soft);
+}
+
+.canvas-task-model-icon {
+  background: var(--canvas-purple-soft);
+}
+
+.result-node .canvas-node-grip {
+  border-bottom: 3px solid var(--canvas-success);
+  background: var(--canvas-paper);
+  color: #147b56;
+}
+
+.result-node .canvas-node-grip span {
+  border-color: #a8d9c1;
+  background: var(--canvas-success-soft);
+  color: #147b56;
+}
+
+.result-node .canvas-node-grip i {
+  color: var(--canvas-muted);
+}
+
+.canvas-result-body {
+  background: var(--canvas-paper);
+}
+
+.canvas-status.completed {
+  background: var(--canvas-success-soft);
+  color: #147b56;
+}
+
+.canvas-status.failed {
+  background: var(--canvas-danger-soft);
+  color: #a63a35;
+}
+
+.canvas-status.processing,
+.canvas-status.queued {
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+}
+
+.canvas-node-palette-item:hover:not(:disabled),
+.canvas-node-palette-item:focus-visible,
+.canvas-node-palette-row:hover,
+.canvas-node-palette-row:focus-visible {
+  border-color: var(--canvas-line);
+  background: var(--canvas-soft);
+}
+
+.canvas-node-palette-badge {
+  background: var(--canvas-purple);
+}
+
 .canvas-task-model {
   display: flex;
   gap: 8px;
