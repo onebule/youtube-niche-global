@@ -221,11 +221,14 @@ export default function VideoCanvasStudio({
   const [submitting, setSubmitting] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const canvasShellRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
+  const fullscreenFallbackRef = useRef(false);
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
@@ -258,6 +261,32 @@ export default function VideoCanvasStudio({
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsCanvasFullscreen(Boolean(fullscreenFallbackRef.current || document.fullscreenElement === canvasShellRef.current));
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !fullscreenFallbackRef.current) return;
+      fullscreenFallbackRef.current = false;
+      setIsCanvasFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isCanvasFullscreen) return;
+    const previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = previousOverflow;
+    };
+  }, [isCanvasFullscreen]);
 
   useEffect(() => {
     try {
@@ -681,6 +710,37 @@ export default function VideoCanvasStudio({
     zoomAt(viewport.scale * (event.deltaY > 0 ? 0.92 : 1.08), event.clientX, event.clientY);
   };
 
+  const toggleCanvasFullscreen = async () => {
+    setPreferencesOpen(false);
+    if (fullscreenFallbackRef.current) {
+      fullscreenFallbackRef.current = false;
+      setIsCanvasFullscreen(false);
+      return;
+    }
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch (cause) {
+        setError(clientMessage(cause));
+      }
+      return;
+    }
+    const canvas = canvasShellRef.current;
+    if (!canvas?.requestFullscreen) {
+      fullscreenFallbackRef.current = true;
+      setIsCanvasFullscreen(true);
+      return;
+    }
+    try {
+      await canvas.requestFullscreen();
+    } catch {
+      // Some embedded browsers expose the API but reject the permission. The
+      // fixed immersive fallback still keeps the canvas usable in that case.
+      fullscreenFallbackRef.current = true;
+      setIsCanvasFullscreen(true);
+    }
+  };
+
   const edges = useMemo(() => CONNECTIONS.map(([from, to]) => {
     const start = {
       x: nodes[from].x + nodeSize[from].width,
@@ -715,7 +775,7 @@ export default function VideoCanvasStudio({
 
     {error && <div className="video-canvas-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError('')}>{zh ? '关闭' : 'Dismiss'}</button></div>}
 
-    <section className="video-canvas-shell" aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
+    <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
       <div className="video-canvas-caption">
         <div><span>{String(shot).padStart(2, '0')}</span><b>{zh ? '当前镜头' : 'Current shot'}</b></div>
         <p>{zh ? '拖动空白区域移动画布，滚轮缩放，拖动节点标题重新排布。' : 'Drag the background to pan, use the wheel to zoom, and drag node headers to arrange.'}</p>
@@ -734,6 +794,7 @@ export default function VideoCanvasStudio({
           <button type="button" onClick={() => zoomAt(1)}>{Math.round(viewport.scale * 100)}%</button>
           <button type="button" onClick={() => zoomAt(viewport.scale * 1.12)} aria-label={zh ? '放大' : 'Zoom in'}>＋</button>
           <button type="button" onClick={() => setViewport(INITIAL_VIEWPORT)}>{zh ? '回到流程' : 'Fit'}</button>
+          <button type="button" className="canvas-fullscreen-button" onClick={() => void toggleCanvasFullscreen()} aria-label={isCanvasFullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '进入全屏' : 'Enter fullscreen')} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}><span aria-hidden="true">{isCanvasFullscreen ? '↙' : '⛶'}</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b></button>
         </div>
         <div className="video-canvas-stage" style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">

@@ -207,6 +207,36 @@
   box-shadow: 0 24px 70px rgba(40, 31, 23, .12);
 }
 
+.video-canvas-shell.is-canvas-fullscreen,
+.video-canvas-shell:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.video-canvas-shell.is-canvas-fullscreen .video-canvas-viewport,
+.video-canvas-shell:fullscreen .video-canvas-viewport {
+  height: auto;
+  min-height: 0;
+}
+
+.video-canvas-shell.is-canvas-fullscreen .video-canvas-caption,
+.video-canvas-shell:fullscreen .video-canvas-caption {
+  padding-top: max(14px, env(safe-area-inset-top));
+}
+
+.video-canvas-shell.is-canvas-fullscreen .video-canvas-composer,
+.video-canvas-shell:fullscreen .video-canvas-composer {
+  padding-bottom: max(13px, env(safe-area-inset-bottom));
+}
+
 .video-canvas-caption {
   display: flex;
   justify-content: space-between;
@@ -284,6 +314,27 @@
 .video-canvas-toolbar button:focus-visible {
   background: #172127;
   color: #fff;
+}
+
+.video-canvas-toolbar .canvas-fullscreen-button {
+  display: inline-flex;
+  min-width: 70px;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  border-left: 1px solid #d5cbbf;
+  font-size: 10px;
+}
+
+.canvas-fullscreen-button span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.canvas-fullscreen-button b {
+  font-size: 9px;
+  font-weight: 850;
 }
 
 .video-canvas-stage {
