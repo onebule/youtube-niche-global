@@ -125,6 +125,7 @@ function assertMiniMaxFrame(frame: UploadedFrame, label: string) {
 
 function UploadControl({
   label,
+  zh,
   optional,
   value,
   busy,
@@ -132,6 +133,7 @@ function UploadControl({
   onRemove,
 }: {
   label: string;
+  zh: boolean;
   optional?: boolean;
   value: UploadedFrame | null;
   busy: boolean;
@@ -139,11 +141,11 @@ function UploadControl({
   onRemove: () => void;
 }) {
   return <div className="canvas-upload">
-    <div className="canvas-upload-head"><b>{label}</b><small>{optional ? 'OPTIONAL' : 'REQUIRED'}</small></div>
+    <div className="canvas-upload-head"><b>{label}</b><small>{optional ? (zh ? '可选' : 'OPTIONAL') : (zh ? '必需' : 'REQUIRED')}</small></div>
     {value ? <div className="canvas-upload-preview">
-      {value.previewUrl ? <img src={value.previewUrl} alt={value.name} /> : <div className="canvas-media-loading">读取图片…</div>}
+      {value.previewUrl ? <img src={value.previewUrl} alt={value.name} /> : <div className="canvas-media-loading">{zh ? '读取图片…' : 'Loading image…'}</div>}
       <span title={value.name}>{value.name}</span>
-      <button type="button" onClick={onRemove}>移除</button>
+      <button type="button" onClick={onRemove}>{zh ? '移除' : 'Remove'}</button>
     </div> : <label className="canvas-upload-empty">
       <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => {
         const file = event.currentTarget.files?.[0];
@@ -151,7 +153,7 @@ function UploadControl({
         event.currentTarget.value = '';
       }} />
       <span aria-hidden="true">＋</span>
-      <b>{busy ? '上传中…' : '选择图片'}</b>
+      <b>{busy ? (zh ? '上传中…' : 'Uploading…') : (zh ? '选择图片' : 'Choose image')}</b>
     </label>}
   </div>;
 }
@@ -696,8 +698,8 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'start-end' ? <>
-                <UploadControl label="START" value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => setStartFrame(null)} />
-                <UploadControl label="END" optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => setEndFrame(null)} />
+                <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => setStartFrame(null)} />
+                <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => setEndFrame(null)} />
               </> : <div className="canvas-omni-node">
                 <div className="canvas-omni-node-head"><b>{zh ? '全能参考' : 'Omni reference'}</b><span>{referenceFrames.length}/9</span></div>
                 <div className="canvas-omni-grid">
