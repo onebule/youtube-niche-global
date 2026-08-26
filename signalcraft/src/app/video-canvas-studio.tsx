@@ -70,6 +70,11 @@ const CONNECTIONS: Array<[NodeId, NodeId]> = [
 ];
 
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const ASPECT_RATIO_OPTIONS: Array<{ value: '9:16' | '16:9' | '1:1'; label: string; className: string }> = [
+  { value: '9:16', label: '9:16', className: 'is-portrait' },
+  { value: '16:9', label: '16:9', className: 'is-landscape' },
+  { value: '1:1', label: '1:1', className: 'is-square' },
+];
 const statusLabel = (status: VideoGeneration['status'], zh: boolean) => ({
   queued: zh ? '排队中' : 'Queued',
   processing: zh ? '生成中' : 'Processing',
@@ -215,6 +220,7 @@ export default function VideoCanvasStudio({
   const [videoUrl, setVideoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
@@ -821,11 +827,43 @@ export default function VideoCanvasStudio({
               <span className="canvas-composer-count">{prompt.length}/1200</span>
             </div>
             <div className="canvas-composer-controls">
-              <label><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
-              <label className="canvas-reference-mode"><span>{zh ? '参考模式' : 'Reference'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
-              <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3' && referenceMode !== 'omni'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
-              <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
-              <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(model).map(value => <option key={value}>{value}</option>)}</select></label>
+              <div className="canvas-preferences-wrap">
+                <button
+                  type="button"
+                  className={'canvas-preferences-trigger ' + (preferencesOpen ? 'is-open' : '')}
+                  aria-expanded={preferencesOpen}
+                  aria-controls="canvas-preferences-panel"
+                  onClick={() => setPreferencesOpen(current => !current)}
+                >
+                  <span className="canvas-preferences-trigger-icon" aria-hidden="true">☷</span>
+                  <span className="canvas-preferences-trigger-copy">
+                    <b>{zh ? '生成偏好' : 'Preferences'}</b>
+                    <small>{modelName(model)} · {referenceMode === 'omni' ? (zh ? '全能参考' : 'Omni') : (zh ? '首尾帧' : 'Start / end')} · {aspectRatio}</small>
+                  </span>
+                  <span className="canvas-preferences-trigger-arrow" aria-hidden="true">{preferencesOpen ? '⌃' : '⌄'}</span>
+                </button>
+                {preferencesOpen && <div id="canvas-preferences-panel" className="canvas-preferences-panel" role="region" aria-labelledby="canvas-preferences-title" onKeyDown={event => { if (event.key === 'Escape') setPreferencesOpen(false); }}>
+                  <div className="canvas-preferences-head">
+                    <div><span>{zh ? '生成偏好' : 'Generation preferences'}</span><b id="canvas-preferences-title">{zh ? '把这一镜头的参数收在一起' : 'Keep this shot’s settings together'}</b></div>
+                    <button type="button" className="canvas-preferences-close" aria-label={zh ? '关闭生成偏好' : 'Close generation preferences'} onClick={() => setPreferencesOpen(false)}>×</button>
+                  </div>
+                  <div className="canvas-preferences-auto" aria-disabled="true">
+                    <div><b>{zh ? '智能推荐' : 'Auto recommend'}</b><small>{zh ? '根据 Prompt 自动选择模型（即将开放）' : 'Choose a model from the prompt (coming soon)'}</small></div>
+                    <span className="canvas-preferences-toggle" aria-hidden="true"><i /></span>
+                  </div>
+                  <div className="canvas-preferences-grid">
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '参考模式' : 'Reference mode'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
+                    <fieldset className="canvas-preference-field canvas-preference-ratio-field"><legend>{zh ? '画幅' : 'Aspect ratio'}</legend><div className="canvas-preference-ratios">{ASPECT_RATIO_OPTIONS.map(option => {
+                      const disabled = model === 'minimax-h3' && referenceMode !== 'omni';
+                      return <button key={option.value} type="button" className={'canvas-ratio-option ' + (aspectRatio === option.value ? 'is-selected ' : '') + option.className} aria-pressed={aspectRatio === option.value} disabled={disabled} onClick={() => setAspectRatio(option.value)}><span className="canvas-ratio-icon" aria-hidden="true" /><b>{option.label}</b></button>;
+                    })}</div></fieldset>
+                    <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
+                    <label className="canvas-preference-field"><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(model).map(value => <option key={value}>{value}</option>)}</select></label>
+                  </div>
+                  <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置会自动保存到本地' : 'Settings save locally'}</em></div>
+                </div>}
+              </div>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
               <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} title={agentPlanBlockedReason || undefined} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>

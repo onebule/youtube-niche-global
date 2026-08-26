@@ -1233,6 +1233,313 @@
   align-items: stretch;
 }
 
+.canvas-preferences-wrap {
+  position: relative;
+  z-index: 8;
+}
+
+.canvas-preferences-trigger {
+  display: flex;
+  min-width: 220px;
+  min-height: 44px;
+  gap: 9px;
+  align-items: center;
+  padding: 5px 10px 5px 7px;
+  border: 1px solid #d4cabe;
+  border-radius: 12px;
+  background: #f4efe6;
+  color: #172127;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-preferences-trigger:hover,
+.canvas-preferences-trigger:focus-visible,
+.canvas-preferences-trigger.is-open {
+  border-color: #0b756f;
+  background: #edf8f5;
+}
+
+.canvas-preferences-trigger:focus-visible,
+.canvas-preferences-close:focus-visible,
+.canvas-ratio-option:focus-visible {
+  outline: 3px solid rgba(11, 117, 111, .3);
+  outline-offset: 2px;
+}
+
+.canvas-preferences-trigger-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: #172127;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.canvas-preferences-trigger-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.canvas-preferences-trigger-copy b {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.canvas-preferences-trigger-copy small {
+  overflow: hidden;
+  color: #746b61;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-preferences-trigger-arrow {
+  color: #0b756f;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.canvas-preferences-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  display: grid;
+  width: min(520px, calc(100vw - 36px));
+  max-height: min(72vh, 480px);
+  gap: 13px;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #b8aea0;
+  border-radius: 18px;
+  background: #fffdf8;
+  box-shadow: 10px 14px 0 rgba(23, 33, 39, .1), 0 18px 42px rgba(23, 33, 39, .18);
+}
+
+.canvas-preferences-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.canvas-preferences-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvas-preferences-head span {
+  color: #0b756f;
+  font: 800 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.canvas-preferences-head b {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.canvas-preferences-close {
+  width: 29px;
+  height: 29px;
+  border: 1px solid #d4cabe;
+  border-radius: 50%;
+  background: #f4efe6;
+  color: #172127;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.canvas-preferences-auto {
+  display: flex;
+  min-height: 44px;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid #e1d8cc;
+  border-radius: 11px;
+  background: #f7f2eb;
+}
+
+.canvas-preferences-auto > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvas-preferences-auto b {
+  color: #312252;
+  font-size: 11px;
+}
+
+.canvas-preferences-auto small {
+  color: #84796d;
+  font-size: 9px;
+}
+
+.canvas-preferences-toggle {
+  display: flex;
+  width: 34px;
+  height: 20px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: #d6cec3;
+  opacity: .72;
+}
+
+.canvas-preferences-toggle i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fffdf8;
+  box-shadow: 0 1px 2px rgba(23, 33, 39, .2);
+}
+
+.canvas-preferences-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.canvas-preference-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid #ddd4c7;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.canvas-preference-field-wide,
+.canvas-preference-ratio-field {
+  grid-column: 1 / -1;
+}
+
+.canvas-preference-field > span,
+.canvas-preference-field > legend {
+  padding: 0;
+  color: #796f64;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.canvas-preference-field select {
+  width: 100%;
+  min-height: 25px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #172127;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.canvas-preference-field select:focus-visible {
+  outline: 2px solid rgba(11, 117, 111, .4);
+  outline-offset: 3px;
+}
+
+.canvas-preference-ratio-field {
+  min-inline-size: 0;
+}
+
+.canvas-preference-ratios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.canvas-ratio-option {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  padding: 7px 4px;
+  border: 1px solid #e0d7cb;
+  border-radius: 9px;
+  background: #faf7f1;
+  color: #172127;
+  cursor: pointer;
+}
+
+.canvas-ratio-option:hover:not(:disabled),
+.canvas-ratio-option.is-selected {
+  border-color: #0b756f;
+  background: #edf8f5;
+  color: #0b756f;
+}
+
+.canvas-ratio-option:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.canvas-ratio-icon {
+  display: block;
+  width: 17px;
+  height: 24px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+
+.canvas-ratio-option.is-landscape .canvas-ratio-icon {
+  width: 26px;
+  height: 16px;
+}
+
+.canvas-ratio-option.is-square .canvas-ratio-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.canvas-ratio-option b {
+  font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.canvas-preferences-footer {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding-top: 3px;
+  border-top: 1px solid #e5ddd2;
+  color: #756b60;
+  font-size: 9px;
+}
+
+.canvas-preferences-footer b {
+  color: #172127;
+  font-size: 12px;
+}
+
+.canvas-preferences-footer b small {
+  color: #897f74;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.canvas-preferences-footer em {
+  margin-left: auto;
+  color: #0b756f;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .canvas-composer-controls label,
 .canvas-reference-mode,
 .canvas-composer-cost {
@@ -1277,6 +1584,22 @@
 .canvas-composer-cost b {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 17px;
+}
+
+/* The compact preference fields live inside the composer controls, so keep
+   their panel-specific spacing from being flattened by the legacy chip rules. */
+.canvas-composer-controls .canvas-preference-field {
+  min-width: 0;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid #ddd4c7;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.canvas-composer-controls .canvas-preference-field select {
+  min-height: 25px;
+  font-size: 12px;
 }
 
 .canvas-composer-generate {
@@ -1480,6 +1803,20 @@
   .canvas-composer-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .canvas-preferences-wrap {
+    grid-column: 1 / -1;
+  }
+
+  .canvas-preferences-trigger {
+    width: 100%;
+  }
+
+  .canvas-preferences-panel {
+    right: auto;
+    left: 0;
+    width: min(520px, calc(100vw - 24px));
   }
 
   .canvas-composer-controls label,
