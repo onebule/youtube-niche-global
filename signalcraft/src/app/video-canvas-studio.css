@@ -4778,3 +4778,74 @@
 .app-shell:has(.video-canvas-page) .studio-nav .active {
   box-shadow: inset 3px 0 0 var(--canvas-purple);
 }
+
+.canvas-task-model {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid var(--canvas-line-soft);
+  background: var(--canvas-soft);
+}
+
+.canvas-task-model-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+  font-size: 13px;
+}
+
+.canvas-task-model > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.canvas-task-model > div b {
+  overflow: hidden;
+  color: var(--canvas-line);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-task-model > div small {
+  color: var(--canvas-muted);
+  font-size: 8px;
+}
+
+.canvas-task-model > button {
+  margin-left: auto;
+  padding: 4px 7px;
+  border: 1px solid var(--canvas-line-soft);
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.canvas-task-model > button:hover,
+.canvas-task-model > button:focus-visible {
+  border-color: var(--canvas-line);
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.canvas-node-palette-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: -1px 0 1px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--canvas-purple);
+  color: #ffffff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}

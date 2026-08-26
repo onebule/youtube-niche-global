@@ -673,6 +673,13 @@ export default function VideoCanvasStudio({
     closeNodePalette();
     focusMotionPrompt();
   };
+  const addVideoNode = () => {
+    closeNodePalette();
+    const readyModel = models.find(item => item.enabled && item.id !== 'auto');
+    if (!selectedModel?.enabled && readyModel) selectModel(readyModel.id);
+    focusMotionPrompt();
+    notify(zh ? `视频生成节点已就绪：${modelName(readyModel?.id || model)}。请在下方补齐参数。` : `Video generation is ready with ${modelName(readyModel?.id || model)}. Complete the settings below.`);
+  };
   const addReferenceNode = () => {
     setReferenceMode('omni');
     closeNodePalette();
@@ -951,8 +958,9 @@ export default function VideoCanvasStudio({
 
           <article className="video-canvas-node task-node" style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '生成任务节点。拖动，或使用方向键移动。' : 'Generation task node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
+              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => setPreferencesOpen(true)}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh) : (zh ? '等待提交' : 'Ready to submit')}</div>
@@ -985,7 +993,7 @@ export default function VideoCanvasStudio({
         <div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
           <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
           <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{zh ? '加入 START / 参考图' : 'Add START / reference'}</small></label>
-          <button type="button" className="canvas-node-palette-item is-disabled" disabled><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><small>{zh ? '多镜头阶段开放' : 'Coming with shot flow'}</small></button>
+          <button type="button" className="canvas-node-palette-item" onClick={addVideoNode}><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><em className="canvas-node-palette-badge">{selectedModel?.enabled ? modelName(model) : (zh ? '选择模型' : 'Choose model')}</em><small>{zh ? '选择模型并写动作提示' : 'Choose a model and prompt'}</small></button>
           <button type="button" className="canvas-node-palette-item is-disabled" disabled><span aria-hidden="true">▥</span><b>{zh ? '音频' : 'Audio'}</b><small>{zh ? '配音阶段开放' : 'Coming with audio'}</small></button>
         </div></div>
         <div className="canvas-node-palette-section"><span>{zh ? '素材' : 'ASSETS'}</span><div className="canvas-node-palette-list">
