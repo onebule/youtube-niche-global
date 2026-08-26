@@ -4958,3 +4958,169 @@
   font-style: normal;
   font-weight: 800;
 }
+
+/* Readability pass: the caption marker needs to be a chip, not the legacy
+   full-size coral square applied to every caption span. */
+.video-canvas-caption .video-canvas-caption-center > span {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 999px;
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.video-canvas-caption .video-canvas-caption-center p {
+  font-size: 11px;
+}
+
+.video-canvas-caption-project b {
+  font-size: 14px;
+}
+
+.video-canvas-caption-project small {
+  font-size: 10px;
+}
+
+.canvas-node-grip b {
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.canvas-node-grip span {
+  font-size: 10px;
+}
+
+.canvas-node-grip i {
+  font-size: 14px;
+}
+
+.canvas-node-body {
+  font-size: 12px;
+}
+
+.canvas-upload-head b,
+.canvas-omni-node-head b {
+  font-size: 12px;
+}
+
+.canvas-upload-head small,
+.canvas-omni-node > small,
+.canvas-reference-chip small,
+.canvas-task-body > small,
+.canvas-result-body > small {
+  font-size: 10px;
+}
+
+.canvas-upload-empty b {
+  font-size: 12px;
+}
+
+.canvas-upload-empty span,
+.canvas-omni-add span {
+  font-size: 22px;
+}
+
+.canvas-upload-preview span,
+.canvas-upload-preview button,
+.canvas-model-fields label,
+.canvas-model-fields select {
+  font-size: 11px;
+}
+
+.canvas-agent-badge b {
+  font-size: 13px;
+}
+
+.canvas-agent-badge small,
+.canvas-agent-confidence,
+.canvas-agent-prerequisite,
+.canvas-agent-warning {
+  font-size: 10px;
+}
+
+.canvas-agent-body strong {
+  font-size: 17px;
+}
+
+.canvas-agent-body p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.canvas-agent-plan-button,
+.canvas-agent-inline-button {
+  font-size: 11px;
+}
+
+.canvas-cost span,
+.canvas-task-body li,
+.canvas-result-body dt,
+.canvas-result-body dd {
+  font-size: 11px;
+}
+
+.canvas-cost b {
+  font-size: 22px;
+}
+
+.canvas-task-state,
+.canvas-status,
+.canvas-task-next {
+  font-size: 11px;
+}
+
+.canvas-result-empty b {
+  font-size: 15px;
+}
+
+.canvas-result-empty p {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.canvas-result-actions button,
+.canvas-task-model > button {
+  font-size: 11px;
+}
+
+.canvas-task-model > div b {
+  font-size: 11px;
+}
+
+.canvas-task-model > div small {
+  font-size: 9px;
+}
+
+.canvas-composer-prompt-head label {
+  font-size: 11px;
+}
+
+.canvas-composer-prompt textarea {
+  min-height: 72px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.canvas-composer-count {
+  font-size: 10px;
+}
+
+.canvas-composer-controls select,
+.canvas-composer-controls label,
+.canvas-reference-mode,
+.canvas-composer-cost,
+.canvas-preferences-trigger {
+  font-size: 11px;
+}
+
+.canvas-composer-cost b {
+  font-size: 19px;
+}
