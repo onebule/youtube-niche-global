@@ -10,9 +10,11 @@ import {
   estimateVideoCredits,
   loadVideoAssetUrl,
   loadVideoModels,
+  normalizeVideoDuration,
   planVideoGeneration,
   refreshVideoGeneration,
   uploadVideoInput,
+  videoDurationOptions,
   VideoGenerationClientError,
   type VideoGeneration,
   type VideoGenerationPlan,
@@ -241,8 +243,9 @@ export default function VideoCanvasStudio({
           setNodes(restoreNodePositions(saved.nodes));
           setPrompt(saved.prompt || '');
           const restoredReferenceMode = saved.referenceMode || 'start-end';
-          setModel(saved.model || 'seedance-2');
-          setDuration(saved.duration || '5s');
+          const restoredModel = saved.model || 'seedance-2';
+          setModel(restoredModel);
+          setDuration(normalizeVideoDuration(restoredModel, saved.duration || '5s'));
           setAspectRatio(saved.aspectRatio || '9:16');
           setResolution(saved.resolution || '720p');
           setShot(saved.shot || 1);
@@ -464,6 +467,7 @@ export default function VideoCanvasStudio({
     // MiniMax H3 supports both FL2VA (start/end) and Ref2VA (multi-reference)
     // inputs. Keep the model selectable in either reference mode.
     setModel(next);
+    setDuration(current => normalizeVideoDuration(next, current));
     if (next === 'minimax-h3') setResolution('768P');
     if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
   };
@@ -768,7 +772,7 @@ export default function VideoCanvasStudio({
               <label className="canvas-reference-mode"><span>{zh ? '参考模式' : 'Reference'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
               <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3' && referenceMode !== 'omni'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
               <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
-              <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label>
+              <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(model).map(value => <option key={value}>{value}</option>)}</select></label>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
               <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>

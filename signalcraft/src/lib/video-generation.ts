@@ -5,6 +5,25 @@ import { authHeaders } from './auth';
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
+const VIDEO_DURATION_LIMITS: Record<VideoModelId, { min: number; max: number }> = {
+  auto: { min: 5, max: 15 },
+  'seedance-2': { min: 5, max: 15 },
+  'seedance-2-5': { min: 4, max: 30 },
+  'minimax-h3': { min: 4, max: 15 },
+};
+
+export function videoDurationOptions(model: VideoModelId) {
+  const limits = VIDEO_DURATION_LIMITS[model] || VIDEO_DURATION_LIMITS.auto;
+  return Array.from({ length: limits.max - limits.min + 1 }, (_, index) => `${limits.min + index}s`);
+}
+
+export function normalizeVideoDuration(model: VideoModelId, value: string) {
+  const limits = VIDEO_DURATION_LIMITS[model] || VIDEO_DURATION_LIMITS.auto;
+  const parsed = Number.parseInt(String(value || ''), 10);
+  const seconds = Number.isFinite(parsed) ? parsed : limits.min;
+  return `${Math.min(limits.max, Math.max(limits.min, seconds))}s`;
+}
+
 export type VideoModel = {
   id: VideoModelId;
   provider?: string;
