@@ -4757,26 +4757,26 @@
 }
 
 .app-shell:has(.video-canvas-page) .studio-nav {
-  border-right-color: var(--canvas-line-soft);
-  background: #ffffff;
+  border-right-color: #423c34;
+  background: #26231f;
 }
 
 .app-shell:has(.video-canvas-page) .studio-nav p {
-  color: var(--canvas-muted);
+  color: #b9afa3;
 }
 
 .app-shell:has(.video-canvas-page) .studio-nav button {
-  color: #5e646b;
+  color: #cec5ba;
 }
 
 .app-shell:has(.video-canvas-page) .studio-nav button:hover,
 .app-shell:has(.video-canvas-page) .studio-nav .active {
-  background: var(--canvas-soft);
-  color: var(--canvas-line);
+  background: #39342e;
+  color: #ffffff;
 }
 
 .app-shell:has(.video-canvas-page) .studio-nav .active {
-  box-shadow: inset 3px 0 0 var(--canvas-purple);
+  box-shadow: none;
 }
 
 /* Semantic refinement: use accent color as a signal, never as a surface. */
