@@ -104,7 +104,10 @@ export async function planVideoGeneration(input: {
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
 }) {
-  const payload = await request<{ plan: VideoGenerationPlan }>('agent/plan', {
+  // Keep this endpoint to one path segment because the production Vercel
+  // function router is configured around `/api/video/[...path]` and only
+  // forwards the first segment on legacy deployments.
+  const payload = await request<{ plan: VideoGenerationPlan }>('agent-plan', {
     method: 'POST',
     body: JSON.stringify(input),
   });
