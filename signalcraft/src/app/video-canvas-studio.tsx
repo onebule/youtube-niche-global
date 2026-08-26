@@ -218,10 +218,16 @@ export default function VideoCanvasStudio({
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
+  // Keep auth transitions derived during render so signing out cannot leave a
+  // briefly actionable composer while the account-loading effect settles.
+  const hasAccount = Boolean(account);
+  const effectiveAccess = account ? access : 'signed-out';
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
-  const canGenerate = Boolean(access === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
+  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
   const progress = generation?.progress || 0;
+  const generationId = generation?.id;
+  const generationStatus = generation?.status;
 
   useEffect(() => {
     try {
@@ -229,6 +235,9 @@ export default function VideoCanvasStudio({
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
         if (saved.version === 1 || saved.version === 2) {
+          // Hydration intentionally mirrors an external localStorage snapshot
+          // after mount; this is the one synchronous state sync in this effect.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setNodes(restoreNodePositions(saved.nodes));
           setPrompt(saved.prompt || '');
           const restoredReferenceMode = saved.referenceMode || 'start-end';
@@ -278,22 +287,24 @@ export default function VideoCanvasStudio({
   }, [aspectRatio, duration, endFrame, generation?.id, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, shot, startFrame]);
 
   useEffect(() => {
-    if (!account) {
-      setAccess('signed-out');
-      setModels([]);
+    if (!hasAccount) {
       return;
     }
     let cancelled = false;
+    // Loading model capabilities is an external request; keep the loading
+    // marker separate from the render-derived signed-out state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccess('loading');
     loadVideoModels().then(next => {
       if (cancelled) return;
       setModels(next);
       setAccess('ready');
-      const current = next.find(item => item.id === model);
-      if (!current?.enabled) {
+      setModel(currentModel => {
+        const current = next.find(item => item.id === currentModel);
+        if (current?.enabled) return currentModel;
         const enabled = next.find(item => item.enabled && item.id !== 'auto');
-        if (enabled) setModel(enabled.id);
-      }
+        return enabled?.id || currentModel;
+      });
     }).catch(cause => {
       if (cancelled) return;
       const typed = cause as VideoGenerationClientError;
@@ -301,10 +312,10 @@ export default function VideoCanvasStudio({
       setError(clientMessage(cause));
     });
     return () => { cancelled = true; };
-  }, [account?.accessToken]);
+  }, [account?.accessToken, hasAccount]);
 
   useEffect(() => {
-    if (access !== 'ready') return;
+    if (effectiveAccess !== 'ready') return;
     let cancelled = false;
     const restore = async () => {
       try {
@@ -334,15 +345,15 @@ export default function VideoCanvasStudio({
     };
     void restore();
     return () => { cancelled = true; };
-  }, [access, endFrame, generation, referenceFrames, restoredGenerationId, startFrame]);
+  }, [effectiveAccess, endFrame, generation, referenceFrames, restoredGenerationId, startFrame]);
 
   useEffect(() => {
-    if (!generation || !['queued', 'processing'].includes(generation.status)) return;
+    if (!generationId || !generationStatus || !['queued', 'processing'].includes(generationStatus)) return;
     let cancelled = false;
     let timer: number | undefined;
     const poll = async () => {
       try {
-        const next = await refreshVideoGeneration(generation.id);
+        const next = await refreshVideoGeneration(generationId);
         if (cancelled) return;
         setGeneration(next);
         if (['queued', 'processing'].includes(next.status)) timer = window.setTimeout(() => { void poll(); }, 4500);
@@ -355,7 +366,7 @@ export default function VideoCanvasStudio({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [generation?.id, generation?.status]);
+  }, [generationId, generationStatus]);
 
   useEffect(() => {
     if (generation?.status !== 'completed' || !generation.videoAssetId) return;
@@ -634,8 +645,8 @@ export default function VideoCanvasStudio({
     };
   }), [nodes]);
 
-  if (access === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
-  if (access === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
+  if (effectiveAccess === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
+  if (effectiveAccess === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
 
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
