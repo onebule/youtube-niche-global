@@ -4119,3 +4119,24 @@
 .canvas-agent-plan-result ul {
   color: #645b7b;
 }
+
+/* Keep the route-level navigation in the same warm family without changing
+   the shared navigation palette on the rest of the studio. */
+.app-shell:has(.video-canvas-page) .studio-nav {
+  border-right-color: #6b5f53;
+  background: #51483f;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav p {
+  color: #d9cfc3;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav button {
+  color: #f1e7db;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav button:hover,
+.app-shell:has(.video-canvas-page) .studio-nav .active {
+  background: #6b5d4f;
+  color: #fffaf2;
+}
