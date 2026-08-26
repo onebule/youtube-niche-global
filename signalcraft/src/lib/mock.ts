@@ -11,7 +11,7 @@ export function getOpportunity(video:Video):Opportunity {
   const ageHours=Math.max(1,(new Date(latest.capturedAt||video.publishedAt).getTime()-new Date(video.publishedAt).getTime())/3600000);
   const medianViews=channel?.medianViews || Math.max(latest.views,1);
   const signal=calculateSignal({...latest,subscribers:channel?.subscribers||latest.subscribers||1,ageHours,sampleCount:video.snapshots.length},{medianViews});
-  const reasons=[signal.viewsPerSubscriber>=1?'播放表现超过频道公开订阅规模':'公开样本仍需持续采样验证',signal.velocityScore>=70?'发布至今平均播放速度较高':'发布时间仍在有效观察窗口',video.format==='short'?'短视频适合验证前 3 秒钩子':'长视频适合拆解标题与结构'];
+  const reasons=[signal.viewsPerSubscriber>=1?'播放表现超过频道公开订阅规模':'当前公开数据仍需持续采集验证',signal.velocityScore>=70?'发布至今平均播放速度较高':'发布时间仍在有效观察窗口',video.format==='short'?'短视频适合验证前 3 秒钩子':'长视频适合拆解标题与结构'];
   return {videoId:video.id,...signal,reasons};
 }
 

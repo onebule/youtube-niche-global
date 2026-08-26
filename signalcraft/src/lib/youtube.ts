@@ -90,7 +90,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     // A search/ranking response contains one video per channel, not a channel
     // history. Do not manufacture a "median" by reversing views/subscribers:
     // that turns the subscriber count into a misleading performance baseline.
-    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,thumbnail:channelThumbnail,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单样本基线'],owner:'未分配',lastSync:'刚刚'});
+    channels.push({id:channelId,title:item.channelTitle,handle:'公开频道',url:item.channelUrl,thumbnail:channelThumbnail,subscribers:item.subscribers,language:videoLanguage,region:market,medianViews:Math.max(item.views,1),health:0,tags:['YouTube 公开数据','单条视频基线'],owner:'未分配',lastSync:'刚刚'});
     // The API already selects a card-appropriate thumbnail URL. The proxy
     // keeps that public YouTube URL off the client and preserves its cache.
     const thumbnail=item.thumbnail?`${thumbnailEndpoint}?url=${encodeURIComponent(item.thumbnail)}`:'';
@@ -102,5 +102,5 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
       : [{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}];
     return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
   });
-  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null,noCandidatesMessage:source.length||input.pageToken?null:payload.noCandidatesMessage||'当前筛选范围没有可用的公开视频样本。'};
+  return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null,noCandidatesMessage:source.length||input.pageToken?null:payload.noCandidatesMessage||'当前筛选条件下暂无可用的公开视频。请调整市场、时间范围或内容形态后重试。'};
 }
