@@ -267,7 +267,8 @@
 }
 
 .agent-node .canvas-node-grip {
-  background: #6d4bc4;
+  background: linear-gradient(120deg, #171b26 0%, #322549 62%, #6d4bc4 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, .18);
 }
 
 .canvas-node-grip span {
@@ -470,13 +471,15 @@
 .canvas-agent-body {
   display: grid;
   gap: 12px;
+  background: #111720;
+  color: #f4f2fb;
 }
 
 .canvas-agent-badge {
   display: flex;
   gap: 8px;
   align-items: center;
-  color: #6d4bc4;
+  color: #e7ddff;
   font-size: 12px;
   font-weight: 900;
 }
@@ -487,12 +490,14 @@
   height: 24px;
   place-items: center;
   border-radius: 50%;
-  background: #eee8ff;
+  background: #6d4bc4;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(109, 75, 196, .18);
 }
 
 .canvas-agent-badge small {
   margin-left: auto;
-  color: #817787;
+  color: #b8a9d6;
   font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   text-transform: uppercase;
 }
@@ -500,28 +505,36 @@
 .canvas-agent-body strong {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 20px;
+  color: #fff;
 }
 
 .canvas-agent-body p {
   margin: 0;
-  color: #6d655e;
+  color: #b8bcc8;
   font-size: 11px;
   line-height: 1.55;
 }
 
 .canvas-agent-warning {
-  color: #a13429;
+  color: #ffad9e;
   font-size: 10px;
   line-height: 1.4;
+}
+
+.canvas-agent-confidence {
+  color: #8de0d6;
+  font: 800 9px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .canvas-agent-plan-button,
 .canvas-agent-inline-button {
   min-height: 34px;
-  border: 1px solid #6d4bc4;
+  border: 1px solid #9171e4;
   border-radius: 9px;
-  background: #eee8ff;
-  color: #5435a2;
+  background: #6d4bc4;
+  color: #fff;
   font-size: 11px;
   font-weight: 900;
   cursor: pointer;
@@ -531,14 +544,15 @@
 .canvas-agent-plan-button:focus-visible:not(:disabled),
 .canvas-agent-inline-button:hover:not(:disabled),
 .canvas-agent-inline-button:focus-visible:not(:disabled) {
-  background: #e2d8ff;
+  background: #7c5bd6;
+  box-shadow: 0 6px 18px rgba(109, 75, 196, .25);
 }
 
 .canvas-agent-plan-button:disabled,
 .canvas-agent-inline-button:disabled {
-  border-color: #c9c0d9;
-  background: #f0edf4;
-  color: #9b92a7;
+  border-color: #4b445b;
+  background: #292431;
+  color: #82788f;
   cursor: not-allowed;
 }
 
@@ -1152,6 +1166,7 @@
   min-width: 92px;
   padding: 0 10px;
   white-space: nowrap;
+  box-shadow: 0 4px 0 #312252;
 }
 
 .canvas-composer-generate:hover:not(:disabled),
@@ -1189,9 +1204,10 @@
   gap: 6px;
   margin: 8px 0 2px;
   padding: 10px 12px;
-  border: 1px solid #cfc1f2;
-  background: #f5f0ff;
-  color: #50379b;
+  border: 1px solid #7d66b9;
+  background: linear-gradient(115deg, #171b26 0%, #252035 100%);
+  color: #f5f1ff;
+  box-shadow: 0 10px 22px rgba(35, 26, 59, .16);
 }
 
 .canvas-agent-plan-result > div {
@@ -1202,7 +1218,7 @@
 }
 
 .canvas-agent-plan-result > div span {
-  color: #756a90;
+  color: #c7b8ec;
   font-size: 10px;
   font-weight: 750;
 }
@@ -1211,7 +1227,7 @@
 .canvas-agent-plan-result small,
 .canvas-agent-plan-result ul {
   margin: 0;
-  color: #635978;
+  color: #c5c0d4;
   font-size: 10px;
   line-height: 1.5;
 }
