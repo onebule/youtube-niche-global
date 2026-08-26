@@ -6,6 +6,7 @@ import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import {
   createVideoGeneration,
+  estimateVideoCredits,
   loadVideoAssetUrl,
   loadVideoHistory,
   loadVideoModels,
@@ -38,7 +39,7 @@ function copy(locale: UiLocale) {
     teamOnlyTitle: zh ? '这个账号还不在 AI Team 中。' : 'This account is not in the AI Team yet.',
     teamOnlyBody: zh ? '请让站点主人将你的邮箱加入团队白名单后重新登录。' : 'Ask the site owner to add your email to the Team allowlist, then sign in again.',
     setupTitle: zh ? '模型已连接，等待内部成本规则。' : 'Models are connected and waiting for internal cost rules.',
-    setupBody: zh ? '管理员需要先配置每个模型的内部积分成本，才能创建任务。此阶段不会产生视频生成费用。' : 'An administrator must set internal credit costs before tasks can start. No generation charges occur in this state.',
+    setupBody: zh ? '管理员需要先配置每个模型的每秒积分费率，才能创建任务。此阶段不会产生视频生成费用。' : 'An administrator must set per-second credit rates before tasks can start. No generation charges occur in this state.',
     start: zh ? 'START 图片' : 'START frame',
     startHint: zh ? '必填 · JPG、PNG 或 WEBP · 小于 20 MB' : 'Required · JPG, PNG, or WEBP · under 20 MB',
     end: zh ? 'END 图片' : 'END frame',
@@ -192,6 +193,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
+  const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
   const current = useMemo(() => history.find(item => item.id === selectedId) || history[0] || null, [history, selectedId]);
   const currentId = current?.id || null;
   const currentStatus = current?.status || null;
@@ -386,7 +388,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
             <label>{text.resolution}<select name="resolution" value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
           </div>
           {model === 'minimax-h3' && <p id="minimax-h3-frame-rule" className="studio-model-note">{text.h3FrameRule}</p>}
-          <div className="studio-submit"><div><span>{selectedModel?.ownerUnlimited ? text.ownerCredits : text.estimate}</span><b>{selectedModel?.ownerUnlimited ? (locale === 'zh' ? '不限' : 'Unlimited') : selectedModel?.creditsCost ? `${selectedModel.creditsCost} credits` : '—'}</b><small>{selectedModel?.ownerUnlimited ? text.ownerUnlimited : selectedModel?.reason || (locale === 'zh' ? '成功后扣除；模型失败将自动退回。' : 'Charged on success; released if the model fails.')}</small></div><button type="submit" className="primary" disabled={!canCreate}>{submitting ? text.generating : text.generate}</button></div>
+          <div className="studio-submit"><div><span>{selectedModel?.ownerUnlimited ? text.ownerCredits : text.estimate}</span><b>{selectedModel?.ownerUnlimited ? (locale === 'zh' ? '不限' : 'Unlimited') : estimatedCredits ? `${estimatedCredits} credits` : '—'}</b><small>{selectedModel?.ownerUnlimited ? text.ownerUnlimited : selectedModel?.reason || (locale === 'zh' ? '成功后扣除；模型失败将自动退回。' : 'Charged on success; released if the model fails.')}</small></div><button type="submit" className="primary" disabled={!canCreate}>{submitting ? text.generating : text.generate}</button></div>
         </form>
 
         <aside className="studio-current" aria-label={text.current} aria-live="polite">

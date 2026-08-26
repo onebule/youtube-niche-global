@@ -10,10 +10,19 @@ export type VideoModel = {
   provider?: string;
   enabled: boolean;
   creditsCost?: number | null;
+  creditsPerSecond?: number | null;
   ownerUnlimited?: boolean;
   callback?: boolean;
   reason?: string | null;
 };
+
+export function estimateVideoCredits(model: VideoModel | null | undefined, duration: string) {
+  if (!model || model.ownerUnlimited) return null;
+  const seconds = Number.parseInt(String(duration).replace(/\D/g, ''), 10);
+  if (!Number.isFinite(seconds) || seconds <= 0) return model.creditsCost ?? null;
+  if (model.creditsPerSecond) return model.creditsPerSecond * seconds;
+  return model.creditsCost ?? null;
+}
 
 export type VideoGeneration = {
   id: string;
