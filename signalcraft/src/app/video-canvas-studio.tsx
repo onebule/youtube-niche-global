@@ -10,17 +10,19 @@ import {
   estimateVideoCredits,
   loadVideoAssetUrl,
   loadVideoModels,
+  planVideoGeneration,
   refreshVideoGeneration,
   uploadVideoInput,
   VideoGenerationClientError,
   type VideoGeneration,
+  type VideoGenerationPlan,
   type VideoModel,
   type VideoModelId,
 } from '@/src/lib/video-generation';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
-type NodeId = 'source' | 'prompt' | 'model' | 'task' | 'result';
+type NodeId = 'source' | 'prompt' | 'model' | 'agent' | 'task' | 'result';
 type NodePositions = Record<NodeId, Point>;
 type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type ReferenceMode = 'start-end' | 'omni';
@@ -46,6 +48,7 @@ const INITIAL_NODES: NodePositions = {
   source: { x: 80, y: 150 },
   prompt: { x: 430, y: 90 },
   model: { x: 450, y: 445 },
+  agent: { x: 430, y: 420 },
   task: { x: 600, y: 210 },
   result: { x: 1040, y: 135 },
 };
@@ -53,15 +56,17 @@ const NODE_SIZE: Record<NodeId, { width: number; height: number }> = {
   source: { width: 290, height: 470 },
   prompt: { width: 320, height: 280 },
   model: { width: 320, height: 310 },
+  agent: { width: 320, height: 280 },
   task: { width: 280, height: 330 },
   result: { width: 360, height: 500 },
 };
 const CONNECTIONS: Array<[NodeId, NodeId]> = [
-  ['source', 'task'],
+  ['source', 'agent'],
+  ['agent', 'task'],
   ['task', 'result'],
 ];
 
-const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
 const statusLabel = (status: VideoGeneration['status'], zh: boolean) => ({
   queued: zh ? '排队中' : 'Queued',
   processing: zh ? '生成中' : 'Processing',
@@ -200,9 +205,11 @@ export default function VideoCanvasStudio({
   const [referenceFrames, setReferenceFrames] = useState<UploadedFrame[]>([]);
   const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | null>(null);
   const [generation, setGeneration] = useState<VideoGeneration | null>(null);
+  const [agentPlan, setAgentPlan] = useState<VideoGenerationPlan | null>(null);
   const [restoredGenerationId, setRestoredGenerationId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
@@ -212,7 +219,7 @@ export default function VideoCanvasStudio({
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
-  const referenceModeSupported = referenceMode !== 'omni' || model === 'seedance-2';
+  const referenceModeSupported = referenceMode !== 'omni' || ['seedance-2', 'seedance-2-5'].includes(model);
   const canGenerate = Boolean(access === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
   const progress = generation?.progress || 0;
 
@@ -438,8 +445,41 @@ export default function VideoCanvasStudio({
   const changeReferenceMode = (next: ReferenceMode) => {
     setReferenceMode(next);
     if (next === 'omni') {
-      setModel('seedance-2');
+      if (!['seedance-2', 'seedance-2-5'].includes(model)) setModel('seedance-2');
       if (!['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+    }
+  };
+
+  const planWithAgent = async () => {
+    if (planning) return;
+    if (!prompt.trim()) {
+      setError(zh ? '先写一段 Motion Prompt，再让 Agent 规划。' : 'Add a Motion Prompt before asking the Agent to plan.');
+      return;
+    }
+    setPlanning(true);
+    setError('');
+    try {
+      const next = await planVideoGeneration({
+        prompt: prompt.trim(),
+        preferredModel: model,
+        referenceMode,
+        referenceCount: referenceMode === 'omni' ? referenceFrames.length : (startFrame ? 1 : 0) + (endFrame ? 1 : 0),
+        referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
+        duration,
+        aspectRatio,
+        resolution,
+      });
+      setAgentPlan(next);
+      setModel(next.model);
+      setReferenceMode(next.referenceMode);
+      setDuration(next.duration);
+      if (next.aspectRatio) setAspectRatio(next.aspectRatio);
+      setResolution(next.resolution);
+      notify(zh ? `Agent 已完成规划：${next.modelLabel}。请确认后再生成。` : `Agent selected ${next.modelLabel}. Review the plan before generating.`);
+    } catch (cause) {
+      setError(clientMessage(cause));
+    } finally {
+      setPlanning(false);
     }
   };
 
@@ -638,9 +678,20 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
+          <article className="video-canvas-node agent-node" style={{ left: nodes.agent.x, top: nodes.agent.y, width: NODE_SIZE.agent.width, minHeight: NODE_SIZE.agent.height }}>
+            <span className="node-port input" aria-hidden="true" />
+            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-body canvas-agent-body">
+              <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (zh ? '已规划' : 'Planned') : (zh ? '待规划' : 'Ready')}</small></div>
+              {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
+              <button type="button" className="canvas-agent-plan-button" disabled={planning || !prompt.trim()} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? '让 Agent 规划' : 'Ask Agent to plan')}</button>
+            </div>
+            <span className="node-port output" aria-hidden="true" />
+          </article>
+
           <article className="video-canvas-node task-node" style={{ left: nodes.task.x, top: nodes.task.y, width: NODE_SIZE.task.width, minHeight: NODE_SIZE.task.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '生成任务' : 'Generation task'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
@@ -652,7 +703,7 @@ export default function VideoCanvasStudio({
 
           <article className="video-canvas-node result-node" style={{ left: nodes.result.x, top: nodes.result.y, width: NODE_SIZE.result.width, minHeight: NODE_SIZE.result.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
                 <div className={'canvas-status ' + generation.status}><b>{statusLabel(generation.status, zh)}</b><span>{generation.progress}%</span></div>
@@ -688,7 +739,7 @@ export default function VideoCanvasStudio({
 
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
-              <textarea value={prompt} maxLength={1200} rows={2} onChange={event => setPrompt(event.target.value)} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} aria-label="Motion Prompt" />
+              <textarea value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} aria-label="Motion Prompt" />
               <span>{prompt.length}/1200</span>
             </div>
             <div className="canvas-composer-controls">
@@ -696,16 +747,18 @@ export default function VideoCanvasStudio({
                 const next = event.target.value as VideoModelId;
                 setModel(next);
                 if (next === 'minimax-h3') setResolution('768P');
-                if (next === 'seedance-2' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
-              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto' && (referenceMode !== 'omni' || item.id === 'seedance-2')).map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+                if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto' && (referenceMode !== 'omni' || ['seedance-2', 'seedance-2-5'].includes(item.id))).map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
               <label className="canvas-reference-mode"><span>{zh ? '参考模式' : 'Reference'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
               <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
               <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
               <label><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{['5s', '8s', '10s'].map(value => <option key={value}>{value}</option>)}</select></label>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
+              <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>
             </div>
-            <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。当前仅 Seedance 2.0 可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. Seedance 2.0 only.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
+            {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite"><div><b>{zh ? 'Agent 已生成方案' : 'Agent plan ready'}</b><span>{agentPlan.director.label} · {agentPlan.modelLabel} · {agentPlan.duration}</span></div><p>{agentPlan.reasoning}</p>{agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}{agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}</div>}
+            <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。Seedance 2.0 / 2.5 可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
         </section>
       </div>

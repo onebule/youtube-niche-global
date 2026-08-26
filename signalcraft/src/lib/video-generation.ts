@@ -2,7 +2,7 @@
 
 import { authHeaders } from './auth';
 
-export type VideoModelId = 'auto' | 'seedance-2' | 'minimax-h3';
+export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type VideoModel = {
@@ -46,6 +46,24 @@ export type VideoGeneration = {
   completedAt: string | null;
 };
 
+export type VideoGenerationPlan = {
+  kind: 'video-generation-plan';
+  director: { id: 'gpt' | 'claude'; label: string; model: string; mode: string };
+  model: Exclude<VideoModelId, 'auto'>;
+  modelLabel: string;
+  referenceMode: 'start-end' | 'omni';
+  referenceCount: number;
+  prompt: string;
+  duration: string;
+  aspectRatio?: '9:16' | '16:9' | '1:1';
+  resolution: string;
+  imageModel?: string | null;
+  estimatedCredits: number | null;
+  warnings: string[];
+  reasoning: string;
+  autoGenerate: false;
+};
+
 type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean };
 
 export class VideoGenerationClientError extends Error {
@@ -74,6 +92,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function loadVideoModels() {
   const payload = await request<{ models: VideoModel[] }>('models');
   return payload.models;
+}
+
+export async function planVideoGeneration(input: {
+  prompt: string;
+  preferredModel?: VideoModelId;
+  referenceMode: 'start-end' | 'omni';
+  referenceCount: number;
+  referenceImageAssetIds?: string[];
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+}) {
+  const payload = await request<{ plan: VideoGenerationPlan }>('agent/plan', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.plan;
 }
 
 export async function uploadVideoInput(file: File) {
