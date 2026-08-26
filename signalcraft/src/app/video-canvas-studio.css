@@ -4140,3 +4140,641 @@
   background: #6b5d4f;
   color: #fffaf2;
 }
+
+/* Reference-led logic palette: structure stays neutral, accents carry meaning. */
+.video-canvas-page {
+  --canvas-paper: #ffffff;
+  --canvas-wash: #fbfbfc;
+  --canvas-soft: #f2f3f5;
+  --canvas-soft-strong: #e8eaed;
+  --canvas-line: #1f2328;
+  --canvas-line-soft: #d9dce1;
+  --canvas-muted: #737980;
+  --canvas-purple: #6b5cf0;
+  --canvas-purple-soft: #efedff;
+  --canvas-success: #16a36f;
+  --canvas-success-soft: #e7f7ef;
+  --canvas-danger: #dd5048;
+  --canvas-danger-soft: #fff0ee;
+  background: var(--canvas-wash);
+  color: var(--canvas-line);
+}
+
+.video-canvas-intro h1,
+.video-canvas-intro aside b,
+.video-canvas-model-copy b,
+.video-canvas-caption-project b,
+.canvas-add-node-trigger,
+.canvas-composer-prompt-head label,
+.canvas-composer-prompt textarea,
+.canvas-composer-controls select,
+.canvas-preferences-head b,
+.canvas-preferences-footer b,
+.canvas-history-head b,
+.canvas-node-palette-head b {
+  color: var(--canvas-line);
+}
+
+.video-canvas-intro p,
+.video-canvas-intro aside span,
+.video-canvas-model-copy small,
+.video-canvas-model-spec,
+.video-canvas-caption-project small,
+.video-canvas-caption-center p,
+.canvas-composer-count,
+.canvas-composer-main > p,
+.canvas-history-head small,
+.canvas-node-palette-head small,
+.canvas-preferences-head small,
+.canvas-preferences-footer,
+.canvas-preferences-footer b small,
+.canvas-node-palette-item small,
+.canvas-node-palette-row small,
+.canvas-history-row-copy small,
+.canvas-history-row-meta small,
+.canvas-history-footnote {
+  color: var(--canvas-muted);
+}
+
+.video-canvas-intro aside,
+.video-canvas-model-pill,
+.video-canvas-shell,
+.video-canvas-composer,
+.canvas-preferences-panel,
+.canvas-history-panel,
+.canvas-node-palette {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-paper);
+  box-shadow: 0 12px 28px rgba(31, 35, 40, .08);
+}
+
+.video-canvas-intro aside button,
+.canvas-preferences-head span,
+.canvas-preferences-footer em,
+.canvas-history-head span,
+.canvas-node-palette-head > div > span,
+.canvas-node-palette-section > span {
+  color: var(--canvas-purple);
+}
+
+.video-canvas-model-spec {
+  border-left-color: var(--canvas-line-soft);
+}
+
+.video-canvas-model-mark {
+  background: linear-gradient(135deg, #dcd8ff 0%, var(--canvas-purple) 100%);
+}
+
+.video-canvas-model-state.ready {
+  background: var(--canvas-success-soft);
+  color: var(--canvas-success);
+}
+
+.video-canvas-model-state.pending {
+  background: var(--canvas-soft);
+  color: var(--canvas-muted);
+}
+
+.video-canvas-error,
+.canvas-history-error,
+.canvas-failure {
+  border-color: #efaaa4;
+  background: var(--canvas-danger-soft);
+  color: #a63a35;
+}
+
+.video-canvas-caption {
+  border-bottom-color: var(--canvas-line-soft);
+  background: var(--canvas-paper);
+}
+
+.canvas-project-mark {
+  border-color: var(--canvas-line);
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.canvas-project-mark + div small i {
+  background: var(--canvas-success);
+}
+
+.canvas-add-node-trigger {
+  border-color: var(--canvas-line);
+  background: var(--canvas-paper);
+}
+
+.canvas-add-node-trigger span {
+  color: var(--canvas-line);
+}
+
+.canvas-add-node-trigger:hover,
+.canvas-add-node-trigger:focus-visible,
+.canvas-add-node-trigger.is-open {
+  border-color: var(--canvas-line);
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.video-canvas-viewport {
+  background-color: var(--canvas-wash);
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M48 0H0V48' fill='none' stroke='%23e3e5e9' stroke-width='1'/%3E%3Ccircle cx='24' cy='24' r='1.1' fill='%23cfd2d8'/%3E%3C/svg%3E");
+}
+
+.video-canvas-toolbar {
+  border-color: var(--canvas-line-soft);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 6px 6px 0 rgba(31, 35, 40, .1);
+}
+
+.video-canvas-toolbar button {
+  color: var(--canvas-line);
+}
+
+.video-canvas-toolbar button:hover,
+.video-canvas-toolbar button:focus-visible {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.video-canvas-toolbar .canvas-history-toolbar-button,
+.video-canvas-toolbar .canvas-fullscreen-button {
+  border-left-color: var(--canvas-line-soft);
+}
+
+.canvas-history-toolbar-button i {
+  background: var(--canvas-success);
+  color: #ffffff;
+}
+
+.video-canvas-edges path {
+  stroke: #343a40;
+  stroke-width: 2.2;
+}
+
+.video-canvas-edges .edge-shadow {
+  stroke: rgba(31, 35, 40, .1);
+  stroke-width: 7;
+}
+
+.video-canvas-node {
+  border-color: var(--canvas-line);
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  box-shadow: 7px 8px 0 rgba(31, 35, 40, .12);
+}
+
+.video-canvas-node::after {
+  box-shadow: inset 0 0 0 1px rgba(31, 35, 40, .05);
+}
+
+.source-node {
+  border-color: var(--canvas-line);
+}
+
+.canvas-node-grip {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-node-grip span {
+  border-color: #b9bec5;
+  color: var(--canvas-line);
+}
+
+.agent-node .canvas-node-grip {
+  border-bottom-color: #5b4bd6;
+  background: var(--canvas-purple);
+  color: #ffffff;
+}
+
+.agent-node .canvas-node-grip span {
+  border-color: rgba(255, 255, 255, .7);
+  color: #ffffff;
+}
+
+.task-node .canvas-node-grip {
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.task-node .canvas-node-grip span {
+  border-color: rgba(255, 255, 255, .7);
+  color: #ffffff;
+}
+
+.result-node .canvas-node-grip {
+  border-bottom: 2px solid var(--canvas-success);
+  background: var(--canvas-success-soft);
+  color: #147b56;
+}
+
+.result-node .canvas-node-grip span {
+  border-color: #9fd5bc;
+  color: #147b56;
+}
+
+.node-port {
+  border-color: var(--canvas-paper);
+  background: var(--canvas-line);
+  box-shadow: 0 0 0 1.5px #aeb4ba;
+}
+
+.canvas-upload + .canvas-upload {
+  border-top-color: var(--canvas-line-soft);
+}
+
+.canvas-upload-head small,
+.canvas-omni-node > small,
+.canvas-reference-chip small,
+.canvas-task-body > small,
+.canvas-result-body > small,
+.canvas-cost span,
+.canvas-task-body li,
+.canvas-result-body dt {
+  color: var(--canvas-muted);
+}
+
+.canvas-upload-empty,
+.canvas-upload-preview,
+.canvas-node-body textarea,
+.canvas-model-fields select,
+.canvas-omni-add,
+.canvas-reference-chip,
+.canvas-task-state,
+.canvas-result-empty,
+.canvas-status {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-upload-empty {
+  color: var(--canvas-muted);
+}
+
+.canvas-upload-preview span,
+.canvas-model-fields label {
+  color: var(--canvas-line);
+}
+
+.canvas-upload-preview button,
+.canvas-model-fields > small {
+  color: var(--canvas-danger);
+}
+
+.canvas-node-body textarea::placeholder,
+.canvas-composer-prompt textarea::placeholder {
+  color: #a0a5ab;
+}
+
+.canvas-omni-node-head span {
+  border-color: #bfc2ff;
+  color: var(--canvas-purple);
+}
+
+.canvas-agent-body {
+  background: var(--canvas-purple-soft);
+  color: #332c6b;
+}
+
+.canvas-agent-body p,
+.canvas-agent-confidence,
+.canvas-agent-prerequisite,
+.canvas-agent-badge small {
+  color: #6b6590;
+}
+
+.canvas-agent-badge {
+  color: #5143c4;
+}
+
+.canvas-agent-badge span {
+  background: var(--canvas-purple);
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(107, 92, 240, .14);
+}
+
+.canvas-agent-body strong {
+  color: #332c6b;
+}
+
+.canvas-agent-warning {
+  color: #a63a35;
+}
+
+.canvas-agent-plan-button,
+.canvas-agent-inline-button {
+  border-color: #5b4bd6;
+  background: var(--canvas-purple);
+  color: #ffffff;
+}
+
+.canvas-agent-plan-button:hover:not(:disabled),
+.canvas-agent-plan-button:focus-visible:not(:disabled),
+.canvas-agent-inline-button:hover:not(:disabled),
+.canvas-agent-inline-button:focus-visible:not(:disabled) {
+  background: #5b4bd6;
+  box-shadow: 0 6px 18px rgba(107, 92, 240, .22);
+}
+
+.canvas-agent-plan-button:disabled,
+.canvas-agent-inline-button:disabled {
+  border-color: #d5d7dc;
+  background: #e7e8eb;
+  color: #9aa0a6;
+}
+
+.canvas-task-body,
+.canvas-result-body {
+  background: var(--canvas-paper);
+}
+
+.canvas-task-body li.done,
+.canvas-task-body li.done::before,
+.canvas-task-next.ready,
+.canvas-task-state.completed > span,
+.canvas-status.completed {
+  color: var(--canvas-success);
+}
+
+.canvas-task-state > span {
+  background: #aeb4ba;
+}
+
+.canvas-task-state.queued > span,
+.canvas-task-state.processing > span {
+  background: var(--canvas-purple);
+}
+
+.canvas-task-state.completed > span {
+  background: var(--canvas-success);
+}
+
+.canvas-task-state.failed > span,
+.canvas-status.failed {
+  background: var(--canvas-danger);
+  border-color: var(--canvas-danger);
+}
+
+.canvas-generate,
+.canvas-composer-generate {
+  border-color: var(--canvas-line);
+  background: var(--canvas-line);
+  color: #ffffff;
+  box-shadow: 4px 4px 0 #aeb4ba;
+}
+
+.canvas-generate:hover:not(:disabled),
+.canvas-generate:focus-visible:not(:disabled),
+.canvas-composer-generate:hover:not(:disabled),
+.canvas-composer-generate:focus-visible:not(:disabled) {
+  background: #343a40;
+  box-shadow: 6px 6px 0 #aeb4ba;
+}
+
+.canvas-generate:disabled,
+.canvas-composer-generate:disabled {
+  border-color: #d5d7dc;
+  background: #e7e8eb;
+  color: #9aa0a6;
+  box-shadow: none;
+}
+
+.canvas-task-state,
+.canvas-status {
+  border-left-color: #aeb4ba;
+}
+
+.canvas-status.processing,
+.canvas-status.queued {
+  border-color: var(--canvas-purple);
+}
+
+.canvas-status.completed {
+  border-color: var(--canvas-success);
+}
+
+.canvas-progress {
+  background: #e0e3e7;
+}
+
+.canvas-progress i {
+  background: var(--canvas-purple);
+}
+
+.canvas-result-body video,
+.canvas-result-body .canvas-media-loading,
+.canvas-media-loading {
+  background: #f0f1f3;
+  color: var(--canvas-muted);
+}
+
+.canvas-result-body dl {
+  background: var(--canvas-soft-strong);
+}
+
+.canvas-result-body dl div {
+  background: var(--canvas-soft);
+}
+
+.canvas-result-actions button {
+  border-color: var(--canvas-line);
+  color: var(--canvas-line);
+}
+
+.canvas-result-actions button:last-child {
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.canvas-result-actions button:disabled {
+  border-color: #d5d7dc;
+  background: #eef0f2;
+  color: #9aa0a6;
+}
+
+.canvas-result-empty {
+  border-color: #b8daca;
+}
+
+.canvas-result-empty > span {
+  border-color: #9fd5bc;
+  color: var(--canvas-success);
+}
+
+.canvas-reference-chip,
+.canvas-omni-reference {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-reference-chip.has-media {
+  border-color: var(--canvas-line);
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.canvas-omni-reference > .canvas-media-loading,
+.canvas-upload-preview .canvas-media-loading {
+  background: #f0f1f3;
+  color: var(--canvas-muted);
+}
+
+.canvas-reference-mention,
+.canvas-reference-remove {
+  border-color: rgba(255, 255, 255, .8);
+  background: rgba(31, 35, 40, .84);
+  color: #ffffff;
+}
+
+.canvas-composer-prompt {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-soft);
+}
+
+.canvas-composer-prompt-head small {
+  background: var(--canvas-soft-strong);
+  color: var(--canvas-muted);
+}
+
+.canvas-composer-controls label,
+.canvas-reference-mode,
+.canvas-composer-cost,
+.canvas-preferences-trigger,
+.canvas-composer-controls .canvas-preference-field,
+.canvas-ratio-option {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-composer-controls label > span,
+.canvas-composer-cost small,
+.canvas-preferences-trigger-copy small,
+.canvas-preferences-trigger-arrow,
+.canvas-preferences-auto small,
+.canvas-preference-field select {
+  color: var(--canvas-muted);
+}
+
+.canvas-reference-mode {
+  color: var(--canvas-purple);
+}
+
+.canvas-preferences-close,
+.canvas-history-close,
+.canvas-node-palette-close {
+  border-color: var(--canvas-line-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-preferences-auto,
+.canvas-preference-field > span,
+.canvas-preference-field legend {
+  color: var(--canvas-line);
+}
+
+.canvas-ratio-option:hover:not(:disabled),
+.canvas-ratio-option.is-selected {
+  border-color: var(--canvas-purple);
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+}
+
+.canvas-history-row,
+.canvas-node-palette-item,
+.canvas-node-palette-row {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+}
+
+.canvas-history-row:hover,
+.canvas-history-row:focus-visible,
+.canvas-history-row.is-current,
+.canvas-node-palette-item:hover:not(:disabled),
+.canvas-node-palette-item:focus-visible,
+.canvas-node-palette-row:hover,
+.canvas-node-palette-row:focus-visible {
+  border-color: var(--canvas-line);
+  background: var(--canvas-soft);
+}
+
+.canvas-history-empty {
+  border-color: var(--canvas-line-soft);
+}
+
+.canvas-history-empty p {
+  color: var(--canvas-line);
+}
+
+.canvas-history-footnote {
+  border-top-color: var(--canvas-line-soft);
+}
+
+.canvas-history-error button,
+.canvas-history-more {
+  border-color: var(--canvas-line);
+  background: var(--canvas-line);
+  color: #ffffff;
+}
+
+.canvas-node-palette-item > span,
+.canvas-node-palette-row > span {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-node-palette-item:nth-child(1) > span {
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+}
+
+.canvas-node-palette-item:nth-child(2) > span {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-node-palette-item:nth-child(3) > span,
+.canvas-node-palette-item:nth-child(4) > span {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.canvas-agent-plan-result {
+  border-color: #c6c1ff;
+  background: var(--canvas-purple-soft);
+  color: #332c6b;
+  box-shadow: 0 10px 22px rgba(107, 92, 240, .12);
+}
+
+.canvas-agent-plan-result > div span,
+.canvas-agent-plan-result p,
+.canvas-agent-plan-result small,
+.canvas-agent-plan-result ul {
+  color: #6b6590;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav {
+  border-right-color: var(--canvas-line-soft);
+  background: #ffffff;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav p {
+  color: var(--canvas-muted);
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav button {
+  color: #5e646b;
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav button:hover,
+.app-shell:has(.video-canvas-page) .studio-nav .active {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.app-shell:has(.video-canvas-page) .studio-nav .active {
+  box-shadow: inset 3px 0 0 var(--canvas-purple);
+}
