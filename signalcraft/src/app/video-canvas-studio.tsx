@@ -450,6 +450,22 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const selectModel = (next: VideoModelId) => {
+    // MiniMax H3 uses the start/end contract rather than Omni references.
+    // Keep it visible in the model picker and migrate the first two Omni
+    // frames when the user selects it, instead of hiding the model entirely.
+    if (next === 'minimax-h3' && referenceMode === 'omni') {
+      const [first, second] = referenceFrames;
+      if (first) setStartFrame(first);
+      if (second) setEndFrame(second);
+      setReferenceFrames([]);
+      setReferenceMode('start-end');
+    }
+    setModel(next);
+    if (next === 'minimax-h3') setResolution('768P');
+    if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+  };
+
   const planWithAgent = async () => {
     if (planning) return;
     if (!prompt.trim()) {
@@ -743,12 +759,7 @@ export default function VideoCanvasStudio({
               <span>{prompt.length}/1200</span>
             </div>
             <div className="canvas-composer-controls">
-              <label><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => {
-                const next = event.target.value as VideoModelId;
-                setModel(next);
-                if (next === 'minimax-h3') setResolution('768P');
-                if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
-              }}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto' && (referenceMode !== 'omni' || ['seedance-2', 'seedance-2-5'].includes(item.id))).map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+              <label><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
               <label className="canvas-reference-mode"><span>{zh ? '参考模式' : 'Reference'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
               <label><span>{zh ? '画幅' : 'Ratio'}</span><select value={aspectRatio} disabled={model === 'minimax-h3'} onChange={event => setAspectRatio(event.target.value as '9:16' | '16:9' | '1:1')}><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
               <label><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
@@ -758,7 +769,7 @@ export default function VideoCanvasStudio({
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} onClick={() => void generate()} aria-label={zh ? '生成视频' : 'Generate video'}>{submitting ? <span className="canvas-submit-spinner" aria-hidden="true" /> : '↑'}</button>
             </div>
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite"><div><b>{zh ? 'Agent 已生成方案' : 'Agent plan ready'}</b><span>{agentPlan.director.label} · {agentPlan.modelLabel} · {agentPlan.duration}</span></div><p>{agentPlan.reasoning}</p>{agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}{agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}</div>}
-            <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。Seedance 2.0 / 2.5 可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
+            <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。Seedance 2.0 / 2.5 可用；选择 MiniMax H3 会自动切换为首尾帧。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. Seedance 2.0 / 2.5 are supported; selecting MiniMax H3 switches to start/end.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 将沿用 START 图片比例。' : 'MiniMax H3 follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
         </section>
       </div>
