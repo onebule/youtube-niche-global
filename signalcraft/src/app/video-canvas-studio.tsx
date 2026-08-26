@@ -234,11 +234,13 @@ export default function VideoCanvasStudio({
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
@@ -304,6 +306,7 @@ export default function VideoCanvasStudio({
   const toggleHistory = () => {
     const next = !historyOpen;
     setHistoryOpen(next);
+    if (next) setNodePaletteOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
 
@@ -345,6 +348,17 @@ export default function VideoCanvasStudio({
       document.documentElement.style.overflow = previousOverflow;
     };
   }, [isCanvasFullscreen]);
+
+  useEffect(() => {
+    if (!historyOpen && !nodePaletteOpen) return;
+    const closePanels = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setHistoryOpen(false);
+      setNodePaletteOpen(false);
+    };
+    window.addEventListener('keydown', closePanels);
+    return () => window.removeEventListener('keydown', closePanels);
+  }, [historyOpen, nodePaletteOpen]);
 
   useEffect(() => {
     try {
@@ -643,6 +657,28 @@ export default function VideoCanvasStudio({
     void planWithAgent();
   };
 
+  const closeNodePalette = () => setNodePaletteOpen(false);
+  const toggleNodePalette = () => {
+    setNodePaletteOpen(current => {
+      const next = !current;
+      if (next) setHistoryOpen(false);
+      return next;
+    });
+  };
+  const handlePaletteImage = (file: File) => {
+    if (referenceMode === 'omni') void uploadReferences([file]);
+    else void upload('start', file);
+  };
+  const addTextNode = () => {
+    closeNodePalette();
+    focusMotionPrompt();
+  };
+  const addReferenceNode = () => {
+    setReferenceMode('omni');
+    closeNodePalette();
+    notify(zh ? '已切换到全能参考，可在画布左侧加入最多 9 张图片。' : 'Omni reference is ready. Add up to 9 images from the left node.');
+  };
+
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     if (!canGenerate || !primaryFrame) return;
@@ -857,8 +893,9 @@ export default function VideoCanvasStudio({
 
     <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
       <div className="video-canvas-caption">
-        <div><span>{String(shot).padStart(2, '0')}</span><b>{zh ? '当前镜头' : 'Current shot'}</b></div>
-        <p>{zh ? '拖动空白区域移动画布，滚轮缩放，拖动节点标题重新排布。' : 'Drag the background to pan, use the wheel to zoom, and drag node headers to arrange.'}</p>
+        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{zh ? '未命名镜头项目' : 'Untitled shot project'}</b><small><i aria-hidden="true" />{zh ? '已保存到本地' : 'Saved locally'}</small></div></div>
+        <div className="video-canvas-caption-center"><span>{String(shot).padStart(2, '0')} · {zh ? '当前镜头' : 'Current shot'}</span><p>{zh ? '拖动空白区域移动画布，滚轮缩放。' : 'Drag the background to pan, use the wheel to zoom.'}</p></div>
+        <div className="video-canvas-caption-actions"><button type="button" className={'canvas-add-node-trigger ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭面板' : 'Close panel') : (zh ? '添加节点' : 'Add node')}</button></div>
       </div>
       <div
         ref={viewportRef}
@@ -943,7 +980,21 @@ export default function VideoCanvasStudio({
             </div>
           </div>
 
-      {historyOpen && <aside id="canvas-history-panel" className="canvas-history-panel" role="region" aria-labelledby="canvas-history-title">
+      {nodePaletteOpen && <aside id="canvas-node-palette" className="canvas-node-palette" role="region" aria-labelledby="canvas-node-palette-title" onKeyDown={event => { if (event.key === 'Escape') closeNodePalette(); }}>
+        <div className="canvas-node-palette-head"><div><span>{zh ? '工作区工具' : 'WORKSPACE TOOLS'}</span><b id="canvas-node-palette-title">{zh ? '添加节点' : 'Add a node'}</b><small>{zh ? '把输入素材放进当前镜头。' : 'Bring an input into the current shot.'}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭添加节点面板' : 'Close add node panel'} onClick={closeNodePalette}>×</button></div>
+        <div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
+          <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
+          <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{zh ? '加入 START / 参考图' : 'Add START / reference'}</small></label>
+          <button type="button" className="canvas-node-palette-item is-disabled" disabled><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><small>{zh ? '多镜头阶段开放' : 'Coming with shot flow'}</small></button>
+          <button type="button" className="canvas-node-palette-item is-disabled" disabled><span aria-hidden="true">▥</span><b>{zh ? '音频' : 'Audio'}</b><small>{zh ? '配音阶段开放' : 'Coming with audio'}</small></button>
+        </div></div>
+        <div className="canvas-node-palette-section"><span>{zh ? '素材' : 'ASSETS'}</span><div className="canvas-node-palette-list">
+          <label className="canvas-node-palette-row"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">↥</span><div><b>{zh ? '本地上传' : 'Local upload'}</b><small>{zh ? '从设备加入图片素材' : 'Add an image from this device'}</small></div></label>
+          <button type="button" className="canvas-node-palette-row" onClick={addReferenceNode}><span aria-hidden="true">@</span><div><b>{zh ? '引用参考' : 'Reference set'}</b><small>{zh ? '切换到最多 9 张全能参考' : 'Switch to up to 9 omni references'}</small></div></button>
+        </div></div>
+      </aside>}
+
+      {historyOpen && <aside id="canvas-history-panel" className="canvas-history-panel" role="region" aria-labelledby="canvas-history-title" onKeyDown={event => { if (event.key === 'Escape') setHistoryOpen(false); }}>
         <div className="canvas-history-head">
           <div><span>{zh ? '任务档案' : 'TASK ARCHIVE'}</span><b id="canvas-history-title">{zh ? '生成历史' : 'Generation history'}</b><small>{zh ? '当前 Team 账号的最近任务' : 'Recent tasks for this Team account'}</small></div>
           <button type="button" className="canvas-history-close" aria-label={zh ? '关闭生成历史' : 'Close generation history'} onClick={() => setHistoryOpen(false)}>×</button>
