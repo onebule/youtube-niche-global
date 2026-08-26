@@ -1,13 +1,14 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import {
   createVideoGeneration,
   estimateVideoCredits,
+  loadVideoHistory,
   loadVideoAssetUrl,
   loadVideoModels,
   normalizeVideoDuration,
@@ -81,6 +82,12 @@ const statusLabel = (status: VideoGeneration['status'], zh: boolean) => ({
   completed: zh ? '已完成' : 'Completed',
   failed: zh ? '失败' : 'Failed',
 }[status]);
+
+function formatHistoryTime(value: string, zh: boolean) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return zh ? '时间未知' : 'Unknown time';
+  return new Intl.DateTimeFormat(zh ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
 
 function clientMessage(cause: unknown) {
   if (cause instanceof VideoGenerationClientError) return cause.message;
@@ -221,10 +228,17 @@ export default function VideoCanvasStudio({
   const [submitting, setSubmitting] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<VideoGeneration[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
@@ -261,6 +275,50 @@ export default function VideoCanvasStudio({
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
+
+  const rememberGeneration = useCallback((next: VideoGeneration) => {
+    setHistory(previous => {
+      const merged = [next, ...previous.filter(item => item.id !== next.id)];
+      return merged.toSorted((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+    });
+  }, []);
+
+  const loadHistoryPage = async (append = false) => {
+    if (effectiveAccess !== 'ready' || (append ? historyLoadingMore : historyLoading)) return;
+    if (append) setHistoryLoadingMore(true); else setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const next = await loadVideoHistory(20, append ? history.length : 0);
+      setHistory(previous => append
+        ? [...previous, ...next.filter(item => !previous.some(existing => existing.id === item.id))]
+        : next,
+      );
+      setHistoryHasMore(next.length === 20);
+    } catch (cause) {
+      setHistoryError(clientMessage(cause));
+    } finally {
+      if (append) setHistoryLoadingMore(false); else setHistoryLoading(false);
+    }
+  };
+
+  const toggleHistory = () => {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
+  };
+
+  const restoreHistoryItem = (item: VideoGeneration) => {
+    setGeneration(item);
+    setRestoredGenerationId(item.id);
+    setPrompt(item.prompt);
+    setModel(item.model);
+    setDuration(normalizeVideoDuration(item.model, item.duration));
+    setAspectRatio(item.aspectRatio);
+    setResolution(item.resolution);
+    setVideoUrl('');
+    setHistoryOpen(false);
+    notify(zh ? '已将历史任务载入当前画布。' : 'History task loaded into the current canvas.');
+  };
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -359,6 +417,10 @@ export default function VideoCanvasStudio({
     setAccess('loading');
     loadVideoModels().then(next => {
       if (cancelled) return;
+      setHistory([]);
+      setHistoryHasMore(false);
+      setHistoryError('');
+      setHistoryOpen(false);
       setModels(next);
       setAccess('ready');
       setModel(currentModel => {
@@ -399,7 +461,10 @@ export default function VideoCanvasStudio({
         }
         if (restoredGenerationId && !generation) {
           const next = await refreshVideoGeneration(restoredGenerationId);
-          if (!cancelled) setGeneration(next);
+          if (!cancelled) {
+            setGeneration(next);
+            rememberGeneration(next);
+          }
         }
       } catch (cause) {
         if (!cancelled) setError(clientMessage(cause));
@@ -407,7 +472,7 @@ export default function VideoCanvasStudio({
     };
     void restore();
     return () => { cancelled = true; };
-  }, [effectiveAccess, endFrame, generation, referenceFrames, restoredGenerationId, startFrame]);
+  }, [effectiveAccess, endFrame, generation, referenceFrames, rememberGeneration, restoredGenerationId, startFrame]);
 
   useEffect(() => {
     if (!generationId || !generationStatus || !['queued', 'processing'].includes(generationStatus)) return;
@@ -418,6 +483,7 @@ export default function VideoCanvasStudio({
         const next = await refreshVideoGeneration(generationId);
         if (cancelled) return;
         setGeneration(next);
+        rememberGeneration(next);
         if (['queued', 'processing'].includes(next.status)) timer = window.setTimeout(() => { void poll(); }, 4500);
       } catch (cause) {
         if (!cancelled) setError(clientMessage(cause));
@@ -428,7 +494,7 @@ export default function VideoCanvasStudio({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [generationId, generationStatus]);
+  }, [generationId, generationStatus, rememberGeneration]);
 
   useEffect(() => {
     if (generation?.status !== 'completed' || !generation.videoAssetId) return;
@@ -564,6 +630,19 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const focusMotionPrompt = () => {
+    promptRef.current?.focus();
+    promptRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const handleAgentAction = () => {
+    if (!prompt.trim()) {
+      focusMotionPrompt();
+      return;
+    }
+    void planWithAgent();
+  };
+
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     if (!canGenerate || !primaryFrame) return;
@@ -590,6 +669,7 @@ export default function VideoCanvasStudio({
         resolution,
       });
       setGeneration(next);
+      rememberGeneration(next);
       setRestoredGenerationId(next.id);
       notify(zh ? '镜头任务已创建，画布会自动同步进度。' : 'Shot created. The canvas will sync progress automatically.');
     } catch (cause) {
@@ -794,6 +874,7 @@ export default function VideoCanvasStudio({
           <button type="button" onClick={() => zoomAt(1)}>{Math.round(viewport.scale * 100)}%</button>
           <button type="button" onClick={() => zoomAt(viewport.scale * 1.12)} aria-label={zh ? '放大' : 'Zoom in'}>＋</button>
           <button type="button" onClick={() => setViewport(INITIAL_VIEWPORT)}>{zh ? '回到流程' : 'Fit'}</button>
+          <button type="button" className="canvas-history-toolbar-button" aria-expanded={historyOpen} aria-controls="canvas-history-panel" onClick={toggleHistory} aria-label={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')} title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}><span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}</button>
           <button type="button" className="canvas-fullscreen-button" onClick={() => void toggleCanvasFullscreen()} aria-label={isCanvasFullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '进入全屏' : 'Enter fullscreen')} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}><span aria-hidden="true">{isCanvasFullscreen ? '↙' : '⛶'}</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b></button>
         </div>
         <div className="video-canvas-stage" style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
@@ -825,7 +906,7 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
               {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `References: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}{typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
-              <button type="button" className="canvas-agent-plan-button" disabled={planning || !prompt.trim()} title={agentPlanBlockedReason || undefined} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? '根据 Prompt 规划' : 'Plan from prompt')}</button>
+              <button type="button" className="canvas-agent-plan-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? '根据 Prompt 规划' : 'Plan from prompt') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}
             </div>
             <span className="node-port output" aria-hidden="true" />
@@ -858,9 +939,19 @@ export default function VideoCanvasStudio({
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
             </div>
-          </article>
+              </article>
+            </div>
+          </div>
+
+      {historyOpen && <aside id="canvas-history-panel" className="canvas-history-panel" role="region" aria-labelledby="canvas-history-title">
+        <div className="canvas-history-head">
+          <div><span>{zh ? '任务档案' : 'TASK ARCHIVE'}</span><b id="canvas-history-title">{zh ? '生成历史' : 'Generation history'}</b><small>{zh ? '当前 Team 账号的最近任务' : 'Recent tasks for this Team account'}</small></div>
+          <button type="button" className="canvas-history-close" aria-label={zh ? '关闭生成历史' : 'Close generation history'} onClick={() => setHistoryOpen(false)}>×</button>
         </div>
-      </div>
+        {historyLoading ? <p className="canvas-history-state">{zh ? '正在读取历史任务…' : 'Loading generation history…'}</p> : historyError ? <div className="canvas-history-error"><p>{historyError}</p><button type="button" onClick={() => void loadHistoryPage(false)}>{zh ? '重试' : 'Retry'}</button></div> : history.length ? <div className="canvas-history-list">{history.map(item => <button type="button" className={'canvas-history-row ' + (generation?.id === item.id ? 'is-current' : '')} key={item.id} onClick={() => restoreHistoryItem(item)}><span className="canvas-history-status" data-status={item.status} aria-hidden="true" /><span className="canvas-history-row-copy"><b>{item.prompt || (zh ? '未命名镜头' : 'Untitled shot')}</b><small>{modelName(item.model)} · {item.duration} · {formatHistoryTime(item.createdAt, zh)}</small></span><span className="canvas-history-row-meta"><strong>{statusLabel(item.status, zh)}</strong><small>{item.creditsCost ? item.creditsCost + ' cr' : (zh ? '主人无限' : 'Owner')}</small></span></button>)}</div> : <div className="canvas-history-empty"><span aria-hidden="true">✦</span><p>{zh ? '还没有生成任务。' : 'No generation tasks yet.'}</p><small>{zh ? '提交第一条镜头后，它会自动出现在这里。' : 'Your first submitted shot will appear here.'}</small></div>}
+        {history.length > 0 && historyHasMore && <button type="button" className="canvas-history-more" disabled={historyLoadingMore} onClick={() => void loadHistoryPage(true)}>{historyLoadingMore ? (zh ? '正在加载…' : 'Loading…') : (zh ? '加载更多' : 'Load more')}</button>}
+        <p className="canvas-history-footnote">{zh ? '点击任务可载入当前画布；不会重新提交模型。' : 'Select a task to load it here; no model request is submitted.'}</p>
+      </aside>}
 
       <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
           <div className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
@@ -884,7 +975,7 @@ export default function VideoCanvasStudio({
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
-              <textarea id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} />
+              <textarea ref={promptRef} id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} />
               <span className="canvas-composer-count">{prompt.length}/1200</span>
             </div>
             <div className="canvas-composer-controls">
@@ -926,7 +1017,7 @@ export default function VideoCanvasStudio({
                 </div>}
               </div>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
-              <button type="button" className="canvas-agent-inline-button" disabled={planning || !prompt.trim()} title={agentPlanBlockedReason || undefined} onClick={() => void planWithAgent()}>{planning ? (zh ? '规划中…' : 'Planning…') : (zh ? 'Agent 规划' : 'Agent plan')}</button>
+              <button type="button" className="canvas-agent-inline-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? 'Agent 规划' : 'Agent plan') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>
             </div>
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite"><div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small>{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join('、')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join(', ')}`}</small>}{agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}{agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}</div>}

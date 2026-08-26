@@ -8,7 +8,6 @@ import {
   createVideoGeneration,
   estimateVideoCredits,
   loadVideoAssetUrl,
-  loadVideoHistory,
   loadVideoModels,
   normalizeVideoDuration,
   refreshVideoGeneration,
@@ -23,7 +22,6 @@ import {
 type UploadedInput = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type UploadSlot = 'start' | 'end' | null;
 
-const MAX_HISTORY = 20;
 const H3_MIN_IMAGE_SIDE = 256;
 const H3_MAX_IMAGE_SIDE = 5760;
 const H3_MIN_IMAGE_RATIO = 0.4;
@@ -75,10 +73,6 @@ function copy(locale: UiLocale) {
     syncOutputPending: zh ? '正在读取中转站的已有结果，请稍后再次打开此任务。' : 'The existing provider result is still being read. Please reopen this task shortly.',
     nextStart: zh ? '用作下一镜 START' : 'Use as next START',
     nextStartHint: zh ? '等待模型返回可保存的尾帧后开放。' : 'Available when the model returns a storable final frame.',
-    history: zh ? 'Generation History' : 'Generation History',
-    historyBody: zh ? '只显示当前团队账号创建的任务。' : 'Only tasks created by this Team account appear here.',
-    emptyHistory: zh ? '尚无生成记录。' : 'No generation history yet.',
-    more: zh ? '加载更多' : 'Load more',
     retry: zh ? '重试读取' : 'Retry',
     team: zh ? 'Team 内测' : 'Team preview',
     syncReady: zh ? '可同步成片' : 'Ready to sync',
@@ -96,10 +90,6 @@ function modelName(model: VideoModelId) {
   if (model === 'seedance-2-5') return 'Seedance 2.5';
   if (model === 'minimax-h3') return 'MiniMax H3';
   return 'Auto';
-}
-
-function formatTime(value: string, locale: UiLocale) {
-  return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function asClientMessage(error: unknown) {
@@ -176,7 +166,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const accountEmail = account?.email || '';
   const accountToken = account?.accessToken || '';
   const [models, setModels] = useState<VideoModel[]>([]);
-  const [history, setHistory] = useState<VideoGeneration[]>([]);
+  const [current, setCurrent] = useState<VideoGeneration | null>(null);
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [error, setError] = useState('');
   const [startFrame, setStartFrame] = useState<UploadedInput | null>(null);
@@ -188,45 +178,30 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16');
   const [resolution, setResolution] = useState('720p');
   const [submitting, setSubmitting] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ generationId: string; url: string } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [syncingOutput, setSyncingOutput] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
-  const current = useMemo(() => history.find(item => item.id === selectedId) || history[0] || null, [history, selectedId]);
   const currentId = current?.id || null;
   const currentStatus = current?.status || null;
   const previewUrl = preview?.generationId === currentId ? preview.url : '';
   const canSyncExistingOutput = Boolean(current && canSyncProviderOutput(current.status, current.errorCode));
   const canCreate = Boolean(startFrame && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
 
-  const upsertGeneration = useCallback((next: VideoGeneration) => {
-    setHistory(previous => {
-      const found = previous.some(item => item.id === next.id);
-      const merged = found ? previous.map(item => item.id === next.id ? next : item) : [next, ...previous];
-      return merged.toSorted((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-    });
-  }, []);
-
   const loadStudio = useCallback(async (showLoading = false) => {
     if (!account) {
       setAccess('signed-out');
       setModels([]);
-      setHistory([]);
+      setCurrent(null);
       return;
     }
     if (showLoading) setAccess('loading');
     setError('');
     try {
-      const [nextModels, nextHistory] = await Promise.all([loadVideoModels(), loadVideoHistory(MAX_HISTORY)]);
+      const nextModels = await loadVideoModels();
       setModels(nextModels);
-      setHistory(nextHistory);
-      setHasMoreHistory(nextHistory.length === MAX_HISTORY);
-      setSelectedId(current => current || nextHistory[0]?.id || null);
       setAccess('ready');
     } catch (cause) {
       const typed = cause as VideoGenerationClientError;
@@ -240,12 +215,10 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     let cancelled = false;
     const loadForAccount = async () => {
       try {
-        const [nextModels, nextHistory] = await Promise.all([loadVideoModels(), loadVideoHistory(MAX_HISTORY)]);
+        const nextModels = await loadVideoModels();
         if (cancelled) return;
         setModels(nextModels);
-        setHistory(nextHistory);
-        setHasMoreHistory(nextHistory.length === MAX_HISTORY);
-        setSelectedId(current => current || nextHistory[0]?.id || null);
+        setCurrent(null);
         setAccess('ready');
       } catch (cause) {
         if (cancelled) return;
@@ -268,7 +241,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
       try {
         const next = await refreshVideoGeneration(currentId);
         if (cancelled) return;
-        upsertGeneration(next);
+        setCurrent(next);
         if (next.status === 'queued' || next.status === 'processing') timer = window.setTimeout(() => { void refresh(); }, 4500);
       } catch (cause) {
         if (!cancelled) setError(asClientMessage(cause));
@@ -276,7 +249,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     };
     timer = window.setTimeout(() => { void refresh(); }, 2500);
     return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [access, currentId, currentStatus, upsertGeneration]);
+  }, [access, currentId, currentStatus]);
 
   const selectFile = async (slot: Exclude<UploadSlot, null>, file: File) => {
     setUploading(slot);
@@ -315,8 +288,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
         aspectRatio,
         resolution,
       });
-      upsertGeneration(generation);
-      setSelectedId(generation.id);
+      setCurrent(generation);
       notify(locale === 'zh' ? '任务已创建，正在等待模型处理。' : 'Task created and waiting for the model.');
     } catch (cause) {
       setError(asClientMessage(cause));
@@ -346,7 +318,7 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     setError('');
     try {
       const next = await refreshVideoGeneration(current.id);
-      upsertGeneration(next);
+      setCurrent(next);
       if (next.status === 'completed') {
         notify(locale === 'zh' ? '已同步中转站完成的视频，可以预览或下载。' : 'The completed provider video is now synced and ready to preview or download.');
       } else {
@@ -357,16 +329,6 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
     } finally {
       setSyncingOutput(false);
     }
-  };
-
-  const loadMore = async () => {
-    setLoadingMore(true);
-    try {
-      const more = await loadVideoHistory(MAX_HISTORY, history.length);
-      setHistory(previous => [...previous, ...more.filter(item => !previous.some(existing => existing.id === item.id))]);
-      setHasMoreHistory(more.length === MAX_HISTORY);
-    } catch (cause) { setError(asClientMessage(cause)); }
-    finally { setLoadingMore(false); }
   };
 
   if (access === 'signed-out') return <main className="app-page video-studio"><section className="studio-access"><span className="eyebrow">{text.eyebrow}</span><h1>{text.signInTitle}</h1><p>{text.signInBody}</p><button type="button" className="primary" onClick={onSignIn}>{text.signIn}</button></section></main>;
@@ -400,7 +362,6 @@ export default function ImageToVideoStudio({ account, locale, onSignIn, notify }
         </aside>
       </div>
 
-      <section className="generation-history"><div className="generation-history-head"><div><span className="eyebrow">03 · HISTORY</span><h2>{text.history}</h2><p>{text.historyBody}</p></div><span>{history.length}</span></div>{history.length ? <div className="generation-list">{history.map(item => <button type="button" key={item.id} className={`generation-row ${current?.id === item.id ? 'selected' : ''}`} onClick={() => setSelectedId(item.id)}><span className="generation-status-dot" data-status={item.status} aria-hidden="true"/><span className="generation-row-main"><b>{item.prompt}</b><small>{modelName(item.model)} · {item.duration} · {formatTime(item.createdAt, locale)}</small></span><StatusBadge status={item.status} errorCode={item.errorCode} locale={locale}/><span className="generation-row-cost">{item.creditsCost || '—'} cr</span></button>)}</div> : <p className="history-empty">{text.emptyHistory}</p>}{hasMoreHistory && <button type="button" className="history-more" onClick={() => { void loadMore(); }} disabled={loadingMore}>{loadingMore ? (locale === 'zh' ? '正在加载…' : 'Loading…') : text.more}</button>}</section>
     </>}
   </main>;
 }
