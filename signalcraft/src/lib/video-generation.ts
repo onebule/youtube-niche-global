@@ -67,11 +67,12 @@ export type VideoGeneration = {
 
 export type VideoGenerationPlan = {
   kind: 'video-generation-plan';
-  director: { id: 'gpt' | 'claude'; label: string; model: string; mode: string };
+  director: { id: 'gpt' | 'claude'; label: string; model: string; mode: string; provider?: string | null };
   model: Exclude<VideoModelId, 'auto'>;
   modelLabel: string;
   referenceMode: 'start-end' | 'omni';
   referenceCount: number;
+  referenceImageRoles?: Array<{ index: number; role: string }>;
   prompt: string;
   duration: string;
   aspectRatio?: '9:16' | '16:9' | '1:1';
@@ -80,7 +81,9 @@ export type VideoGenerationPlan = {
   estimatedCredits: number | null;
   warnings: string[];
   reasoning: string;
+  confidence?: number;
   autoGenerate: false;
+  agentFallback?: boolean;
 };
 
 type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean };
