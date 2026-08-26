@@ -3057,3 +3057,472 @@
     padding: 10px;
   }
 }
+
+/* Palette pass: keep the reference workspace feeling, without a black UI. */
+.video-canvas-page {
+  background: #29424a;
+  color: #f6f0e4;
+}
+
+.video-canvas-intro h1 {
+  color: #fff5e4;
+}
+
+.video-canvas-intro p {
+  color: #b9c8c8;
+}
+
+.video-canvas-intro aside,
+.video-canvas-model-pill {
+  border-color: #506c73;
+  background: #304a52;
+}
+
+.video-canvas-intro aside b,
+.video-canvas-model-copy b {
+  color: #fff5e4;
+}
+
+.video-canvas-intro aside span,
+.video-canvas-model-copy small,
+.video-canvas-model-spec {
+  color: #b2c1c2;
+}
+
+.video-canvas-model-spec {
+  border-left-color: #5a7479;
+}
+
+.video-canvas-model-state.ready {
+  background: #2d655f;
+  color: #b5f1e4;
+}
+
+.video-canvas-model-state.pending {
+  background: #496168;
+  color: #d5dddd;
+}
+
+.video-canvas-shell {
+  border-color: #617a80;
+  background: #334d55;
+  box-shadow: 0 24px 70px rgba(19, 42, 49, .38);
+}
+
+.video-canvas-caption {
+  border-bottom-color: #5d777c;
+  background: #38545c;
+}
+
+.canvas-project-mark {
+  border-color: #ff9b89;
+  background: #ff6d58;
+}
+
+.video-canvas-caption-project b,
+.canvas-add-node-trigger {
+  color: #fff5e4;
+}
+
+.video-canvas-caption-project small,
+.video-canvas-caption-center p {
+  color: #b5c4c5;
+}
+
+.canvas-add-node-trigger {
+  border-color: #668087;
+  background: #49656d;
+}
+
+.canvas-add-node-trigger:hover,
+.canvas-add-node-trigger:focus-visible,
+.canvas-add-node-trigger.is-open {
+  border-color: #ff9b89;
+  background: #6a514f;
+}
+
+.video-canvas-viewport {
+  background-color: #2b444c;
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M48 0H0V48' fill='none' stroke='%23415d64' stroke-width='1' stroke-opacity='.75'/%3E%3Ccircle cx='24' cy='24' r='1.1' fill='%23637d82' fill-opacity='.8'/%3E%3C/svg%3E");
+}
+
+.video-canvas-toolbar {
+  border-color: #70888e;
+  background: #46616a;
+  box-shadow: 7px 7px 0 rgba(19, 42, 49, .34);
+}
+
+.video-canvas-toolbar button {
+  color: #f5f0e6;
+}
+
+.video-canvas-toolbar button:hover,
+.video-canvas-toolbar button:focus-visible {
+  background: #5b7880;
+  color: #fff;
+}
+
+.video-canvas-toolbar .canvas-history-toolbar-button,
+.video-canvas-toolbar .canvas-fullscreen-button {
+  border-left-color: #6d858a;
+}
+
+.video-canvas-node {
+  border-color: #789198;
+  background: #49636b;
+  color: #f3eee4;
+  box-shadow: 8px 9px 0 rgba(18, 39, 46, .34);
+}
+
+.video-canvas-node::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
+}
+
+.source-node {
+  border-color: #9bbde0;
+}
+
+.canvas-node-grip {
+  background: #58737b;
+}
+
+.agent-node .canvas-node-grip {
+  background: linear-gradient(120deg, #4a4b72 0%, #625596 62%, #8166cf 100%);
+}
+
+.task-node .canvas-node-grip {
+  background: #ce5946;
+}
+
+.result-node .canvas-node-grip {
+  background: #218b82;
+}
+
+.node-port {
+  border-color: #49636b;
+  background: #ff806c;
+  box-shadow: 0 0 0 1.5px #243b43;
+}
+
+.canvas-upload + .canvas-upload {
+  border-top-color: #71888d;
+}
+
+.canvas-upload-head small,
+.canvas-omni-node > small,
+.canvas-reference-chip small,
+.canvas-task-body > small,
+.canvas-result-body > small {
+  color: #c0cecf;
+}
+
+.canvas-upload-empty,
+.canvas-upload-preview,
+.canvas-node-body textarea,
+.canvas-model-fields select,
+.canvas-omni-add,
+.canvas-reference-chip {
+  border-color: #789095;
+  background: #58737b;
+  color: #f5f0e6;
+}
+
+.canvas-node-body textarea::placeholder,
+.canvas-composer-prompt textarea::placeholder {
+  color: #c0cccd;
+}
+
+.canvas-upload-preview span,
+.canvas-model-fields label {
+  color: #f1ede4;
+}
+
+.canvas-upload-preview button {
+  color: #ffb0a1;
+}
+
+.canvas-model-fields > small {
+  color: #ffc0b5;
+}
+
+.canvas-omni-node-head span {
+  border-color: #83b7b4;
+  color: #b5f1e4;
+}
+
+.canvas-task-body,
+.canvas-result-body {
+  background: #49636b;
+}
+
+.canvas-agent-body {
+  background: #474a6c;
+}
+
+.canvas-agent-body p,
+.canvas-agent-confidence,
+.canvas-agent-prerequisite {
+  color: #d9dfeb;
+}
+
+.canvas-agent-badge {
+  color: #f1e9ff;
+}
+
+.canvas-agent-badge small {
+  color: #ddd2f2;
+}
+
+.canvas-agent-body strong {
+  color: #fff8f0;
+}
+
+.canvas-cost {
+  border-bottom-color: #71888d;
+}
+
+.canvas-cost span,
+.canvas-task-body li,
+.canvas-result-body dt {
+  color: #c3d0d0;
+}
+
+.canvas-task-body li.done,
+.canvas-task-body li.done::before,
+.canvas-task-next.ready {
+  color: #b5f1e4;
+}
+
+.canvas-task-state,
+.canvas-result-empty,
+.canvas-status {
+  border-color: #71888d;
+  background: #58737b;
+  color: #f2eee6;
+}
+
+.canvas-result-empty {
+  border-color: #8da1a4;
+}
+
+.canvas-result-empty > span {
+  border-color: #a5b7b8;
+  color: #ff9b89;
+}
+
+.canvas-progress {
+  background: #6b858b;
+}
+
+.canvas-result-body video,
+.canvas-result-body .canvas-media-loading {
+  background: #3d5960;
+}
+
+.canvas-result-body dl {
+  background: #779095;
+}
+
+.canvas-result-body dl div {
+  background: #58737b;
+}
+
+.canvas-result-actions button {
+  border-color: #9aabad;
+  color: #fff7ec;
+}
+
+.canvas-result-actions button:last-child {
+  background: #3e5c64;
+}
+
+.canvas-result-actions button:disabled {
+  border-color: #789095;
+  background: #4a626a;
+  color: #b4c0c1;
+}
+
+.canvas-failure {
+  border-color: #b06b61;
+  background: #704b4b;
+  color: #ffe1d9;
+}
+
+.video-canvas-composer {
+  border-color: #668087;
+  background: #3c5860;
+  box-shadow: 0 -12px 34px rgba(18, 39, 46, .32);
+}
+
+.canvas-reference-chip,
+.canvas-omni-reference {
+  border-color: #789095;
+  background: #58737b;
+  color: #f5f0e6;
+}
+
+.canvas-composer-prompt {
+  border-color: #71888d;
+  background: #4a6670;
+}
+
+.canvas-composer-prompt-head label,
+.canvas-composer-prompt-head small,
+.canvas-composer-prompt textarea {
+  color: #fff5e4;
+}
+
+.canvas-composer-prompt-head small {
+  background: #58757c;
+}
+
+.canvas-composer-count,
+.canvas-composer-main > p {
+  color: #c0cecf;
+}
+
+.canvas-composer-controls label,
+.canvas-reference-mode,
+.canvas-composer-cost,
+.canvas-preferences-trigger {
+  border-color: #71888d;
+  background: #58737b;
+  color: #fff5e4;
+}
+
+.canvas-composer-controls label > span,
+.canvas-composer-cost small,
+.canvas-preferences-trigger-copy small,
+.canvas-preferences-trigger-arrow {
+  color: #c1cecf;
+}
+
+.canvas-composer-controls select {
+  color: #fff5e4;
+}
+
+.canvas-preferences-panel,
+.canvas-history-panel,
+.canvas-node-palette {
+  border-color: #789095;
+  background: #45616a;
+  color: #fff5e4;
+  box-shadow: 10px 12px 0 rgba(18, 39, 46, .28), 0 18px 40px rgba(18, 39, 46, .38);
+}
+
+.canvas-preferences-head b,
+.canvas-preferences-footer b,
+.canvas-history-head b,
+.canvas-node-palette-head b {
+  color: #fff5e4;
+}
+
+.canvas-preferences-head span,
+.canvas-preferences-footer em,
+.canvas-history-head span,
+.canvas-node-palette-head > div > span,
+.canvas-node-palette-section > span {
+  color: #b5f1e4;
+}
+
+.canvas-preferences-head small,
+.canvas-preferences-footer,
+.canvas-preferences-footer b small,
+.canvas-history-head small,
+.canvas-node-palette-head small {
+  color: #c0cecf;
+}
+
+.canvas-preferences-close,
+.canvas-history-close,
+.canvas-node-palette-close {
+  border-color: #8da1a4;
+  color: #fff5e4;
+}
+
+.canvas-preferences-auto,
+.canvas-composer-controls .canvas-preference-field,
+.canvas-ratio-option {
+  border-color: #71888d;
+  background: #58737b;
+}
+
+.canvas-preferences-auto b,
+.canvas-preference-field > span,
+.canvas-preference-field legend {
+  color: #fff5e4;
+}
+
+.canvas-preferences-auto small,
+.canvas-preference-field select {
+  color: #c0cecf;
+}
+
+.canvas-ratio-option {
+  color: #ecf1ed;
+}
+
+.canvas-ratio-option:hover:not(:disabled),
+.canvas-ratio-option.is-selected {
+  border-color: #a5eee2;
+  background: #386f6d;
+  color: #d2fff4;
+}
+
+.canvas-history-row,
+.canvas-node-palette-item,
+.canvas-node-palette-row {
+  border-color: #6f878c;
+  background: #58737b;
+  color: #fff5e4;
+}
+
+.canvas-history-row:hover,
+.canvas-history-row:focus-visible,
+.canvas-history-row.is-current,
+.canvas-node-palette-item:hover:not(:disabled),
+.canvas-node-palette-item:focus-visible,
+.canvas-node-palette-row:hover,
+.canvas-node-palette-row:focus-visible {
+  border-color: #a5eee2;
+  background: #386f6d;
+}
+
+.canvas-history-row-copy small,
+.canvas-history-row-meta small,
+.canvas-history-footnote,
+.canvas-node-palette-item small,
+.canvas-node-palette-row small {
+  color: #c0cecf;
+}
+
+.canvas-history-empty {
+  border-color: #8da1a4;
+}
+
+.canvas-history-empty p {
+  color: #fff5e4;
+}
+
+.canvas-history-error {
+  border-color: #b06b61;
+  background: #704b4b;
+  color: #ffe1d9;
+}
+
+.canvas-history-footnote {
+  border-top-color: #6f878c;
+}
+
+.canvas-history-error button,
+.canvas-history-more {
+  border-color: #8da1a4;
+  background: #49656d;
+  color: #fff5e4;
+}
+
+.canvas-node-palette-item > span,
+.canvas-node-palette-row > span {
+  background: #6a858b;
+  color: #fff5e4;
+}
