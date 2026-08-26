@@ -201,7 +201,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   max-width: 1480px;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #b8aea0;
   background: #fffdf8;
   box-shadow: 0 24px 70px rgba(40, 31, 23, .12);
@@ -1313,7 +1313,7 @@
   bottom: calc(100% + 12px);
   display: grid;
   width: min(520px, calc(100vw - 36px));
-  max-height: min(72vh, 480px);
+  max-height: min(72vh, 440px);
   gap: 13px;
   overflow: auto;
   padding: 16px;
