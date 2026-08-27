@@ -24,6 +24,7 @@ export type GenerationSpecV2 = {
   schemaVersion: 2;
   requestId: string;
   taskType: 'image-to-video';
+  referenceMode: 'start-end' | 'omni';
   routing: {
     mode: 'locked' | 'auto';
     requestedModel: VideoModelId;
@@ -408,6 +409,7 @@ export function buildGenerationSpecV2(input: {
     schemaVersion: 2,
     requestId,
     taskType: 'image-to-video',
+    referenceMode: input.referenceMode || 'start-end',
     routing: {
       mode,
       requestedModel: input.model,
@@ -459,7 +461,7 @@ export async function planVideoGeneration(input: {
   return payload.plan;
 }
 
-export async function uploadVideoInput(file: File) {
+export async function uploadVideoInput(file: File, dimensions?: { width: number; height: number }) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     throw new VideoGenerationClientError('仅支持 JPG、PNG 或 WEBP 图片。', 422, 'VIDEO_INPUT_TYPE_INVALID');
   }
@@ -470,7 +472,7 @@ export async function uploadVideoInput(file: File) {
     upload: { assetId: string; uploadUrl: string; uploadHeaders: Record<string, string> };
   }>('upload-intent', {
     method: 'POST',
-    body: JSON.stringify({ filename: file.name, contentType: file.type, byteSize: file.size }),
+    body: JSON.stringify({ filename: file.name, contentType: file.type, byteSize: file.size, width: dimensions?.width, height: dimensions?.height }),
   });
   const uploaded = await fetch(intent.upload.uploadUrl, {
     method: 'PUT',
@@ -543,4 +545,11 @@ export async function loadVideoAssetUrl(assetId: string, download = false) {
     `asset-url?assetId=${encodeURIComponent(assetId)}${download ? '&download=1' : ''}`,
   );
   return payload.asset.url;
+}
+
+export async function loadVideoAsset(assetId: string, download = false) {
+  const payload = await request<{ asset: { url: string; contentType: string | null; kind: string; width: number | null; height: number | null } }>(
+    `asset-url?assetId=${encodeURIComponent(assetId)}${download ? '&download=1' : ''}`,
+  );
+  return payload.asset;
 }

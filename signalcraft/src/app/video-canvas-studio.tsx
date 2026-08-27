@@ -51,6 +51,7 @@ import {
   formatVideoGenerationTime,
   formatVideoGenerationTimeRange,
   loadVideoHistory,
+  loadVideoAsset,
   loadVideoAssetUrl,
   loadVideoModels,
   normalizeVideoDuration,
@@ -382,6 +383,7 @@ export default function VideoCanvasStudio({
   // routing or billing. A fresh browser session intentionally starts a fresh
   // generation group.
   const generationGroupIdRef = useRef<string | null>(null);
+  const historyRestoreRequestRef = useRef(0);
   const fullscreenFallbackRef = useRef(false);
 
   const captureCurrentShot = () : ShotSnapshot => ({
@@ -731,7 +733,8 @@ export default function VideoCanvasStudio({
     notify(zh ? '已将该版本标记为最佳镜头。' : 'This version is now the Best Take.');
   };
 
-  const restoreHistoryItem = (item: VideoGeneration) => {
+  const restoreHistoryItem = async (item: VideoGeneration) => {
+    const requestId = ++historyRestoreRequestRef.current;
     setGeneration(item);
     setCancelling(false);
     rememberGeneration(item);
@@ -744,7 +747,75 @@ export default function VideoCanvasStudio({
     setVideoUrl('');
     setHistoryOpen(false);
     setCompareOpen(false);
-    notify(zh ? '已将历史任务载入当前画布。' : 'History task loaded into the current canvas.');
+    const spec = item.generationSpec;
+    const referenceMode = spec?.referenceMode || (spec?.references && spec.references.length > 2 ? 'omni' : 'start-end');
+    const referenceIds = referenceMode === 'omni'
+      ? (spec?.references || []).map(reference => reference.assetId).filter(Boolean).slice(0, 9)
+      : [];
+    const startId = item.startImageAssetId || spec?.references?.find(reference => reference.role === 'start_frame')?.assetId || null;
+    const endId = item.endImageAssetId || spec?.references?.find(reference => reference.role === 'end_frame')?.assetId || null;
+    try {
+      const frameFromAsset = async (assetId: string, name: string, referenceIndex?: number): Promise<UploadedFrame | null> => {
+        const asset = await loadVideoAsset(assetId);
+        if (asset.kind !== 'input-image' && asset.kind !== 'output-frame') return null;
+        return {
+          assetId,
+          name,
+          previewUrl: asset.url,
+          width: asset.width || 0,
+          height: asset.height || 0,
+          ...(referenceIndex ? { referenceIndex } : {}),
+        };
+      };
+      const [start, end, references] = await Promise.all([
+        startId ? frameFromAsset(startId, zh ? '历史 START' : 'History START') : Promise.resolve(null),
+        referenceMode === 'start-end' && endId ? frameFromAsset(endId, zh ? '历史 END' : 'History END') : Promise.resolve(null),
+        referenceMode === 'omni'
+          ? Promise.all(referenceIds.map((assetId, index) => frameFromAsset(assetId, `${zh ? '参考图' : 'Reference'} ${index + 1}`, index + 1)))
+          : Promise.resolve([] as Array<UploadedFrame | null>),
+      ]);
+      if (requestId !== historyRestoreRequestRef.current) return;
+      setReferenceMode(referenceMode);
+      setStartFrame(referenceMode === 'start-end' ? start : null);
+      setEndFrame(referenceMode === 'start-end' ? end : null);
+      const validReferences = references.filter((frame): frame is UploadedFrame => Boolean(frame));
+      setReferenceFrames(referenceMode === 'omni' ? validReferences : []);
+      setCanvasSemantics(previous => {
+        let next = previous;
+        const frames = [
+          ...(referenceMode === 'start-end' && start ? [{ frame: start, role: 'start_frame' as const }] : []),
+          ...(referenceMode === 'start-end' && end ? [{ frame: end, role: 'end_frame' as const }] : []),
+          ...(referenceMode === 'omni' ? validReferences.map(frame => ({ frame, role: 'reference' as const })) : []),
+        ];
+        frames.forEach(({ frame, role }, index) => {
+          next = registerCanvasAsset(next, {
+            assetId: frame.assetId,
+            kind: 'image',
+            role,
+            shotId: next.shot.id,
+            name: frame.name,
+            width: frame.width,
+            height: frame.height,
+            generationId: item.id,
+          });
+          next = bindCanvasAssetReference(next, {
+            token: `@${zh ? '图片' : 'image'}${index + 1}`,
+            assetId: frame.assetId,
+            role,
+            priority: Math.max(10, 100 - index * 10),
+            strength: index === 0 || role !== 'reference' ? 'strong' : 'weak',
+            required: index === 0,
+          });
+        });
+        return patchCanvasNode(next, 'source', { role: 'reference', assetId: (start || validReferences[0])?.assetId || null, status: 'draft' });
+      });
+      notify(zh ? '历史任务已载入，参数和可用参考图已恢复；不会自动重新生成。' : 'History loaded with parameters and available references; no new generation was submitted.');
+    } catch (cause) {
+      if (requestId === historyRestoreRequestRef.current) {
+        notify(zh ? '历史参数已载入，但部分参考图无法读取，请重新绑定后再生成。' : 'History parameters loaded, but some references could not be read. Rebind them before generating.');
+        setError(clientMessage(cause));
+      }
+    }
   };
 
   useEffect(() => {
@@ -992,7 +1063,7 @@ export default function VideoCanvasStudio({
 
   const uploadFrame = async (file: File): Promise<UploadedFrame> => {
     const dimensions = await imageDimensions(file);
-    const assetId = await uploadVideoInput(file);
+    const assetId = await uploadVideoInput(file, dimensions);
     return { assetId, name: file.name, previewUrl: URL.createObjectURL(file), ...dimensions };
   };
 
@@ -1798,7 +1869,7 @@ export default function VideoCanvasStudio({
           <div><span>{zh ? '任务档案' : 'TASK ARCHIVE'}</span><b id="canvas-history-title">{zh ? '生成历史' : 'Generation history'}</b><small>{zh ? '当前 Team 账号的最近任务' : 'Recent tasks for this Team account'}</small></div>
           <button type="button" className="canvas-history-close" aria-label={zh ? '关闭生成历史' : 'Close generation history'} onClick={() => setHistoryOpen(false)}>×</button>
         </div>
-        {historyLoading ? <p className="canvas-history-state">{zh ? '正在读取历史任务…' : 'Loading generation history…'}</p> : historyError ? <div className="canvas-history-error"><p>{historyError}</p><button type="button" onClick={() => void loadHistoryPage(false)}>{zh ? '重试' : 'Retry'}</button></div> : history.length ? <div className="canvas-history-list">{history.map(item => <button type="button" className={'canvas-history-row ' + (generation?.id === item.id ? 'is-current' : '')} key={item.id} onClick={() => restoreHistoryItem(item)}><span className="canvas-history-status" data-status={item.status} aria-hidden="true" /><span className="canvas-history-row-copy"><b>{item.prompt || (zh ? '未命名镜头' : 'Untitled shot')}</b><small>{[historyShotLabel(item, zh), modelName(item.model), item.duration, formatHistoryTime(item.createdAt, zh)].filter(Boolean).join(' · ')}</small></span><span className="canvas-history-row-meta"><strong>{statusLabel(item.status, zh, item.errorCode)}</strong><small>{item.creditsCost ? item.creditsCost + ' cr' : (zh ? '主人无限' : 'Owner')}</small></span></button>)}</div> : <div className="canvas-history-empty"><span aria-hidden="true">✦</span><p>{zh ? '还没有生成任务。' : 'No generation tasks yet.'}</p><small>{zh ? '提交第一条镜头后，它会自动出现在这里。' : 'Your first submitted shot will appear here.'}</small></div>}
+        {historyLoading ? <p className="canvas-history-state">{zh ? '正在读取历史任务…' : 'Loading generation history…'}</p> : historyError ? <div className="canvas-history-error"><p>{historyError}</p><button type="button" onClick={() => void loadHistoryPage(false)}>{zh ? '重试' : 'Retry'}</button></div> : history.length ? <div className="canvas-history-list">{history.map(item => <button type="button" className={'canvas-history-row ' + (generation?.id === item.id ? 'is-current' : '')} key={item.id} onClick={() => void restoreHistoryItem(item)}><span className="canvas-history-status" data-status={item.status} aria-hidden="true" /><span className="canvas-history-row-copy"><b>{item.prompt || (zh ? '未命名镜头' : 'Untitled shot')}</b><small>{[historyShotLabel(item, zh), modelName(item.model), item.duration, formatHistoryTime(item.createdAt, zh)].filter(Boolean).join(' · ')}</small></span><span className="canvas-history-row-meta"><strong>{statusLabel(item.status, zh, item.errorCode)}</strong><small>{item.creditsCost ? item.creditsCost + ' cr' : (zh ? '主人无限' : 'Owner')}</small></span></button>)}</div> : <div className="canvas-history-empty"><span aria-hidden="true">✦</span><p>{zh ? '还没有生成任务。' : 'No generation tasks yet.'}</p><small>{zh ? '提交第一条镜头后，它会自动出现在这里。' : 'Your first submitted shot will appear here.'}</small></div>}
         {history.length > 0 && historyHasMore && <button type="button" className="canvas-history-more" disabled={historyLoadingMore} onClick={() => void loadHistoryPage(true)}>{historyLoadingMore ? (zh ? '正在加载…' : 'Loading…') : (zh ? '加载更多' : 'Load more')}</button>}
         <p className="canvas-history-footnote">{zh ? '点击任务可载入当前画布；不会重新提交模型。' : 'Select a task to load it here; no model request is submitted.'}</p>
       </aside>}
@@ -1817,7 +1888,7 @@ export default function VideoCanvasStudio({
             <p>{item?.prompt || (zh ? '历史任务详情将在载入后显示。' : 'Load this task to view its full prompt.')}</p>
             <small>{item ? `${modelName(item.model)} · ${item.duration} · ${formatHistoryTime(item.createdAt, zh)}` : version.generationId}</small>
             <div className="canvas-compare-card-actions">
-              {item && generation?.id !== item.id && <button type="button" onClick={() => restoreHistoryItem(item)}>{zh ? '载入结果' : 'Load result'}</button>}
+              {item && generation?.id !== item.id && <button type="button" onClick={() => void restoreHistoryItem(item)}>{zh ? '载入结果' : 'Load result'}</button>}
               {item?.status === 'completed' && !version.bestTake && <button type="button" className="is-primary" onClick={() => markBestTake(version.generationId)}>{zh ? '设为最佳' : 'Set best'}</button>}
               {generation?.id === item?.id && <span>{zh ? '当前显示' : 'Currently shown'}</span>}
             </div>
