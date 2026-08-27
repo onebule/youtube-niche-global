@@ -738,7 +738,9 @@
   position: absolute;
   inset: 0 auto auto 0;
   transform-origin: 0 0;
-  will-change: transform;
+  /* Avoid caching the whole stage as a bitmap while zooming. Repainting at
+     the active scale keeps node text sharper on high-zoom workspaces. */
+  will-change: auto;
 }
 
 .video-canvas-edges {
