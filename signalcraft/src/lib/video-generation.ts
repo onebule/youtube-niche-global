@@ -168,6 +168,99 @@ export function normalizeVideoDuration(model: VideoModelId, value: string) {
   return `${Math.min(limits.max, Math.max(limits.min, seconds))}s`;
 }
 
+export type VideoGenerationPreflightIssue = {
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+};
+
+export type VideoGenerationPreflight = {
+  ok: boolean;
+  errors: VideoGenerationPreflightIssue[];
+  warnings: VideoGenerationPreflightIssue[];
+  normalizedDuration: string;
+};
+
+type PreflightFrame = { assetId?: string | null; width?: number; height?: number; available?: boolean };
+
+/**
+ * Performs the cheap, provider-neutral checks that must happen before a paid
+ * task is submitted. It intentionally returns issues instead of throwing so
+ * the composer can explain how to correct the current shot.
+ */
+export function preflightVideoGeneration(input: {
+  language?: 'zh' | 'en';
+  model: VideoModelId;
+  modelReady: boolean;
+  prompt: string;
+  referenceMode: 'start-end' | 'omni';
+  startFrame: PreflightFrame | null;
+  endFrame?: PreflightFrame | null;
+  referenceFrames?: PreflightFrame[];
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+  unboundMentionCount?: number;
+  invalidMentionCount?: number;
+}): VideoGenerationPreflight {
+  const errors: VideoGenerationPreflightIssue[] = [];
+  const warnings: VideoGenerationPreflightIssue[] = [];
+  const zh = input.language !== 'en';
+  const copy = (zhText: string, enText: string) => zh ? zhText : enText;
+  const add = (severity: VideoGenerationPreflightIssue['severity'], code: string, message: string) => {
+    (severity === 'error' ? errors : warnings).push({ code, severity, message });
+  };
+  const duration = normalizeVideoDuration(input.model, input.duration);
+  const unboundMentionCount = Math.max(0, Number(input.unboundMentionCount) || 0);
+  const invalidMentionCount = Math.max(0, Number(input.invalidMentionCount) || 0);
+  const modelLimits = VIDEO_DURATION_LIMITS[input.model] || VIDEO_DURATION_LIMITS.auto;
+  const resolutions = input.model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p'];
+  const frames = input.referenceMode === 'omni'
+    ? (input.referenceFrames || [])
+    : [input.startFrame, input.endFrame].filter((frame): frame is PreflightFrame => Boolean(frame));
+
+  if (!input.prompt.trim()) add('error', 'PROMPT_REQUIRED', copy('填写 Motion Prompt 后才能生成。', 'Add a Motion Prompt before generating.'));
+  if (input.prompt.length > 1200) add('error', 'PROMPT_TOO_LONG', copy('Motion Prompt 不能超过 1200 个字符。', 'Motion Prompt must be 1,200 characters or fewer.'));
+  if (input.model === 'auto') add('error', 'AUTO_MODEL_UNAVAILABLE', copy('Auto 模型推荐尚未开放，请先选择具体模型。', 'Auto model routing is not available yet. Choose a specific model.'));
+  if (!input.modelReady) add('error', 'MODEL_NOT_READY', copy('当前模型尚未配置完成，请选择已就绪的模型。', 'This model is not ready. Choose a configured model.'));
+  if (input.referenceMode === 'omni') {
+    if (!frames.length) add('error', 'REFERENCE_REQUIRED', copy('全能参考至少需要 1 张图片。', 'Omni reference needs at least one image.'));
+    if (frames.length > 9) add('error', 'REFERENCE_LIMIT', copy('全能参考最多支持 9 张图片。', 'Omni reference supports up to 9 images.'));
+  } else if (!input.startFrame) {
+    add('error', 'START_REQUIRED', copy('首尾帧模式需要 START 图片。', 'Start / end mode needs a START image.'));
+  }
+  if (!['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(input.model)) {
+    add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('当前模型不支持所选参考模式。', 'This model does not support the selected reference mode.'));
+  }
+  const durationSeconds = Number.parseInt(duration, 10);
+  const requestedDurationSeconds = Number.parseInt(String(input.duration || ''), 10);
+  if (Number.isFinite(requestedDurationSeconds) && (requestedDurationSeconds < modelLimits.min || requestedDurationSeconds > modelLimits.max)) {
+    add('error', 'DURATION_UNSUPPORTED', copy(`${input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : 'Seedance 2.0'} 时长需在 ${modelLimits.min}–${modelLimits.max} 秒之间。`, `${input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : 'Seedance 2.0'} supports ${modelLimits.min}–${modelLimits.max} seconds.`));
+  }
+  if (!resolutions.includes(input.resolution)) add('error', 'RESOLUTION_UNSUPPORTED', copy(`当前模型不支持 ${input.resolution}，可用分辨率为 ${resolutions.join('、')}。`, `${input.resolution} is not supported by this model. Use ${resolutions.join(', ')}.`));
+  if (input.model === 'minimax-h3' && input.referenceMode === 'start-end') add('warning', 'H3_RATIO_FOLLOWS_START', copy('MiniMax H3 首尾帧模式会沿用 START 图片比例。', 'MiniMax H3 start / end mode follows the START image ratio.'));
+  if (unboundMentionCount > 0) add('error', 'REFERENCE_UNBOUND', copy(`有 ${unboundMentionCount} 个素材引用尚未绑定。`, `${unboundMentionCount} asset mention${unboundMentionCount > 1 ? 's are' : ' is'} not bound.`));
+  if (invalidMentionCount > 0) add('error', 'REFERENCE_INVALID', copy(`有 ${invalidMentionCount} 个素材引用已失效，请重新绑定。`, `${invalidMentionCount} asset mention${invalidMentionCount > 1 ? 's are' : ' is'} invalid. Rebind it before generating.`));
+  frames.forEach((frame, index) => {
+    const label = input.referenceMode === 'omni' ? `参考图 ${index + 1}` : index === 0 ? 'START' : 'END';
+    if (!frame.assetId || frame.available === false) add('error', 'ASSET_UNAVAILABLE', copy(`${label} 素材不可用，请重新上传。`, `${label} is unavailable. Upload it again.`));
+    const width = Number(frame.width);
+    const height = Number(frame.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      add('error', 'IMAGE_DIMENSION_UNKNOWN', copy(`${label} 图片尺寸尚未读取完成。`, `${label} dimensions are not ready yet.`));
+      return;
+    }
+    if (input.model === 'minimax-h3') {
+      const ratio = width / Math.max(1, height);
+      if (width < 256 || height < 256 || width > 5760 || height > 5760 || ratio < 0.4 || ratio > 2.5) {
+        add('error', 'IMAGE_DIMENSION_INVALID', copy(`${label} 图片不符合 MiniMax H3 要求：边长 256–5760px，宽高比 0.4–2.5。`, `${label} does not meet MiniMax H3 requirements: 256–5,760px sides and a 0.4–2.5 aspect ratio.`));
+      }
+    }
+  });
+  if (durationSeconds >= 20) add('warning', 'LONG_RENDER', copy('长时长任务预计需要更久，提交后可在结果节点查看预计剩余时间。', 'Longer clips take more time. The result node will show the estimated time remaining.'));
+  return { ok: errors.length === 0, errors, warnings, normalizedDuration: duration };
+}
+
 export type VideoModel = {
   id: VideoModelId;
   provider?: string;

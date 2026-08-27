@@ -53,6 +53,7 @@ import {
   loadVideoModels,
   normalizeVideoDuration,
   planVideoGeneration,
+  preflightVideoGeneration,
   refreshVideoGeneration,
   uploadVideoInput,
   videoDurationOptions,
@@ -387,8 +388,23 @@ export default function VideoCanvasStudio({
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
   const assetMentionValidation = useMemo(() => validateCanvasAssetMentions(canvasSemantics, prompt), [canvasSemantics, prompt]);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
+  const preflight = useMemo(() => preflightVideoGeneration({
+    language: zh ? 'zh' : 'en',
+    model,
+    modelReady: Boolean(selectedModel?.enabled),
+    prompt,
+    referenceMode,
+    startFrame,
+    endFrame,
+    referenceFrames,
+    duration,
+    aspectRatio,
+    resolution,
+    unboundMentionCount: assetMentionValidation.unbound.length,
+    invalidMentionCount: assetMentionValidation.invalid.length,
+  }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, endFrame, model, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
-  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && !assetMentionValidation.hasInvalid && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !cancelling && !uploading && !generationInFlight);
+  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
   const shotActionsDisabled = submitting || cancelling || Boolean(uploading) || generationInFlight;
   const agentPlanBlockedReason = !prompt.trim()
     ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
@@ -402,6 +418,7 @@ export default function VideoCanvasStudio({
     if (assetMentionValidation.invalid.length) return zh ? `有 ${assetMentionValidation.invalid.length} 个素材引用已失效，请重新绑定` : `${assetMentionValidation.invalid.length} asset mention${assetMentionValidation.invalid.length > 1 ? 's are' : ' is'} invalid; rebind it before generating`;
     if (!referenceModeSupported) return zh ? '当前模型不支持这个参考模式' : 'This model does not support the selected reference mode';
     if (!selectedModel?.enabled) return zh ? '选择一个已就绪的模型' : 'Choose a model that is ready';
+    if (preflight.errors.length) return preflight.errors[0].message;
     return '';
   })();
   const progress = generation?.progress || 0;
@@ -1599,7 +1616,7 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => setPreferencesOpen(true)}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
-              <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li></ul>
+              <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '等待提交' : 'Ready to submit')}</div>
               {!generation && <strong className={'canvas-task-next ' + (canGenerate ? 'ready' : '')}>{canGenerate ? (zh ? '参数已齐，可以生成' : 'Ready to generate') : generationBlockedReason}</strong>}
               <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
@@ -1750,6 +1767,11 @@ export default function VideoCanvasStudio({
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
               <button type="button" className="canvas-agent-inline-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? 'Agent 规划' : 'Agent plan') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               {generationInFlight ? <button type="button" className="canvas-composer-cancel" disabled={cancelling} onClick={() => void cancelGeneration()}>{cancelling ? (zh ? '正在停止…' : 'Stopping…') : (zh ? '停止生成' : 'Stop generation')}<span aria-hidden="true">×</span></button> : <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>}
+            </div>
+            <div className={'canvas-preflight-review ' + (preflight.ok ? 'is-ready' : 'has-errors')} role="status" aria-live="polite">
+              <div className="canvas-preflight-review-head"><span>{zh ? '提交前检查' : 'PREFLIGHT REVIEW'}</span><b>{preflight.ok ? (zh ? '可以提交' : 'Ready to submit') : (zh ? `${preflight.errors.length} 项需要处理` : `${preflight.errors.length} item${preflight.errors.length > 1 ? 's need' : ' needs'} attention`)}</b></div>
+              {(preflight.errors.length > 0 || preflight.warnings.length > 0) && <ul>{[...preflight.errors, ...preflight.warnings].slice(0, 3).map(issue => <li key={issue.code} className={issue.severity}><i />{issue.message}</li>)}</ul>}
+              {preflight.ok && preflight.warnings.length === 0 && <small>{zh ? '素材、模型能力和参数均已检查。' : 'Assets, model capability, and settings passed the checks.'}</small>}
             </div>
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite">
               <div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div>
