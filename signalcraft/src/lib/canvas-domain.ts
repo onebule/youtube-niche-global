@@ -442,6 +442,7 @@ function normalizeEvent(value: unknown, shotId: string): CanvasEventSemantic | n
   const metadata = Object.entries(rawMetadata).slice(0, 16).reduce<CanvasEventMetadata>((result, [key, rawValue]) => {
     const normalizedKey = text(key, '', 80);
     if (!normalizedKey) return result;
+    if (/(secret|token|key|url|credential|password|cookie)/iu.test(normalizedKey)) return result;
     if (rawValue === null || typeof rawValue === 'string' || typeof rawValue === 'boolean') result[normalizedKey] = rawValue;
     else if (typeof rawValue === 'number' && Number.isFinite(rawValue)) result[normalizedKey] = rawValue;
     return result;
