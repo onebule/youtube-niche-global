@@ -6277,3 +6277,26 @@
   font-size: 9px;
   font-weight: 750;
 }
+
+.canvas-retry-button {
+  width: 100%;
+  margin-top: 7px;
+  padding: 7px 9px;
+  border: 1px solid #c7c0f4;
+  border-radius: 7px;
+  background: #f1effd;
+  color: var(--canvas-purple, #5f4ee7);
+  font-size: 10px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.canvas-retry-button:hover:not(:disabled) {
+  border-color: var(--canvas-purple, #5f4ee7);
+  background: #e8e4ff;
+}
+
+.canvas-retry-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}

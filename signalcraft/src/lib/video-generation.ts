@@ -298,6 +298,7 @@ export type VideoGeneration = {
   thumbnailAssetId: string | null;
   creditsCost: number;
   errorCode: string | null;
+  retryable?: boolean;
   failureStage?: 'provider' | 'media' | 'storage' | 'quality' | null;
   errorMessage: string | null;
   createdAt: string;
