@@ -114,7 +114,7 @@ export type CanvasAgentContext = {
 
 export type CanvasAgentAction = {
   id: string;
-  type: 'shot.create' | 'shot.duplicate' | 'shot.reorder' | 'shot.delete';
+  type: 'canvas.organize' | 'shot.create' | 'shot.duplicate' | 'shot.reorder' | 'shot.delete';
   direction?: 'up' | 'down';
   shotId?: string | null;
   reason?: string;

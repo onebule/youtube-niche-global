@@ -112,6 +112,7 @@ const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
   result: zh ? '视频结果' : 'Video result',
 }[nodeId]);
 const agentActionName = (action: CanvasAgentAction, zh: boolean) => {
+  if (action.type === 'canvas.organize') return zh ? '整理画布' : 'Organize canvas';
   if (action.type === 'shot.create') return zh ? '创建镜头' : 'Create shot';
   if (action.type === 'shot.duplicate') return zh ? '复制镜头' : 'Duplicate shot';
   if (action.type === 'shot.delete') return zh ? '删除镜头' : 'Delete shot';
@@ -1181,13 +1182,23 @@ export default function VideoCanvasStudio({
     return true;
   };
 
+  const organizeCanvas = () => {
+    setNodes(previous => CanvasCommandService.resetLayout(previous, INITIAL_NODES));
+    setViewport(INITIAL_VIEWPORT);
+    setSelectedNodeId(null);
+    notify(zh ? '已按默认流程整理当前画布。' : 'The current canvas was organized into the default flow.');
+    return true;
+  };
+
   const applyAgentAction = (action: CanvasAgentAction) => {
     if (appliedAgentActionIds.includes(action.id)) return;
     if (action.shotId && action.shotId !== canvasSemantics.shot.id) {
       notify(zh ? '这条建议针对其他镜头，已阻止应用。' : 'This suggestion targets another shot and was blocked.');
       return;
     }
-    const applied = action.type === 'shot.create'
+    const applied = action.type === 'canvas.organize'
+      ? organizeCanvas()
+      : action.type === 'shot.create'
       ? createNextShot(false)
       : action.type === 'shot.duplicate'
         ? createNextShot(true)
@@ -1232,7 +1243,7 @@ export default function VideoCanvasStudio({
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
       <div><span>AI STUDIO · SHOT CANVAS</span><h1>{zh ? '把镜头思路铺开，再交给模型。' : 'Lay out the shot before handing it to the model.'}</h1><p>{zh ? '拖拽节点组织一次图生视频任务；底层仍复用现有 Provider、异步任务、积分和媒体存储。' : 'Arrange one image-to-video task with draggable nodes while reusing the existing providers, task lifecycle, credits, and storage.'}</p></div>
-      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(previous => CanvasCommandService.resetLayout(previous, INITIAL_NODES)); setViewport(INITIAL_VIEWPORT); setSelectedNodeId(null); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
+      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
     </header>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
