@@ -6269,3 +6269,11 @@
   font-size: 8px;
   white-space: nowrap;
 }
+
+.canvas-failure-stage {
+  display: block;
+  margin-top: 5px;
+  color: var(--canvas-muted, #737980);
+  font-size: 9px;
+  font-weight: 750;
+}

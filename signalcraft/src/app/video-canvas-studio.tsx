@@ -173,6 +173,14 @@ function canvasReferenceRoleLabel(role: CanvasAssetRole, zh: boolean) {
   return labels[role];
 }
 
+function failureStageLabel(stage: VideoGeneration['failureStage'], zh: boolean) {
+  if (stage === 'provider') return zh ? '模型服务' : 'Provider';
+  if (stage === 'media') return zh ? '媒体读取' : 'Media read';
+  if (stage === 'storage') return zh ? '私有存储' : 'Private storage';
+  if (stage === 'quality') return zh ? '质量门禁' : 'Quality gate';
+  return zh ? '未知阶段' : 'Unknown stage';
+}
+
 function formatHistoryTime(value: string, zh: boolean) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return zh ? '时间未知' : 'Unknown time';
@@ -1734,7 +1742,7 @@ export default function VideoCanvasStudio({
                 {['queued', 'processing'].includes(generation.status) && <div className="canvas-progress" data-mode={progress > 0 ? 'synced' : 'indeterminate'} aria-hidden="true"><i style={progress > 0 ? { width: Math.max(8, progress) + '%' } : undefined} /></div>}
                 {generationInFlight && <button type="button" className="canvas-cancel-button" disabled={cancelling} onClick={() => void cancelGeneration()}>{cancelling ? (zh ? '正在停止…' : 'Stopping…') : (zh ? '停止生成' : 'Stop generation')}<span aria-hidden="true">×</span></button>}
                 {videoUrl ? <video src={videoUrl} controls playsInline preload="metadata" /> : generation.status === 'completed' ? <div className="canvas-media-loading">{zh ? '正在读取私有视频…' : 'Loading private video…'}</div> : null}
-                {generation.status === 'failed' && <p className="canvas-failure">{generation.errorMessage || (zh ? '模型未完成本次生成。' : 'The model did not finish this generation.')}</p>}
+                {generation.status === 'failed' && <><p className="canvas-failure">{generation.errorMessage || (zh ? '模型未完成本次生成。' : 'The model did not finish this generation.')}</p>{generation.failureStage && <small className="canvas-failure-stage">{zh ? '失败阶段：' : 'Failure stage: '}{failureStageLabel(generation.failureStage, zh)}</small>}</>}
                 {generation.errorCode === 'VIDEO_GENERATION_CANCELLED' && <small className="canvas-cancel-note">{zh ? '可以修改 Motion Prompt 后再次生成。' : 'Edit the Motion Prompt and generate again when ready.'}</small>}
                 <dl><div><dt>{zh ? '模型' : 'Model'}</dt><dd>{modelName(generation.model)}</dd></div><div><dt>{zh ? '规格' : 'Format'}</dt><dd>{generation.duration} · {generation.aspectRatio} · {generation.resolution}</dd></div></dl>
                 <div className="canvas-result-version"><span>{currentVersion ? `V${currentVersion.number}` : 'V1'}</span>{currentVersion?.bestTake && <b>{zh ? '最佳镜头' : 'BEST TAKE'}</b>}<small>{shotVersions.length > 1 ? (zh ? `${shotVersions.length} 个版本` : `${shotVersions.length} versions`) : (zh ? '首个版本' : 'First version')}</small></div>

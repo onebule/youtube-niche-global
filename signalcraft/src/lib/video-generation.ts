@@ -298,6 +298,7 @@ export type VideoGeneration = {
   thumbnailAssetId: string | null;
   creditsCost: number;
   errorCode: string | null;
+  failureStage?: 'provider' | 'media' | 'storage' | 'quality' | null;
   errorMessage: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -327,7 +328,7 @@ export type VideoGenerationPlan = {
   agentFallback?: boolean;
 };
 
-type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean };
+type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean; failureStage?: string | null };
 
 export class VideoGenerationClientError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
