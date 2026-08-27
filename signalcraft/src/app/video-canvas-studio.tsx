@@ -2332,9 +2332,9 @@ export default function VideoCanvasStudio({
                   aria-controls={mentionMenuOpen && filteredMentionCandidates.length > 0 ? 'canvas-mention-menu' : undefined}
                   aria-haspopup="listbox"
                   aria-activedescendant={mentionMenuOpen && filteredMentionCandidates.length > 0 ? `canvas-mention-option-${mentionActiveIndex}` : undefined}
-                  onChange={event => { setPrompt(event.target.value); setAgentPlan(null); syncMentionMenu(event.target.value, event.target.selectionStart || event.target.value.length); }}
-                  onSelect={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
-                  onClick={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
+                  onChange={event => { setPrompt(event.target.value); setAgentPlan(null); syncMentionMenu(event.target.value, event.target.selectionStart ?? event.target.value.length); }}
+                  onSelect={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
+                  onClick={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
                   onKeyDown={handlePromptKeyDown}
                   onBlur={() => { window.setTimeout(() => { if (document.activeElement !== promptRef.current) closeMentionMenu(); }, 0); }}
                   placeholder={zh ? '写清人物、脚本、动作和镜头；输入 @ 选择参考图…' : 'Describe the subject, script, motion, and camera; type @ to pick a reference…'}
