@@ -4,7 +4,7 @@ import { authHeaders } from './auth';
 type ApiOpportunity = {
   title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
-  format:'short'|'long'; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
+  format:'short'|'long'; formatConfidence?:'high'|'medium'|'low'; formatSignals?:string[]; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
 };
 
 export type PublicRankingScope = {
@@ -100,7 +100,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     const snapshots=hasBaseline
       ? [{capturedAt:item.baselineCapturedAt!,views:Number(item.baselineViews),likes:0,comments:0,subscribers:item.subscribers},{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]
       : [{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}];
-    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
+    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,formatConfidence:item.formatConfidence,formatSignals:item.formatSignals,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
   });
   return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null,noCandidatesMessage:source.length||input.pageToken?null:payload.noCandidatesMessage||'当前筛选条件下暂无可用的公开视频。请调整市场、时间范围或内容形态后重试。'};
 }
