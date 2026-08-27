@@ -6523,6 +6523,251 @@
   }
 }
 
+/* Script screenshots are references, not silent prompt input. Keep OCR as a
+   deliberate, reviewable step in the existing paper-and-coral composer. */
+.canvas-reference-ocr {
+  min-width: 48px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid #f6b4a7;
+  border-radius: 5px;
+  background: #fff4ef;
+  color: #9f3025;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.canvas-reference-ocr:hover:not(:disabled),
+.canvas-reference-ocr:focus-visible:not(:disabled) {
+  background: #ffdfd6;
+  outline: 2px solid rgba(228, 74, 57, .24);
+  outline-offset: 1px;
+}
+
+.canvas-reference-ocr:disabled {
+  opacity: .62;
+  cursor: wait;
+}
+
+.canvas-script-ocr-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 11px;
+  padding: 9px 11px;
+  border: 1px solid #c6e4db;
+  border-radius: 10px;
+  background: linear-gradient(100deg, #effaf6, #f6fbf8);
+}
+
+.canvas-script-ocr-entry > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-script-ocr-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid #b2d8cd;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #0b756f;
+  font: 900 11px/1 Georgia, 'Times New Roman', serif;
+}
+
+.canvas-script-ocr-entry b,
+.canvas-script-ocr-entry small {
+  display: block;
+}
+
+.canvas-script-ocr-entry b {
+  color: #1b3534;
+  font-size: 11px;
+}
+
+.canvas-script-ocr-entry small {
+  margin-top: 2px;
+  color: #64817b;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.canvas-script-ocr-entry > button,
+.canvas-script-ocr-actions button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid #0b756f;
+  border-radius: 7px;
+  background: #0b756f;
+  color: #fffdf8;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.canvas-script-ocr-entry > button {
+  padding: 0 10px;
+}
+
+.canvas-script-ocr-entry > button:hover:not(:disabled),
+.canvas-script-ocr-entry > button:focus-visible:not(:disabled),
+.canvas-script-ocr-actions button:hover:not(:disabled),
+.canvas-script-ocr-actions button:focus-visible:not(:disabled) {
+  background: #09615d;
+  box-shadow: 0 4px 12px rgba(11, 117, 111, .18);
+}
+
+.canvas-script-ocr-entry > button:disabled,
+.canvas-script-ocr-actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.canvas-script-ocr-panel {
+  margin-top: 9px;
+  padding: 12px;
+  border: 1px solid #d7cdc0;
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 8px 20px rgba(31, 47, 49, .08);
+}
+
+.canvas-script-ocr-panel.has-error {
+  border-color: #f0b6aa;
+  background: #fff8f5;
+}
+
+.canvas-script-ocr-panel-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.canvas-script-ocr-panel-head span,
+.canvas-script-ocr-panel-head b,
+.canvas-script-ocr-panel-head small {
+  display: block;
+}
+
+.canvas-script-ocr-panel-head span {
+  color: #8b8175;
+  font: 800 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .08em;
+}
+
+.canvas-script-ocr-panel-head b {
+  margin-top: 3px;
+  color: #172127;
+  font-size: 12px;
+}
+
+.canvas-script-ocr-panel-head small {
+  max-width: 150px;
+  overflow: hidden;
+  color: #0b756f;
+  font: 800 9px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-script-ocr-panel textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid #bcb1a3;
+  border-radius: 8px;
+  background: #f8f4ed;
+  color: #172127;
+  font: 500 12px/1.55 inherit;
+}
+
+.canvas-script-ocr-panel textarea:focus {
+  border-color: #0b756f;
+  outline: 3px solid rgba(11, 117, 111, .15);
+  outline-offset: 1px;
+}
+
+.canvas-script-ocr-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 96px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f6f4;
+  color: #55716d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.canvas-script-ocr-loading i {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid #b6d7cf;
+  border-top-color: #0b756f;
+  border-radius: 50%;
+  animation: canvas-ocr-spin .8s linear infinite;
+}
+
+.canvas-script-ocr-error {
+  margin: 7px 0 0;
+  color: #b32f23;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.canvas-script-ocr-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.canvas-script-ocr-actions button {
+  padding: 0 11px;
+}
+
+.canvas-script-ocr-actions button.is-quiet {
+  border-color: #d7cdc0;
+  background: #f7f2ea;
+  color: #655d54;
+}
+
+@keyframes canvas-ocr-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-script-ocr-loading i { animation: none; }
+}
+
+@media (max-width: 720px) {
+  .canvas-script-ocr-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .canvas-script-ocr-entry > button {
+    width: 100%;
+  }
+
+  .canvas-script-ocr-panel-head {
+    flex-direction: column;
+    gap: 5px;
+  }
+}
+
 /* Reference semantics stay visible on the thumbnail instead of hiding in
    prompt prose. The controls are intentionally compact so the composer keeps
    its existing paper-and-coral rhythm on narrow screens. */

@@ -340,6 +340,13 @@ export type VideoGenerationPlan = {
 
 type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean; failureStage?: string | null };
 
+export type ScriptOcrResult = {
+  text: string;
+  provider: string | null;
+  model: string | null;
+  extractedAt: string;
+};
+
 export class VideoGenerationClientError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
     super(message);
@@ -459,6 +466,19 @@ export async function planVideoGeneration(input: {
     body: JSON.stringify(input),
   });
   return payload.plan;
+}
+
+/**
+ * Ask the server-side vision adapter to read a script screenshot. The browser
+ * sends only the private asset id; signed media URLs and provider credentials
+ * never cross this client boundary.
+ */
+export async function extractScriptText(assetId: string, language: 'zh' | 'en' = 'zh') {
+  const payload = await request<{ ocr: ScriptOcrResult }>('ocr-script', {
+    method: 'POST',
+    body: JSON.stringify({ assetId, language }),
+  });
+  return payload.ocr;
 }
 
 export async function uploadVideoInput(file: File, dimensions?: { width: number; height: number }) {

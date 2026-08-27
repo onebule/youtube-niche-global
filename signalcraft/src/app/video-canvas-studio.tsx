@@ -49,6 +49,7 @@ import {
   cancelVideoGeneration,
   estimateVideoCredits,
   estimateVideoGenerationTime,
+  extractScriptText,
   formatVideoGenerationTime,
   formatVideoGenerationTimeRange,
   loadVideoHistory,
@@ -66,6 +67,7 @@ import {
   type VideoGenerationPlan,
   type VideoModel,
   type VideoModelId,
+  type ScriptOcrResult,
 } from '@/src/lib/video-generation';
 
 type Point = { x: number; y: number };
@@ -91,6 +93,14 @@ type SavedCanvas = {
   semantics?: CanvasSemantics;
   activeShot?: number;
   shots?: SavedShot[];
+};
+
+type ScriptOcrState = {
+  assetId: string | null;
+  status: 'idle' | 'processing' | 'ready' | 'error';
+  text: string;
+  result: ScriptOcrResult | null;
+  error: string;
 };
 
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
@@ -337,6 +347,9 @@ function OmniReferenceChip({
   onRemove,
   onRoleChange,
   onStrengthChange,
+  onExtractText,
+  extractingText = false,
+  extractTextLabel,
   highlighted,
 }: {
   frame: UploadedFrame;
@@ -353,6 +366,9 @@ function OmniReferenceChip({
   onRemove: () => void;
   onRoleChange?: (role: CanvasAssetRole) => void;
   onStrengthChange?: () => void;
+  onExtractText?: () => void;
+  extractingText?: boolean;
+  extractTextLabel?: string;
   highlighted?: boolean;
 }) {
   return <div className={'canvas-omni-reference ' + (highlighted ? 'is-highlighted' : '')} data-highlighted={highlighted ? 'true' : undefined}>
@@ -362,6 +378,7 @@ function OmniReferenceChip({
         {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
       {onStrengthChange && <button type="button" className={'canvas-reference-strength ' + strength} aria-pressed={strength === 'strong'} aria-label={strength === 'strong' ? `${mentionLabel} ${roleLabel}: ${zh ? '强约束' : 'strong constraint'}` : `${mentionLabel} ${roleLabel}: ${zh ? '弱参考' : 'weak reference'}`} title={strength === 'strong' ? (zh ? '强约束：尽量保持该素材特征' : 'Strong constraint: preserve this asset’s features') : (zh ? '弱参考：仅提供方向，不强制复刻' : 'Weak reference: guide the direction without forcing a match')} onClick={onStrengthChange}>{strength === 'strong' ? (zh ? '强' : 'S') : (zh ? '弱' : 'W')}</button>}
+      {onExtractText && (role === 'script' || role === 'storyboard') && <button type="button" className="canvas-reference-ocr" disabled={extractingText} onClick={onExtractText} aria-label={extractTextLabel}>{extractingText ? (zh ? '识别中…' : 'Reading…') : (zh ? '提取文字' : 'Extract text')}</button>}
     </div> : <span className="canvas-reference-role-pill">{roleLabel}</span>}
     <button type="button" className="canvas-reference-mention" onClick={onMention}>{mentionLabel}</button>
     <button type="button" className="canvas-reference-remove" onClick={onRemove} aria-label={removeLabel}>×</button>
@@ -396,6 +413,7 @@ export default function VideoCanvasStudio({
   const [endFrame, setEndFrame] = useState<UploadedFrame | null>(null);
   const [referenceFrames, setReferenceFrames] = useState<UploadedFrame[]>([]);
   const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | null>(null);
+  const [scriptOcr, setScriptOcr] = useState<ScriptOcrState>({ assetId: null, status: 'idle', text: '', result: null, error: '' });
   const [generation, setGeneration] = useState<VideoGeneration | null>(null);
   const [agentPlan, setAgentPlan] = useState<VideoGenerationPlan | null>(null);
   const [restoredGenerationId, setRestoredGenerationId] = useState<string | null>(null);
@@ -478,6 +496,7 @@ export default function VideoCanvasStudio({
     setEndFrame(cloneFrame(snapshot.endFrame));
     setReferenceMode(snapshot.referenceMode);
     setReferenceFrames(snapshot.referenceFrames.map(frame => ({ ...frame })));
+    setScriptOcr({ assetId: null, status: 'idle', text: '', result: null, error: '' });
     setActiveGeneration(snapshot.generation);
     setCancelling(false);
     setRestoredGenerationId(snapshot.restoredGenerationId);
@@ -512,6 +531,10 @@ export default function VideoCanvasStudio({
   const activeReferenceBindings = useMemo(() => canvasSemantics.references
     .filter(reference => reference.shotId === canvasSemantics.shot.id)
     .slice(-9), [canvasSemantics.references, canvasSemantics.shot.id]);
+  const scriptReferenceFrames = useMemo(() => referenceFrames.flatMap((frame, index) => {
+    const binding = referenceBindingForFrame(frame, index, activeReferenceBindings);
+    return binding.role === 'script' || binding.role === 'storyboard' ? [{ frame, index, binding }] : [];
+  }), [activeReferenceBindings, referenceFrames]);
   const omniReferenceRoleOptions = useMemo(() => OMNI_REFERENCE_ROLE_VALUES.map(value => ({
     value,
     label: canvasReferenceRoleLabel(value, zh),
@@ -1260,7 +1283,51 @@ export default function VideoCanvasStudio({
       constraints: current.constraints,
     }));
     setAgentPlan(null);
+    if (!scriptLike && scriptOcr.assetId === frame.assetId) {
+      setScriptOcr({ assetId: null, status: 'idle', text: '', result: null, error: '' });
+    }
     notify(zh ? `参考图 ${mentionIndex} 已标记为${canvasReferenceRoleLabel(nextRole, true)}。` : `Reference image ${mentionIndex} is now ${canvasReferenceRoleLabel(nextRole, false)}.`);
+  };
+
+  const extractScript = async (frame: UploadedFrame) => {
+    if (scriptOcr.status === 'processing') return;
+    setSelectedNodeId('source');
+    setHighlightedAssetId(frame.assetId);
+    setScriptOcr({ assetId: frame.assetId, status: 'processing', text: '', result: null, error: '' });
+    setError('');
+    try {
+      const result = await extractScriptText(frame.assetId, zh ? 'zh' : 'en');
+      setScriptOcr({ assetId: frame.assetId, status: 'ready', text: result.text, result, error: '' });
+      notify(zh ? '脚本文字已提取，请检查后再插入 Motion Prompt。' : 'Script text was extracted. Review it before inserting into Motion Prompt.');
+    } catch (cause) {
+      const message = clientMessage(cause);
+      setScriptOcr({ assetId: frame.assetId, status: 'error', text: '', result: null, error: message });
+    }
+  };
+
+  const insertScriptOcr = () => {
+    const extracted = scriptOcr.text.trim();
+    if (!extracted) return;
+    const source = scriptReferenceFrames.find(item => item.frame.assetId === scriptOcr.assetId) || scriptReferenceFrames[0];
+    const mention = source ? (zh ? `@图片${frameReferenceIndex(source.frame, source.index)}` : `@image${frameReferenceIndex(source.frame, source.index)}`) : (zh ? '@脚本' : '@script');
+    const prefix = `${zh ? '脚本参考' : 'Script reference'} ${mention}：`;
+    const separator = prompt.trim() ? '\n\n' : '';
+    const remaining = Math.max(0, 1200 - prompt.length - separator.length - prefix.length);
+    if (remaining <= 0) {
+      setError(zh ? 'Motion Prompt 已接近 1200 字上限，请先删减现有内容。' : 'Motion Prompt is near the 1,200-character limit. Shorten it before inserting the script.');
+      return;
+    }
+    const clipped = extracted.slice(0, remaining);
+    setPrompt(current => `${current.trimEnd()}${separator}${prefix}${clipped}`.slice(0, 1200));
+    setAgentPlan(null);
+    notify(clipped.length < extracted.length
+      ? (zh ? '脚本已插入，但因 Prompt 上限截取了一部分；可在下方继续编辑。' : 'The script was inserted, but clipped to fit the Prompt limit. Continue editing below.')
+      : (zh ? '脚本已插入 Motion Prompt，可继续编辑后生成。' : 'The script was inserted into Motion Prompt. Edit it before generating.'));
+  };
+
+  const updateScriptOcrText = (value: string) => {
+    setScriptOcr(current => ({ ...current, text: value.slice(0, 12000), status: value.trim() ? 'ready' : 'error', error: value.trim() ? '' : (zh ? '请输入或重新提取脚本文字。' : 'Enter or extract the script text again.') }));
+    setAgentPlan(null);
   };
 
   const toggleReferenceStrength = (index: number) => {
@@ -2065,7 +2132,7 @@ export default function VideoCanvasStudio({
               {referenceFrames.map((frame, index) => {
                 const mentionIndex = frameReferenceIndex(frame, index);
                 const binding = referenceBindingForFrame(frame, index, activeReferenceBindings);
-                return <OmniReferenceChip key={frame.assetId} frame={frame} role={binding.role} roleLabel={canvasReferenceRoleLabel(binding.role, zh)} strength={binding.strength} zh={zh} roleOptions={omniReferenceRoleOptions} editable onRoleChange={nextRole => updateReferenceRole(index, nextRole)} onStrengthChange={() => toggleReferenceStrength(index)} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />;
+                return <OmniReferenceChip key={frame.assetId} frame={frame} role={binding.role} roleLabel={canvasReferenceRoleLabel(binding.role, zh)} strength={binding.strength} zh={zh} roleOptions={omniReferenceRoleOptions} editable onRoleChange={nextRole => updateReferenceRole(index, nextRole)} onStrengthChange={() => toggleReferenceStrength(index)} onExtractText={() => void extractScript(frame)} extractingText={scriptOcr.status === 'processing' && scriptOcr.assetId === frame.assetId} extractTextLabel={zh ? `提取 ${mentionIndex} 的脚本文字` : `Extract text from ${mentionIndex}`} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />;
               })}
               {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
             </>}
@@ -2079,6 +2146,16 @@ export default function VideoCanvasStudio({
               {assetMentionValidation.hasInvalid && <p className="canvas-asset-reference-warning" role="alert">{assetMentionValidation.unbound.length > 0
                 ? (zh ? `有 ${assetMentionValidation.unbound.length} 个 @图片引用尚未绑定，请点击对应参考图的引用按钮。` : `${assetMentionValidation.unbound.length} image mention${assetMentionValidation.unbound.length > 1 ? 's are' : ' is'} not bound. Click the matching reference chip to bind it.`)
                 : (zh ? '提示词里有已失效的素材引用，请重新加入或重新绑定。' : 'A referenced asset is no longer available. Add it again or rebind the mention.')}</p>}
+              {scriptReferenceFrames.length > 0 && <div className="canvas-script-ocr-entry" aria-live="polite">
+                <div><span className="canvas-script-ocr-icon" aria-hidden="true">Aa</span><div><b>{zh ? '脚本截图可提取文字' : 'Script screenshot text is available'}</b><small>{zh ? '先确认识别结果，再插入 Prompt；会调用视觉模型但不会自动提交视频任务。' : 'Review it before inserting. Vision usage may apply, but no video task is submitted automatically.'}</small></div></div>
+                <button type="button" disabled={scriptOcr.status === 'processing'} onClick={() => void extractScript(scriptReferenceFrames[0].frame)}>{scriptOcr.status === 'processing' ? (zh ? '识别中…' : 'Reading…') : (zh ? '提取文字' : 'Extract text')}</button>
+              </div>}
+              {scriptOcr.status !== 'idle' && scriptOcr.assetId && scriptReferenceFrames.some(item => item.frame.assetId === scriptOcr.assetId) && <div className={'canvas-script-ocr-panel ' + (scriptOcr.status === 'error' ? 'has-error' : '')} aria-label={zh ? '脚本文字识别结果' : 'Script OCR result'}>
+                <div className="canvas-script-ocr-panel-head"><div><span>{zh ? '识别结果 · 可编辑' : 'TRANSCRIPTION · EDITABLE'}</span><b>{scriptOcr.status === 'processing' ? (zh ? '正在读取脚本截图…' : 'Reading the script screenshot…') : scriptOcr.status === 'error' ? (zh ? '识别未完成' : 'Could not read the screenshot') : (zh ? '请确认后插入' : 'Review before inserting')}</b></div><small>{scriptOcr.result?.model || (zh ? '视觉模型' : 'Vision model')}</small></div>
+                {scriptOcr.status === 'processing' ? <div className="canvas-script-ocr-loading"><i /><span>{zh ? '正在按阅读顺序提取文字，通常需要几秒。' : 'Transcribing the reading order. This usually takes a few seconds.'}</span></div> : <textarea aria-label={zh ? '可编辑的脚本文字' : 'Editable script text'} value={scriptOcr.text} onChange={event => updateScriptOcrText(event.target.value)} rows={5} maxLength={12000} placeholder={zh ? '识别结果会显示在这里，也可以手动粘贴或修正。' : 'The transcription appears here. You can paste or correct it manually.'} />}
+                {scriptOcr.error && <p className="canvas-script-ocr-error" role="alert">{scriptOcr.error}</p>}
+                {scriptOcr.status !== 'processing' && <div className="canvas-script-ocr-actions"><button type="button" disabled={!scriptOcr.text.trim()} onClick={insertScriptOcr}>{zh ? '插入 Motion Prompt' : 'Insert into Motion Prompt'}</button><button type="button" className="is-quiet" onClick={() => { const source = scriptReferenceFrames.find(item => item.frame.assetId === scriptOcr.assetId); if (source) void extractScript(source.frame); }}>{zh ? '重新识别' : 'Run again'}</button></div>}
+              </div>}
             </div>
             <div className="canvas-composer-controls">
               <div className="canvas-template-wrap">
