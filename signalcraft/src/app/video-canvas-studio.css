@@ -5478,13 +5478,25 @@
 }
 
 .video-canvas-node[data-selected='true'] {
-  outline: 3px solid rgba(221, 80, 72, .34);
+  outline: 2px solid color-mix(in srgb, var(--canvas-danger) 70%, transparent);
   outline-offset: 5px;
-  box-shadow: 0 0 0 1px var(--canvas-danger), 8px 10px 0 rgba(31, 35, 40, .12);
+  border-color: var(--canvas-danger);
+  box-shadow: 0 0 0 1px var(--canvas-danger), 0 0 0 5px color-mix(in srgb, var(--canvas-danger) 13%, transparent), 8px 10px 0 rgba(31, 35, 40, .12);
+  z-index: 4;
 }
 
 .video-canvas-node[data-selected='true'] .canvas-node-grip {
   box-shadow: inset 0 -3px 0 var(--canvas-danger);
+}
+
+.video-canvas-node[data-selected='true']::after {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canvas-danger) 18%, #fff);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .video-canvas-node {
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
 }
 
 .video-canvas-caption .canvas-shot-rail {
