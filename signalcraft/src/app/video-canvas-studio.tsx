@@ -30,6 +30,7 @@ import {
   patchCanvasShot,
   recordCanvasGeneration,
   registerCanvasAsset,
+  type CanvasAgentAction,
   type CanvasAssetRole,
   type CanvasNodeId,
   type CanvasSemantics,
@@ -110,6 +111,12 @@ const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
   task: zh ? '视频生成' : 'Video generation',
   result: zh ? '视频结果' : 'Video result',
 }[nodeId]);
+const agentActionName = (action: CanvasAgentAction, zh: boolean) => {
+  if (action.type === 'shot.create') return zh ? '创建镜头' : 'Create shot';
+  if (action.type === 'shot.duplicate') return zh ? '复制镜头' : 'Duplicate shot';
+  if (action.type === 'shot.delete') return zh ? '删除镜头' : 'Delete shot';
+  return action.direction === 'up' ? (zh ? '镜头前移' : 'Move shot earlier') : (zh ? '镜头后移' : 'Move shot later');
+};
 const ASPECT_RATIO_OPTIONS: Array<{ value: '9:16' | '16:9' | '1:1'; label: string; className: string }> = [
   { value: '9:16', label: '9:16', className: 'is-portrait' },
   { value: '16:9', label: '16:9', className: 'is-landscape' },
@@ -279,6 +286,7 @@ export default function VideoCanvasStudio({
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
   const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
+  const [appliedAgentActionIds, setAppliedAgentActionIds] = useState<string[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -325,6 +333,7 @@ export default function VideoCanvasStudio({
     setAgentPlan(snapshot.agentPlan);
     setCanvasSemantics(snapshot.semantics);
     setShot(snapshot.shot);
+    setAppliedAgentActionIds([]);
     setSelectedNodeId(null);
     setHistoryOpen(false);
     setNodePaletteOpen(false);
@@ -388,38 +397,40 @@ export default function VideoCanvasStudio({
   };
 
   const reorderCurrentShot = (direction: 'up' | 'down') => {
-    if ((direction === 'up' && !canMoveCurrentShotUp) || (direction === 'down' && !canMoveCurrentShotDown)) return;
+    if ((direction === 'up' && !canMoveCurrentShotUp) || (direction === 'down' && !canMoveCurrentShotDown)) return false;
     const currentSnapshot = captureCurrentShot();
     const reordered = reorderShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, direction);
     const active = reordered.find(snapshot => snapshot.shot === shot);
-    if (!active) return;
+    if (!active) return false;
     setShotSnapshots(reordered);
     setCanvasSemantics(active.semantics);
     notify(direction === 'up'
       ? (zh ? `镜头 ${String(shot).padStart(2, '0')} 已前移。` : `Shot ${String(shot).padStart(2, '0')} moved earlier.`)
       : (zh ? `镜头 ${String(shot).padStart(2, '0')} 已后移。` : `Shot ${String(shot).padStart(2, '0')} moved later.`));
+    return true;
   };
 
   const deleteCurrentShot = () => {
-    if (shotActionsDisabled) return;
+    if (shotActionsDisabled) return false;
     const currentSnapshot = captureCurrentShot();
     const allSnapshots = upsertShotSnapshot(shotSnapshots, currentSnapshot);
     if (allSnapshots.length <= 1) {
       notify(zh ? '至少保留一个镜头。' : 'Keep at least one shot in the canvas.');
-      return;
+      return false;
     }
     const confirmation = zh
       ? `删除镜头 ${String(shot).padStart(2, '0')}？生成历史仍会保留，但这个镜头会从当前画布移除。`
       : `Delete shot ${String(shot).padStart(2, '0')}? Generation history stays available, but this shot will be removed from the canvas.`;
-    if (typeof window !== 'undefined' && !window.confirm(confirmation)) return;
+    if (typeof window !== 'undefined' && !window.confirm(confirmation)) return false;
     const ordered = sortShotSnapshots(allSnapshots);
     const index = ordered.findIndex(snapshot => snapshot.shot === shot);
     const fallback = ordered[index > 0 ? index - 1 : 1];
     const remaining = removeShotSnapshot(ordered, shot);
-    if (!fallback) return;
+    if (!fallback) return false;
     setShotSnapshots(remaining);
     applyShotSnapshot(fallback);
     notify(zh ? `已删除镜头 ${String(shot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} deleted.`);
+    return true;
   };
 
   const rememberGeneration = useCallback((next: VideoGeneration) => {
@@ -824,6 +835,7 @@ export default function VideoCanvasStudio({
         canvasContext: createCanvasAgentContext(captureCurrentShot(), selectedNodeId),
       });
       setAgentPlan(next);
+      setAppliedAgentActionIds([]);
       setModel(next.model);
       setReferenceMode(next.referenceMode);
       setDuration(next.duration);
@@ -1112,6 +1124,10 @@ export default function VideoCanvasStudio({
   };
 
   const createNextShot = (duplicate = false) => {
+    if (shotActionsDisabled) {
+      notify(zh ? '当前任务完成后才可创建镜头。' : 'Finish the current task before creating another shot.');
+      return false;
+    }
     const currentSnapshot = captureCurrentShot();
     const nextShot = nextShotNumber();
     const nextSemantics = createCanvasSemantics(nextShot);
@@ -1162,6 +1178,23 @@ export default function VideoCanvasStudio({
     notify(duplicate
       ? (zh ? `已复制镜头 ${String(shot).padStart(2, '0')}，创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} duplicated as shot ${String(nextShot).padStart(2, '0')}.`)
       : (zh ? `已创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(nextShot).padStart(2, '0')} created.`));
+    return true;
+  };
+
+  const applyAgentAction = (action: CanvasAgentAction) => {
+    if (appliedAgentActionIds.includes(action.id)) return;
+    if (action.shotId && action.shotId !== canvasSemantics.shot.id) {
+      notify(zh ? '这条建议针对其他镜头，已阻止应用。' : 'This suggestion targets another shot and was blocked.');
+      return;
+    }
+    const applied = action.type === 'shot.create'
+      ? createNextShot(false)
+      : action.type === 'shot.duplicate'
+        ? createNextShot(true)
+        : action.type === 'shot.reorder'
+          ? reorderCurrentShot(action.direction || 'down')
+          : deleteCurrentShot();
+    if (applied) setAppliedAgentActionIds(previous => previous.includes(action.id) ? previous : [...previous, action.id]);
   };
 
   const toggleShotCollapsed = () => {
@@ -1428,7 +1461,24 @@ export default function VideoCanvasStudio({
               <button type="button" className="canvas-agent-inline-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? 'Agent 规划' : 'Agent plan') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>
             </div>
-            {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite"><div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small>{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join('、')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join(', ')}`}</small>}{agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}{agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}</div>}
+            {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite">
+              <div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div>
+              <p>{agentPlan.reasoning}</p>
+              {agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small>{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join('、')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join(', ')}`}</small>}
+              {agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}
+              {agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}
+              {agentPlan.suggestedActions && agentPlan.suggestedActions.length > 0 && <div className="canvas-agent-actions">
+                <div className="canvas-agent-actions-head"><b>{zh ? '建议操作' : 'Suggested actions'}</b><small>{zh ? '仅在你确认后应用到当前画布' : 'Apply to this canvas only after your confirmation'}</small></div>
+                <div className="canvas-agent-actions-list">
+                  {agentPlan.suggestedActions.map(action => {
+                    const applied = appliedAgentActionIds.includes(action.id);
+                    return <button key={action.id} type="button" className={'canvas-agent-action-button ' + (action.type === 'shot.delete' ? 'is-destructive' : '')} disabled={applied} onClick={() => applyAgentAction(action)} title={action.reason || undefined}>
+                      <span>{agentActionName(action, zh)}</span><small>{applied ? (zh ? '已应用' : 'Applied') : (action.reason || (zh ? '点击应用' : 'Click to apply'))}</small>
+                    </button>;
+                  })}
+                </div>
+              </div>}
+            </div>}
             <p>{referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。MiniMax H3、Seedance 2.0 / 2.5 均可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. MiniMax H3 and Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 首尾帧模式将沿用 START 图片比例。' : 'MiniMax H3 start/end mode follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
         </section>

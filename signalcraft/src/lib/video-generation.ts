@@ -1,7 +1,7 @@
 'use client';
 
 import { authHeaders } from './auth';
-import type { CanvasAgentContext } from './canvas-domain';
+import type { CanvasAgentAction, CanvasAgentContext } from './canvas-domain';
 
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
@@ -85,6 +85,7 @@ export type VideoGenerationPlan = {
   warnings: string[];
   reasoning: string;
   confidence?: number;
+  suggestedActions?: CanvasAgentAction[];
   autoGenerate: false;
   agentFallback?: boolean;
 };

@@ -112,6 +112,14 @@ export type CanvasAgentContext = {
   };
 };
 
+export type CanvasAgentAction = {
+  id: string;
+  type: 'shot.create' | 'shot.duplicate' | 'shot.reorder' | 'shot.delete';
+  direction?: 'up' | 'down';
+  shotId?: string | null;
+  reason?: string;
+};
+
 const NODE_IDS: CanvasNodeId[] = ['source', 'prompt', 'model', 'agent', 'task', 'result'];
 const NODE_ROLES: CanvasNodeRole[] = ['generic', 'reference', 'agent', 'generation', 'video_result'];
 const ASSET_KINDS: CanvasAssetKind[] = ['image', 'video'];
