@@ -5239,11 +5239,12 @@
   background: var(--canvas-danger-soft);
 }
 
-.canvas-shot-container-actions {
+.canvas-shot-container-head > .canvas-shot-container-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-left: auto;
+  min-width: auto;
   pointer-events: auto;
 }
 
