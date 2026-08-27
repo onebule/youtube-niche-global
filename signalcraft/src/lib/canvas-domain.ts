@@ -64,6 +64,8 @@ export type CanvasShotSemantic = {
   index: number;
   title: string;
   status: CanvasShotStatus;
+  order: number;
+  collapsed: boolean;
 };
 
 export type CanvasEdgeSemantic = {
@@ -130,7 +132,7 @@ export function createCanvasSemantics(shotIndex = 1): CanvasSemantics {
   ];
   return {
     version: 1,
-    shot: { id: shotId, index, title: `Shot ${String(index).padStart(2, '0')}`, status: 'draft' },
+    shot: { id: shotId, index, title: `Shot ${String(index).padStart(2, '0')}`, status: 'draft', order: index, collapsed: false },
     nodes: {
       source: defaultNode('reference', shotId),
       prompt: defaultNode('generic', shotId),
@@ -243,6 +245,8 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
       index,
       title: text(shotCandidate.title, `Shot ${String(index).padStart(2, '0')}`, 160),
       status: oneOf(shotCandidate.status, SHOT_STATUSES, 'draft'),
+      order: integer(shotCandidate.order, index, 1, 999),
+      collapsed: Boolean(shotCandidate.collapsed),
     },
     nodes,
     edges,
@@ -255,6 +259,10 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
 export function patchCanvasNode(semantics: CanvasSemantics, nodeId: CanvasNodeId, patch: Partial<CanvasNodeSemantic>): CanvasSemantics {
   const current = semantics.nodes[nodeId] || defaultNode('generic', semantics.shot.id);
   return { ...semantics, nodes: { ...semantics.nodes, [nodeId]: { ...current, ...patch, shotId: patch.shotId || current.shotId || semantics.shot.id } } };
+}
+
+export function patchCanvasShot(semantics: CanvasSemantics, patch: Partial<CanvasShotSemantic>): CanvasSemantics {
+  return { ...semantics, shot: { ...semantics.shot, ...patch } };
 }
 
 export function registerCanvasAsset(semantics: CanvasSemantics, asset: CanvasAssetSemantic): CanvasSemantics {

@@ -5124,3 +5124,173 @@
 .canvas-composer-cost b {
   font-size: 19px;
 }
+
+/* Phase 2: make the current workflow legible as one movable Shot unit while
+   keeping its existing nodes and SVG edges untouched. */
+.canvas-shot-container {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px dashed #cfd3d8;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .58);
+  box-shadow: 0 18px 44px rgba(31, 35, 40, .06);
+  pointer-events: none;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.canvas-shot-container::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 96px;
+  height: 4px;
+  border-radius: 0 0 6px 0;
+  background: var(--canvas-danger);
+}
+
+.canvas-shot-container-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  margin: 12px 12px 0;
+  padding: 7px 9px 7px 7px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .9);
+  color: var(--canvas-line);
+  box-shadow: 0 5px 16px rgba(31, 35, 40, .06);
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas-shot-container-index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--canvas-danger);
+  color: #fff;
+  font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.canvas-shot-container-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-shot-container-head b {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-shot-container-head small {
+  color: var(--canvas-muted);
+  font: 700 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.canvas-shot-container-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 999px;
+  color: var(--canvas-muted);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.canvas-shot-container-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.canvas-shot-container-status.generating {
+  color: var(--canvas-purple);
+  border-color: #c9c3ff;
+  background: var(--canvas-purple-soft);
+}
+
+.canvas-shot-container-status.completed {
+  color: #147b56;
+  border-color: #bde6d2;
+  background: var(--canvas-success-soft);
+}
+
+.canvas-shot-container-status.failed {
+  color: var(--canvas-danger);
+  border-color: #f0b7b0;
+  background: var(--canvas-danger-soft);
+}
+
+.canvas-shot-container-head > button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 8px;
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  font-size: 10px;
+  font-weight: 800;
+  pointer-events: auto;
+}
+
+.canvas-shot-container-head > button:hover,
+.canvas-shot-container-head > button:focus-visible {
+  border-color: var(--canvas-danger);
+  outline: none;
+  color: var(--canvas-danger);
+}
+
+.canvas-shot-container-flow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 20px 0;
+  color: var(--canvas-muted);
+  font-size: 10px;
+}
+
+.canvas-shot-container-flow span {
+  color: var(--canvas-danger);
+  font: 900 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .12em;
+}
+
+.canvas-shot-container-flow b {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvas-shot-container.is-collapsed {
+  border-color: #e2b1aa;
+  background: rgba(255, 250, 248, .78);
+  box-shadow: 0 12px 28px rgba(200, 59, 45, .1);
+}
+
+.is-shot-collapsed .video-canvas-node,
+.is-shot-collapsed .video-canvas-edges {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-shot-container {
+    transition: none;
+  }
+}

@@ -9,6 +9,7 @@ import {
   createCanvasSemantics,
   normalizeCanvasSemantics,
   patchCanvasNode,
+  patchCanvasShot,
   recordCanvasGeneration,
   registerCanvasAsset,
   type CanvasAssetRole,
@@ -254,6 +255,7 @@ export default function VideoCanvasStudio({
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
+  const shotDragRef = useRef<{ clientX: number; clientY: number; origin: NodePositions } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
   const fullscreenFallbackRef = useRef(false);
@@ -860,6 +862,33 @@ export default function VideoCanvasStudio({
     }));
   };
 
+  const startShotDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    shotDragRef.current = { clientX: event.clientX, clientY: event.clientY, origin: nodes };
+  };
+  const moveShot = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = shotDragRef.current;
+    if (!drag) return;
+    const dx = (event.clientX - drag.clientX) / viewport.scale;
+    const dy = (event.clientY - drag.clientY) / viewport.scale;
+    const ids: NodeId[] = ['source', 'agent', 'task', 'result'];
+    setNodes(previous => {
+      const next = { ...previous };
+      ids.forEach(id => {
+        next[id] = {
+          x: clamp(drag.origin[id].x + dx, 0, STAGE_SIZE.width - nodeSize[id].width),
+          y: clamp(drag.origin[id].y + dy, 0, STAGE_SIZE.height - nodeSize[id].height),
+        };
+      });
+      return next;
+    });
+  };
+  const endShotDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    shotDragRef.current = null;
+  };
+
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -926,6 +955,19 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const toggleShotCollapsed = () => {
+    setCanvasSemantics(previous => patchCanvasShot(previous, { collapsed: !previous.shot.collapsed }));
+  };
+
+  const shotFrame = useMemo(() => {
+    const ids: NodeId[] = ['source', 'agent', 'task', 'result'];
+    const minX = Math.min(...ids.map(id => nodes[id].x));
+    const minY = Math.min(...ids.map(id => nodes[id].y));
+    const maxX = Math.max(...ids.map(id => nodes[id].x + nodeSize[id].width));
+    const maxY = Math.max(...ids.map(id => nodes[id].y + nodeSize[id].height));
+    return { x: minX - 32, y: minY - 64, width: maxX - minX + 64, height: maxY - minY + 96 };
+  }, [nodeSize, nodes]);
+
   const edges = useMemo(() => CONNECTIONS.map(([from, to]) => {
     const start = {
       x: nodes[from].x + nodeSize[from].width,
@@ -983,7 +1025,22 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-history-toolbar-button" aria-expanded={historyOpen} aria-controls="canvas-history-panel" onClick={toggleHistory} aria-label={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')} title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}><span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}</button>
           <button type="button" className="canvas-fullscreen-button" onClick={() => void toggleCanvasFullscreen()} aria-label={isCanvasFullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '进入全屏' : 'Enter fullscreen')} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}><span aria-hidden="true">{isCanvasFullscreen ? '↙' : '⛶'}</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b></button>
         </div>
-        <div className="video-canvas-stage" style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
+        <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
+          <div
+            className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
+            data-shot-id={canvasSemantics.shot.id}
+            data-shot-status={canvasSemantics.shot.status}
+            style={{ left: shotFrame.x, top: shotFrame.y, width: shotFrame.width, height: shotFrame.height }}
+            aria-label={zh ? `${canvasSemantics.shot.title} 容器` : `${canvasSemantics.shot.title} container`}
+          >
+            <div className="canvas-shot-container-head" onPointerDown={startShotDrag} onPointerMove={moveShot} onPointerUp={endShotDrag} onPointerCancel={endShotDrag}>
+              <span className="canvas-shot-container-index">{String(canvasSemantics.shot.index).padStart(2, '0')}</span>
+              <div><b>{zh ? '当前镜头' : 'Current shot'}</b><small>{canvasSemantics.shot.title}</small></div>
+              <span className={'canvas-shot-container-status ' + canvasSemantics.shot.status}><i />{canvasSemantics.shot.status === 'generating' ? (zh ? '生成中' : 'Generating') : canvasSemantics.shot.status === 'completed' ? (zh ? '已完成' : 'Completed') : canvasSemantics.shot.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft')}</span>
+              <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
+            </div>
+            {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? 'SHOT FLOW' : 'SHOT FLOW'}</span><b>{zh ? '素材 → Agent → 生成 → 结果' : 'Reference → Agent → Generate → Result'}</b></div>}
+          </div>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">
             {edges.map(edge => <g key={edge.id}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
