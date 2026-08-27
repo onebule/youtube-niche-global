@@ -115,7 +115,7 @@ function RankingFilters({filters,setFilters,locale}:{filters:ReturnType<typeof p
   const reset=()=>patch({format:'short',entity:'videos',window:'28d',minSubs:'0',maxSubs:'all',minViews:'0',maxViews:'all',display:'list',category:'all',language:'all'});
   return <aside className="ranking-filters ranking-rules" aria-label={copy.filterAria}>
     <div><span className="eyebrow">{zh?'筛选':'Filters'}</span><h2>{zh?'按规则缩小范围':'Narrow the ranking'}</h2><p>{copy.fixedRule}</p></div>
-    <RankingOptionGroup label={zh?'内容形态':'Content format'} value={filters.format} onChange={value=>patch({format:value})} options={[{value:'short',label:zh?'短视频':'Short-form'},{value:'long',label:zh?'长视频':'Long-form'}]}/>
+    <RankingOptionGroup label={zh?'内容形态':'Content format'} value={filters.format} onChange={value=>patch({format:value})} options={[{value:'all',label:zh?'全部':'All'},{value:'short',label:zh?'短视频':'Short-form'},{value:'long',label:zh?'长视频':'Long-form'}]}/>
     <RankingOptionGroup label={zh?'榜单维度':'Ranking entity'} value={filters.entity} onChange={value=>patch({entity:value})} options={[{value:'videos',label:zh?'视频':'Videos'},{value:'channels',label:zh?'频道':'Channels'}]}/>
     <RankingOptionGroup label={zh?'时间窗口':'Time window'} value={filters.window} onChange={value=>patch({window:value})} options={[{value:'24h',label:zh?'24小时':'24h'},{value:'7d',label:zh?'7天':'7d'},{value:'28d',label:zh?'28天':'28d'},{value:'365d',label:zh?'历史数据':'History'}]}/>
     <RankingBandGroup label={zh?'订阅量区间':'Subscriber range'} value={currentSubscriberBand} onChange={value=>setBand(value,'subscribers')} options={subscriberBands}/>
