@@ -258,7 +258,7 @@ function normalizeReference(value: unknown, shotId: string, assets: CanvasAssetS
   const candidate = value as Partial<CanvasAssetReference>;
   const assetId = text(candidate.assetId, '', 240);
   const token = text(candidate.token, '', 80).replace(/\s+/g, '');
-  const mentionId = text(candidate.mentionId, '', 80);
+  const mentionId = normalizeCanvasMentionToken(token) || text(candidate.mentionId, '', 80);
   if (!assetId || !token || !mentionId) return null;
   const asset = assets.find(item => item.assetId === assetId && item.shotId === (candidate.shotId || shotId));
   return {

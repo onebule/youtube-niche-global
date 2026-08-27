@@ -933,18 +933,19 @@ export default function VideoCanvasStudio({
       const failed = settled.find(result => result.status === 'rejected');
       if (uploaded.length) {
         const usedIndexes = new Set(referenceFrames.map((frame, index) => frameReferenceIndex(frame, index)));
-        let nextIndex = 1;
-        const indexed = uploaded.map(frame => {
-          while (usedIndexes.has(nextIndex) && nextIndex <= 9) nextIndex += 1;
-          const next = { ...frame, referenceIndex: nextIndex };
+        const indexed = uploaded.flatMap(frame => {
+          const nextIndex = Array.from({ length: 9 }, (_, index) => index + 1).find(index => !usedIndexes.has(index));
+          if (!nextIndex) return [];
           usedIndexes.add(nextIndex);
-          nextIndex += 1;
-          return next;
+          return [{ ...frame, referenceIndex: nextIndex }];
         });
-        setReferenceFrames(current => [...current, ...indexed].slice(0, 9));
-        indexed.forEach(frame => rememberImageAsset(frame, 'reference'));
-        patchSemanticNode('source', { role: 'reference', assetId: indexed[0].assetId, status: 'draft' });
-        notify(zh ? `已加入 ${indexed.length} 张全能参考图片。` : `${indexed.length} omni reference images added.`);
+        if (indexed.length) {
+          setReferenceFrames(current => [...current, ...indexed].slice(0, 9));
+          indexed.forEach(frame => rememberImageAsset(frame, 'reference'));
+          patchSemanticNode('source', { role: 'reference', assetId: indexed[0].assetId, status: 'draft' });
+          notify(zh ? `已加入 ${indexed.length} 张全能参考图片。` : `${indexed.length} omni reference images added.`);
+        }
+        if (uploaded.length > indexed.length) setError(zh ? '参考图编号已占满，请先移除旧素材后再加入。' : 'All reference labels are occupied. Remove an old asset before adding another.');
       }
       if (failed?.status === 'rejected') setError(clientMessage(failed.reason));
       if (files.length > capacity) setError(zh ? `已达到 9 张上限，未加入其余 ${files.length - capacity} 张。` : `The 9-image limit was reached; ${files.length - capacity} files were skipped.`);
