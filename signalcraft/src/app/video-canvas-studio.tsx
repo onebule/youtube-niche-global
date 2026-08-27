@@ -284,6 +284,9 @@ export default function VideoCanvasStudio({
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [compareOpen, setCompareOpen] = useState(false);
+  const [comparePreviewUrls, setComparePreviewUrls] = useState<Record<string, string>>({});
+  const [comparePreviewLoading, setComparePreviewLoading] = useState(false);
+  const [comparePreviewError, setComparePreviewError] = useState('');
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -381,6 +384,8 @@ export default function VideoCanvasStudio({
     .filter(version => version.shotId === canvasSemantics.shot.id)
     .sort((left, right) => left.number - right.number)
     .map(version => ({ version, generation: history.find(item => item.id === version.generationId) || null })), [canvasSemantics, history]);
+  const alternateModel: Exclude<VideoModelId, 'auto'> = model === 'minimax-h3' ? 'seedance-2-5' : 'minimax-h3';
+  const alternateModelDetails = useMemo(() => models.find(item => item.id === alternateModel) || null, [alternateModel, models]);
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
   const shotRailItems = useMemo(() => {
     const current = { shot, order: canvasSemantics.shot.order || shot, status: canvasSemantics.shot.status };
@@ -500,6 +505,38 @@ export default function VideoCanvasStudio({
     if (next) setNodePaletteOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
+
+  useEffect(() => {
+    if (!compareOpen) return;
+    const pending = shotVersions
+      .map(({ generation: item }) => item)
+      .filter((item): item is VideoGeneration => Boolean(item?.videoAssetId && item.status === 'completed' && !comparePreviewUrls[item.id]));
+    if (!pending.length) return;
+    let cancelled = false;
+    const load = async () => {
+      // Yield once before updating local state so opening the panel does not
+      // synchronously cascade another render from inside this effect.
+      await Promise.resolve();
+      if (cancelled) return;
+      setComparePreviewLoading(true);
+      setComparePreviewError('');
+      const settled = await Promise.allSettled(pending.map(async item => [item.id, await loadVideoAssetUrl(item.videoAssetId!)] as const));
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      let failed = false;
+      settled.forEach(result => {
+        if (result.status === 'fulfilled') next[result.value[0]] = result.value[1];
+        else failed = true;
+      });
+      if (Object.keys(next).length) setComparePreviewUrls(previous => ({ ...previous, ...next }));
+      if (failed) setComparePreviewError(zh ? '部分版本视频暂时无法读取。' : 'Some version videos could not be loaded.');
+      setComparePreviewLoading(false);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [compareOpen, comparePreviewUrls, shotVersions, zh]);
 
   const markBestTake = (generationId: string) => {
     const candidate = history.find(item => item.id === generationId);
@@ -843,6 +880,17 @@ export default function VideoCanvasStudio({
     setDuration(current => normalizeVideoDuration(next, current));
     if (next === 'minimax-h3') setResolution('768P');
     if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+  };
+
+  const prepareAlternateModel = () => {
+    if (!alternateModelDetails?.enabled) {
+      notify(zh ? `${modelName(alternateModel)} 尚未配置，暂时不能使用。` : `${modelName(alternateModel)} is not configured yet.`);
+      return;
+    }
+    selectModel(alternateModel);
+    setAgentPlan(null);
+    setPreferencesOpen(true);
+    notify(zh ? `已切换到 ${modelName(alternateModel)} 分支，请确认参数后再提交。` : `Switched to the ${modelName(alternateModel)} branch. Review settings before submitting.`);
   };
 
   const planWithAgent = async () => {
@@ -1415,6 +1463,7 @@ export default function VideoCanvasStudio({
                 <div className="canvas-result-version"><span>{currentVersion ? `V${currentVersion.number}` : 'V1'}</span>{currentVersion?.bestTake && <b>{zh ? '最佳镜头' : 'BEST TAKE'}</b>}<small>{shotVersions.length > 1 ? (zh ? `${shotVersions.length} 个版本` : `${shotVersions.length} versions`) : (zh ? '首个版本' : 'First version')}</small></div>
                 {generation.status === 'completed' && !currentVersion?.bestTake && <button type="button" className="canvas-best-take-button" onClick={() => markBestTake(generation.id)}>{zh ? '设为最佳镜头' : 'Set as Best Take'}</button>}
                 {shotVersions.length > 1 && <button type="button" className="canvas-compare-button" onClick={toggleCompare}>{zh ? '对比当前镜头版本' : 'Compare shot versions'}</button>}
+                {!['queued', 'processing'].includes(generation.status) && <button type="button" className="canvas-branch-button" disabled={!alternateModelDetails?.enabled} title={!alternateModelDetails?.enabled ? (zh ? `${modelName(alternateModel)} 尚未配置` : `${modelName(alternateModel)} is not configured`) : undefined} onClick={prepareAlternateModel}>{zh ? `用 ${modelName(alternateModel)} 再生成` : `Generate with ${modelName(alternateModel)}`}</button>}
                 <div className="canvas-result-actions"><button type="button" disabled={!generation.videoAssetId} onClick={() => void download()}>{zh ? '下载' : 'Download'}</button><button type="button" disabled={!generation.thumbnailAssetId} onClick={() => void continueWithResult()}>{zh ? '设为下一镜头 START' : 'Use as next START'}</button></div>{generation.thumbnailAssetId && <small>{zh ? '下一镜头将使用结果缩略帧作为 START。' : 'The next shot will use the result thumbnail as START.'}</small>}
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
@@ -1455,6 +1504,9 @@ export default function VideoCanvasStudio({
         <div className="canvas-compare-list">
           {shotVersions.map(({ version, generation: item }) => <article className={'canvas-compare-card ' + (generation?.id === version.generationId ? 'is-current' : '')} key={version.id}>
             <div className="canvas-compare-card-head"><b>V{version.number}</b>{version.bestTake && <strong>{zh ? '最佳镜头' : 'BEST TAKE'}</strong>}<span>{item ? statusLabel(item.status, zh) : (zh ? '历史任务' : 'History')}</span></div>
+            {item?.status === 'completed' && <div className="canvas-compare-preview" aria-label={zh ? `版本 V${version.number} 视频预览` : `Video preview for version V${version.number}`}>
+              {comparePreviewUrls[item.id] ? <video src={comparePreviewUrls[item.id]} controls playsInline preload="metadata" /> : <span>{comparePreviewLoading ? (zh ? '正在读取预览…' : 'Loading preview…') : comparePreviewError ? (zh ? '预览暂时不可用' : 'Preview unavailable') : (zh ? '等待视频地址…' : 'Waiting for video URL…')}</span>}
+            </div>}
             <p>{item?.prompt || (zh ? '历史任务详情将在载入后显示。' : 'Load this task to view its full prompt.')}</p>
             <small>{item ? `${modelName(item.model)} · ${item.duration} · ${formatHistoryTime(item.createdAt, zh)}` : version.generationId}</small>
             <div className="canvas-compare-card-actions">
