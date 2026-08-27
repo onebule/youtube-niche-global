@@ -37,9 +37,12 @@ type Persisted = { saved:Video[]; collections:Collection[]; ideas:Idea[]; tasks:
 type RankingData = {short:Video[];long:Video[];nextPageToken:string|null;loadedCount:number;dataScope:PublicRankingScope|null;emptyMessage:string|null};
 const defaultState:Persisted={saved:[],collections:initialCollections,ideas:initialIdeas,tasks:initialTasks,alerts:initialAlerts,rules:watchRules,tags:{}};
 const EMPTY_VIDEO_LIST:Video[]=[];
-const categoryOptions=[['all','全部类别'],['1','影视动画'],['2','汽车'],['15','宠物动物'],['17','体育'],['19','旅行'],['20','游戏'],['22','人物生活'],['23','喜剧'],['24','娱乐'],['25','新闻政治'],['26','生活技巧'],['27','教育'],['28','科技'],['29','公益']];
+// These categories are fixed out of scope. Keep them out of both the visible
+// filter and the client-side saved-data guard; the API enforces the same rule.
+const categoryOptions=[['all','全部类别'],['2','汽车'],['15','宠物动物'],['17','体育'],['19','旅行'],['22','人物生活'],['23','喜剧'],['25','新闻政治'],['26','生活技巧'],['27','教育'],['28','科技'],['29','公益']];
 const categoryLabel=(value:string)=>categoryOptions.find(([id])=>id===value)?.[1];
-const matchesContentScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>video.topic!=='音乐'&&!video.tags.includes('儿童内容')&&(filters.category==='all'||video.topic===categoryLabel(filters.category));
+const excludedTopics=new Set(['影视动画','音乐','游戏','娱乐']);
+const matchesContentScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>!excludedTopics.has(video.topic)&&!video.tags.includes('儿童内容')&&(filters.category==='all'||video.topic===categoryLabel(filters.category));
 const matchesRankingScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>{
   const subscribers=channelFor(video).subscribers;
   const views=video.snapshots.at(-1)?.views||0;
