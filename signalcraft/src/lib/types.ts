@@ -5,7 +5,7 @@ export interface User { id:string; name:string; email:string; role:Role; avatar?
 export interface Workspace { id:string; name:string; brandName:string; timezone:string }
 export interface Channel { id:string; title:string; handle:string; url?:string; thumbnail?:string; subscribers:number; language:string; region:string; medianViews:number; health:number; tags:string[]; owner:string; lastSync:string }
 export interface VideoSnapshot { capturedAt:string; views:number; likes:number; comments:number; subscribers?:number }
-export interface Video { id:string; channelId:string; title:string; topic:string; language:string; region:string; format:VideoFormat; formatConfidence?:'high'|'medium'|'low'; formatSignals?:string[]; publishedAt:string; durationSeconds:number; thumbnail:string; sourceUrl?:string; risk:'low'|'medium'|'high'; snapshots:VideoSnapshot[]; tags:string[]; }
+export interface Video { id:string; channelId:string; title:string; topic:string; language:string; region:string; format:VideoFormat; formatConfidence?:'high'|'medium'|'low'; formatSource?:string; formatVersion?:number; formatSignals?:string[]; publishedAt:string; durationSeconds:number; thumbnail:string; sourceUrl?:string; risk:'low'|'medium'|'high'; snapshots:VideoSnapshot[]; tags:string[]; }
 export interface Opportunity { videoId:string; opportunityScore:number; velocityScore:number; outlierScore:number; confidence:number; viewsPerHour:number; viewsPerSubscriber:number; growthRate:number; reasons:string[]; }
 export interface WatchRule { id:string; name:string; type:'频道'|'关键词'|'赛道'|'对标组'; threshold:number; frequency:string; channel:string; paused:boolean }
 export interface Alert { id:string; title:string; body:string; createdAt:string; read:boolean; sourceVideoId?:string }
