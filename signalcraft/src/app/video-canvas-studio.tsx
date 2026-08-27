@@ -2328,7 +2328,7 @@ export default function VideoCanvasStudio({
             {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? 'SHOT FLOW' : 'SHOT FLOW'}</span><b>{zh ? '素材 → Agent → 生成 → 结果' : 'Reference → Agent → Generate → Result'}</b></div>}
           </div>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">
-            {edges.map(edge => <g key={edge.id} className={edge.id.startsWith('custom-') ? 'custom-edge' : undefined}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
+            {edges.map(edge => <g key={edge.id} className={customEdges.some(customEdge => customEdge.id === edge.id) ? 'custom-edge' : undefined}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
           <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-highlighted-asset={highlightedAssetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>

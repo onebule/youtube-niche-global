@@ -162,7 +162,12 @@ export function normalizeCustomNodes(value: unknown): CanvasCustomNode[] {
     if (!item || typeof item !== 'object') return [];
     const candidate = item as Partial<CanvasCustomNode>;
     const baseId = String(candidate.id || `custom-${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 72);
-    const id = baseId && seenIds.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    let id = baseId;
+    let suffix = 1;
+    while (id && seenIds.has(id)) {
+      suffix += 1;
+      id = `${baseId}-${suffix}`.slice(0, 72);
+    }
     const parentId = String(candidate.parentId || 'result').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'result';
     if (!id) return [];
     seenIds.add(id);
