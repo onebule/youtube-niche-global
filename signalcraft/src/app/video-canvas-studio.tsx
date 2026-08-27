@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
+import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
   createCanvasSemantics,
   normalizeCanvasSemantics,
@@ -37,7 +38,7 @@ import {
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
 type NodeId = CanvasNodeId;
-type NodePositions = Record<NodeId, Point>;
+type NodePositions = CanvasNodePositions;
 type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type ReferenceMode = 'start-end' | 'omni';
 type SavedCanvas = {
@@ -249,6 +250,7 @@ export default function VideoCanvasStudio({
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
@@ -823,6 +825,7 @@ export default function VideoCanvasStudio({
 
   const startNodeDrag = (event: ReactPointerEvent<HTMLDivElement>, id: NodeId) => {
     event.stopPropagation();
+    setSelectedNodeId(id);
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { id, clientX: event.clientX, clientY: event.clientY, origin: nodes[id] };
   };
@@ -831,12 +834,9 @@ export default function VideoCanvasStudio({
     if (!drag) return;
     const dx = (event.clientX - drag.clientX) / viewport.scale;
     const dy = (event.clientY - drag.clientY) / viewport.scale;
-    setNodes(previous => ({
-      ...previous,
-      [drag.id]: {
-        x: clamp(drag.origin.x + dx, 0, STAGE_SIZE.width - nodeSize[drag.id].width),
-        y: clamp(drag.origin.y + dy, 0, STAGE_SIZE.height - nodeSize[drag.id].height),
-      },
+    setNodes(previous => CanvasCommandService.moveNode(previous, drag.id, {
+      x: clamp(drag.origin.x + dx, 0, STAGE_SIZE.width - nodeSize[drag.id].width),
+      y: clamp(drag.origin.y + dy, 0, STAGE_SIZE.height - nodeSize[drag.id].height),
     }));
   };
   const endNodeDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -853,12 +853,10 @@ export default function VideoCanvasStudio({
     if (!direction) return;
     event.preventDefault();
     const distance = event.shiftKey ? 48 : 16;
-    setNodes(previous => ({
-      ...previous,
-      [id]: {
-        x: clamp(previous[id].x + direction.x * distance, 0, STAGE_SIZE.width - nodeSize[id].width),
-        y: clamp(previous[id].y + direction.y * distance, 0, STAGE_SIZE.height - nodeSize[id].height),
-      },
+    setSelectedNodeId(id);
+    setNodes(previous => CanvasCommandService.moveNode(previous, id, {
+      x: clamp(previous[id].x + direction.x * distance, 0, STAGE_SIZE.width - nodeSize[id].width),
+      y: clamp(previous[id].y + direction.y * distance, 0, STAGE_SIZE.height - nodeSize[id].height),
     }));
   };
 
@@ -874,14 +872,14 @@ export default function VideoCanvasStudio({
     const dy = (event.clientY - drag.clientY) / viewport.scale;
     const ids: NodeId[] = ['source', 'agent', 'task', 'result'];
     setNodes(previous => {
-      const next = { ...previous };
+      const next: Partial<NodePositions> = {};
       ids.forEach(id => {
         next[id] = {
           x: clamp(drag.origin[id].x + dx, 0, STAGE_SIZE.width - nodeSize[id].width),
           y: clamp(drag.origin[id].y + dy, 0, STAGE_SIZE.height - nodeSize[id].height),
         };
       });
-      return next;
+      return CanvasCommandService.moveNodes(previous, next);
     });
   };
   const endShotDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -990,7 +988,7 @@ export default function VideoCanvasStudio({
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
       <div><span>AI STUDIO · SHOT CANVAS</span><h1>{zh ? '把镜头思路铺开，再交给模型。' : 'Lay out the shot before handing it to the model.'}</h1><p>{zh ? '拖拽节点组织一次图生视频任务；底层仍复用现有 Provider、异步任务、积分和媒体存储。' : 'Arrange one image-to-video task with draggable nodes while reusing the existing providers, task lifecycle, credits, and storage.'}</p></div>
-      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(INITIAL_NODES); setViewport(INITIAL_VIEWPORT); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
+      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={() => { setNodes(previous => CanvasCommandService.resetLayout(previous, INITIAL_NODES)); setViewport(INITIAL_VIEWPORT); setSelectedNodeId(null); }}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
     </header>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
@@ -1045,8 +1043,8 @@ export default function VideoCanvasStudio({
             {edges.map(edge => <g key={edge.id}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
-          <article className="video-canvas-node source-node" data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-status={canvasSemantics.nodes.source?.status} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
+          <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'start-end' ? <>
                 <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
@@ -1063,9 +1061,9 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node agent-node" data-canvas-node="agent" data-canvas-role={canvasSemantics.nodes.agent?.role} data-shot-id={canvasSemantics.nodes.agent?.shotId} data-generation-id={canvasSemantics.nodes.agent?.generationId || undefined} data-status={canvasSemantics.nodes.agent?.status} style={{ left: nodes.agent.x, top: nodes.agent.y, width: nodeSize.agent.width, minHeight: nodeSize.agent.height }}>
+          <article className={'video-canvas-node agent-node ' + (selectedNodeId === 'agent' ? 'is-selected' : '')} data-canvas-node="agent" data-canvas-role={canvasSemantics.nodes.agent?.role} data-shot-id={canvasSemantics.nodes.agent?.shotId} data-generation-id={canvasSemantics.nodes.agent?.generationId || undefined} data-status={canvasSemantics.nodes.agent?.status} data-selected={selectedNodeId === 'agent' ? 'true' : undefined} onClick={() => setSelectedNodeId('agent')} style={{ left: nodes.agent.x, top: nodes.agent.y, width: nodeSize.agent.width, minHeight: nodeSize.agent.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'Agent 导演节点。拖动，或使用方向键移动。' : 'Agent director node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'Agent 导演节点。拖动，或使用方向键移动。' : 'Agent director node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('agent')} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
               {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `References: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}{typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
@@ -1075,9 +1073,9 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node task-node" data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-status={canvasSemantics.nodes.task?.status} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
+          <article className={'video-canvas-node task-node ' + (selectedNodeId === 'task' ? 'is-selected' : '')} data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-status={canvasSemantics.nodes.task?.status} data-selected={selectedNodeId === 'task' ? 'true' : undefined} onClick={() => setSelectedNodeId('task')} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => setPreferencesOpen(true)}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
@@ -1089,9 +1087,9 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className="video-canvas-node result-node" data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-status={canvasSemantics.nodes.result?.status} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
+          <article className={'video-canvas-node result-node ' + (selectedNodeId === 'result' ? 'is-selected' : '')} data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-status={canvasSemantics.nodes.result?.status} data-selected={selectedNodeId === 'result' ? 'true' : undefined} onClick={() => setSelectedNodeId('result')} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('result')} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
                 <div className={'canvas-status ' + generation.status}><b>{statusLabel(generation.status, zh)}</b><span>{generation.progress}%</span></div>
