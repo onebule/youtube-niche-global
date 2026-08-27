@@ -955,6 +955,42 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const createNextShot = (duplicate = false) => {
+    const nextShot = shot + 1;
+    const nextSemantics = createCanvasSemantics(nextShot);
+    nextSemantics.assets = canvasSemantics.assets
+      .filter(asset => asset.role !== 'output')
+      .map(asset => ({ ...asset, shotId: nextSemantics.shot.id }));
+    nextSemantics.generations = canvasSemantics.generations;
+    nextSemantics.versions = canvasSemantics.versions;
+    if (duplicate) {
+      const primaryAssetId = referenceMode === 'omni' ? referenceFrames[0]?.assetId : startFrame?.assetId;
+      setCanvasSemantics(patchCanvasNode(nextSemantics, 'source', {
+        role: 'reference',
+        assetId: primaryAssetId || null,
+        status: 'draft',
+      }));
+      setReferenceFrames(previous => previous.map(frame => ({ ...frame })));
+      setStartFrame(previous => previous ? { ...previous } : null);
+      setEndFrame(previous => previous ? { ...previous } : null);
+      notify(zh ? `已复制镜头 ${String(shot).padStart(2, '0')}，创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} duplicated as shot ${String(nextShot).padStart(2, '0')}.`);
+    } else {
+      setCanvasSemantics(nextSemantics);
+      setReferenceMode('start-end');
+      setReferenceFrames([]);
+      setStartFrame(null);
+      setEndFrame(null);
+      setPrompt('');
+      notify(zh ? `已创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(nextShot).padStart(2, '0')} created.`);
+    }
+    setGeneration(null);
+    setRestoredGenerationId(null);
+    setVideoUrl('');
+    setShot(nextShot);
+    setSelectedNodeId(null);
+    setHistoryOpen(false);
+  };
+
   const toggleShotCollapsed = () => {
     setCanvasSemantics(previous => patchCanvasShot(previous, { collapsed: !previous.shot.collapsed }));
   };
@@ -1041,7 +1077,11 @@ export default function VideoCanvasStudio({
               <span className="canvas-shot-container-index">{String(canvasSemantics.shot.index).padStart(2, '0')}</span>
               <div><b>{zh ? '当前镜头' : 'Current shot'}</b><small>{canvasSemantics.shot.title}</small></div>
               <span className={'canvas-shot-container-status ' + canvasSemantics.shot.status}><i />{canvasSemantics.shot.status === 'generating' ? (zh ? '生成中' : 'Generating') : canvasSemantics.shot.status === 'completed' ? (zh ? '已完成' : 'Completed') : canvasSemantics.shot.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft')}</span>
-              <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
+              <div className="canvas-shot-container-actions">
+                <button type="button" className="canvas-shot-container-action" onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(true)}>{zh ? '复制' : 'Duplicate'}</button>
+                <button type="button" className="canvas-shot-container-action" onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(false)}>{zh ? '+ 新镜头' : '+ New shot'}</button>
+                <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
+              </div>
             </div>
             {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? 'SHOT FLOW' : 'SHOT FLOW'}</span><b>{zh ? '素材 → Agent → 生成 → 结果' : 'Reference → Agent → Generate → Result'}</b></div>}
           </div>

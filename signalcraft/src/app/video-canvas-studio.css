@@ -5239,7 +5239,15 @@
   background: var(--canvas-danger-soft);
 }
 
-.canvas-shot-container-head > button {
+.canvas-shot-container-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  pointer-events: auto;
+}
+
+.canvas-shot-container-actions > button {
   min-height: 28px;
   padding: 0 9px;
   border: 1px solid var(--canvas-line-soft);
@@ -5251,11 +5259,24 @@
   pointer-events: auto;
 }
 
-.canvas-shot-container-head > button:hover,
-.canvas-shot-container-head > button:focus-visible {
+.canvas-shot-container-action {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--canvas-muted) !important;
+}
+
+.canvas-shot-container-actions > button:hover,
+.canvas-shot-container-actions > button:focus-visible {
   border-color: var(--canvas-danger);
   outline: none;
   color: var(--canvas-danger);
+}
+
+.canvas-shot-container-action:hover,
+.canvas-shot-container-action:focus-visible {
+  background: var(--canvas-danger-soft) !important;
+  border-color: #f0b7b0 !important;
+  color: var(--canvas-danger) !important;
 }
 
 .canvas-shot-container-flow {
