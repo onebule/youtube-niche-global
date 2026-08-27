@@ -102,6 +102,14 @@ const CONNECTIONS: Array<[NodeId, NodeId]> = [
 ];
 
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
+  source: zh ? '镜头边界' : 'Shot boundary',
+  prompt: 'Motion Prompt',
+  model: zh ? '模型设置' : 'Model settings',
+  agent: zh ? 'Agent 导演' : 'Agent director',
+  task: zh ? '视频生成' : 'Video generation',
+  result: zh ? '视频结果' : 'Video result',
+}[nodeId]);
 const ASPECT_RATIO_OPTIONS: Array<{ value: '9:16' | '16:9' | '1:1'; label: string; className: string }> = [
   { value: '9:16', label: '9:16', className: 'is-portrait' },
   { value: '16:9', label: '16:9', className: 'is-landscape' },
@@ -1290,6 +1298,7 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
               {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `References: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}{typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
+              <small className="canvas-agent-context" aria-live="polite">{selectedNodeId ? (zh ? `已带入选中节点：${canvasNodeName(selectedNodeId, zh)}` : `Selected node included: ${canvasNodeName(selectedNodeId, zh)}`) : (zh ? '当前镜头上下文会随规划一并发送' : 'Current shot context will be included with the plan')}</small>
               <button type="button" className="canvas-agent-plan-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? '根据 Prompt 规划' : 'Plan from prompt') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}
             </div>
