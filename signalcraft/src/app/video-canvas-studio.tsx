@@ -1015,6 +1015,10 @@ export default function VideoCanvasStudio({
         if (restoredGenerationId && !generation) {
           const next = await refreshVideoGeneration(restoredGenerationId);
           if (!cancelled) {
+            // A user may switch shots while this refresh is in flight. Do not
+            // let a late response for the previous history item replace the
+            // currently selected task.
+            if (generationContextRef.current && generationContextRef.current.id !== restoredGenerationId) return;
             const activeNext = setActiveGeneration(next);
             if (activeNext) rememberGeneration(activeNext);
           }
@@ -1034,7 +1038,7 @@ export default function VideoCanvasStudio({
     const poll = async () => {
       try {
         const next = await refreshVideoGeneration(generationId);
-        if (cancelled) return;
+        if (cancelled || generationContextRef.current?.id !== generationId) return;
         const activeNext = setActiveGeneration(next);
         if (activeNext) rememberGeneration(activeNext);
         if (['queued', 'processing'].includes(next.status)) timer = window.setTimeout(() => { void poll(); }, 4500);
