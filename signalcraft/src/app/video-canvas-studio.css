@@ -6119,3 +6119,153 @@
   font-size: 10px;
   line-height: 1.4;
 }
+
+/* Compact, inspectable planning trace inside the Agent node. It is intentionally
+   denser than the composer so the canvas stays readable at normal zoom. */
+.canvas-agent-explainability {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 6px;
+  padding: 8px;
+  border: 1px solid var(--canvas-line-soft, #d9dce1);
+  border-radius: 9px;
+  background: #fbfaf7;
+}
+
+.canvas-agent-explainability-head,
+.canvas-agent-plan-facts,
+.canvas-agent-reference-row,
+.canvas-agent-event-log > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.canvas-agent-explainability-head {
+  justify-content: space-between;
+}
+
+.canvas-agent-explainability-head span,
+.canvas-agent-reference-list > small,
+.canvas-agent-corrections > small,
+.canvas-agent-event-log > small {
+  color: var(--canvas-muted, #737980);
+  font: 900 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.canvas-agent-explainability-head b {
+  color: var(--canvas-purple, #5f4ee7);
+  font-size: 9px;
+}
+
+.canvas-agent-plan-facts {
+  flex-wrap: wrap;
+}
+
+.canvas-agent-plan-facts span {
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: #f0eefb;
+  color: #44339e;
+  font-size: 9px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-agent-reference-list,
+.canvas-agent-corrections,
+.canvas-agent-event-log {
+  display: grid;
+  gap: 4px;
+}
+
+.canvas-agent-reference-row {
+  padding: 4px 5px;
+  border-radius: 5px;
+  background: #f2f3f3;
+  font-size: 9px;
+}
+
+.canvas-agent-reference-row b {
+  color: var(--canvas-line, #1f2328);
+  font-weight: 850;
+}
+
+.canvas-agent-reference-row span {
+  color: var(--canvas-muted, #737980);
+}
+
+.canvas-agent-reference-row em {
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.canvas-agent-reference-row em.strong {
+  background: #ffe7e1;
+  color: var(--canvas-danger, #dd5048);
+}
+
+.canvas-agent-reference-row em.weak {
+  background: #e8f4ef;
+  color: #147b56;
+}
+
+.canvas-agent-reference-row code {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--canvas-muted, #737980);
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-agent-corrections span {
+  color: #80651c;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.canvas-agent-confirmation {
+  color: var(--canvas-muted, #737980);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.canvas-agent-event-log {
+  padding-top: 6px;
+  border-top: 1px dashed var(--canvas-line-soft, #d9dce1);
+}
+
+.canvas-agent-event-log > div {
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.canvas-agent-event-log i {
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--canvas-danger, #dd5048);
+  font-style: normal;
+  text-align: center;
+}
+
+.canvas-agent-event-log span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--canvas-line, #1f2328);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-agent-event-log time {
+  margin-left: auto;
+  color: var(--canvas-muted, #737980);
+  font-size: 8px;
+  white-space: nowrap;
+}

@@ -13,6 +13,19 @@ export type CanvasAssetReferenceStatus = 'valid' | 'invalid';
 export type CanvasNodeStatus = 'draft' | GenerationStatus;
 export type CanvasShotStatus = 'draft' | 'generating' | 'completed' | 'failed';
 export type CanvasEdgeType = 'INPUT' | 'REFERENCE' | 'CONTINUITY' | 'VARIATION' | 'GENERATION' | 'SHOT_FLOW';
+export type CanvasEventType = 'asset.bound' | 'asset.invalidated' | 'agent.planned' | 'generation.status';
+export type CanvasEventActor = 'user' | 'agent' | 'system';
+export type CanvasEventMetadata = Record<string, string | number | boolean | null>;
+
+export type CanvasEventSemantic = {
+  id: string;
+  shotId: string;
+  type: CanvasEventType;
+  actor: CanvasEventActor;
+  message: string;
+  createdAt: string;
+  metadata: CanvasEventMetadata;
+};
 
 export type CanvasNodeSemantic = {
   role: CanvasNodeRole;
@@ -115,6 +128,7 @@ export type CanvasSemantics = {
   references: CanvasAssetReference[];
   generations: CanvasGenerationSemantic[];
   versions: CanvasVersionSemantic[];
+  events: CanvasEventSemantic[];
 };
 
 /**
@@ -132,6 +146,7 @@ export type CanvasAgentContext = {
   references: CanvasSemantics['references'];
   generations: CanvasSemantics['generations'];
   versions: CanvasSemantics['versions'];
+  events: CanvasSemantics['events'];
   input: {
     prompt: string;
     model: VideoModelId;
@@ -160,6 +175,8 @@ const ASSET_ROLES: CanvasAssetRole[] = ['generic', 'start_frame', 'end_frame', '
 const NODE_STATUSES: CanvasNodeStatus[] = ['draft', 'queued', 'processing', 'completed', 'failed'];
 const SHOT_STATUSES: CanvasShotStatus[] = ['draft', 'generating', 'completed', 'failed'];
 const EDGE_TYPES: CanvasEdgeType[] = ['INPUT', 'REFERENCE', 'CONTINUITY', 'VARIATION', 'GENERATION', 'SHOT_FLOW'];
+const EVENT_TYPES: CanvasEventType[] = ['asset.bound', 'asset.invalidated', 'agent.planned', 'generation.status'];
+const EVENT_ACTORS: CanvasEventActor[] = ['user', 'agent', 'system'];
 const VIDEO_MODELS: VideoModelId[] = ['auto', 'seedance-2', 'seedance-2-5', 'minimax-h3'];
 const MAX_SEMANTIC_ROWS = 100;
 
@@ -214,6 +231,7 @@ export function createCanvasSemantics(shotIndex = 1): CanvasSemantics {
     references: [],
     generations: [],
     versions: [],
+    events: [],
   };
 }
 
@@ -413,6 +431,32 @@ function normalizeVersion(value: unknown, shotId: string): CanvasVersionSemantic
   };
 }
 
+function normalizeEvent(value: unknown, shotId: string): CanvasEventSemantic | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<CanvasEventSemantic>;
+  const id = text(candidate.id, '', 240);
+  if (!id) return null;
+  const rawMetadata = candidate.metadata && typeof candidate.metadata === 'object'
+    ? candidate.metadata as Record<string, unknown>
+    : {};
+  const metadata = Object.entries(rawMetadata).slice(0, 16).reduce<CanvasEventMetadata>((result, [key, rawValue]) => {
+    const normalizedKey = text(key, '', 80);
+    if (!normalizedKey) return result;
+    if (rawValue === null || typeof rawValue === 'string' || typeof rawValue === 'boolean') result[normalizedKey] = rawValue;
+    else if (typeof rawValue === 'number' && Number.isFinite(rawValue)) result[normalizedKey] = rawValue;
+    return result;
+  }, {});
+  return {
+    id,
+    shotId: text(candidate.shotId, shotId, 120),
+    type: oneOf(candidate.type, EVENT_TYPES, 'generation.status'),
+    actor: oneOf(candidate.actor, EVENT_ACTORS, 'system'),
+    message: text(candidate.message, '', 240),
+    createdAt: text(candidate.createdAt, new Date(0).toISOString(), 80),
+    metadata,
+  };
+}
+
 /** Safely upgrades v1–v3 local snapshots into the semantic v1 shape. */
 export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasSemantics {
   const fallback = createCanvasSemantics(shotIndex);
@@ -439,6 +483,9 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
   const references = Array.isArray(candidate.references)
     ? candidate.references.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeReference(item, shotId, assets)).filter((item): item is CanvasAssetReference => Boolean(item))
     : [];
+  const events = Array.isArray(candidate.events)
+    ? candidate.events.slice(-MAX_SEMANTIC_ROWS).map(item => normalizeEvent(item, shotId)).filter((item): item is CanvasEventSemantic => Boolean(item))
+    : [];
   return {
     version: 1,
     shot: {
@@ -455,7 +502,28 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
     references,
     generations: Array.isArray(candidate.generations) ? candidate.generations.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeGeneration(item, shotId)).filter((item): item is CanvasGenerationSemantic => Boolean(item)) : [],
     versions: Array.isArray(candidate.versions) ? candidate.versions.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeVersion(item, shotId)).filter((item): item is CanvasVersionSemantic => Boolean(item)) : [],
+    events,
   };
+}
+
+export type CanvasEventInput = Omit<CanvasEventSemantic, 'shotId' | 'createdAt' | 'metadata'> & {
+  shotId?: string | null;
+  createdAt?: string | null;
+  metadata?: CanvasEventMetadata;
+};
+
+/** Appends a small, idempotent audit event to the local Shot semantics. */
+export function recordCanvasEvent(semantics: CanvasSemantics, input: CanvasEventInput): CanvasSemantics {
+  const id = text(input.id, '', 240);
+  if (!id || semantics.events.some(event => event.id === id)) return semantics;
+  const event = normalizeEvent({
+    ...input,
+    id,
+    shotId: input.shotId || semantics.shot.id,
+    createdAt: input.createdAt || new Date().toISOString(),
+  }, semantics.shot.id);
+  if (!event) return semantics;
+  return { ...semantics, events: [...semantics.events, event].slice(-MAX_SEMANTIC_ROWS) };
 }
 
 export function patchCanvasNode(semantics: CanvasSemantics, nodeId: CanvasNodeId, patch: Partial<CanvasNodeSemantic>): CanvasSemantics {

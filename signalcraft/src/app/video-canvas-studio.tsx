@@ -33,11 +33,13 @@ import {
   patchCanvasNode,
   patchCanvasShot,
   recordCanvasGeneration,
+  recordCanvasEvent,
   registerCanvasAsset,
   selectCanvasBestTake,
   validateCanvasAssetMentions,
   type CanvasAgentAction,
   type CanvasAssetRole,
+  type CanvasEventSemantic,
   type CanvasNodeId,
   type CanvasSemantics,
 } from '@/src/lib/canvas-domain';
@@ -143,6 +145,33 @@ const statusLabel = (status: VideoGeneration['status'], zh: boolean, errorCode?:
   failed: zh ? '失败' : 'Failed',
   }[status]);
 };
+
+function canvasEventLabel(event: CanvasEventSemantic, zh: boolean) {
+  if (event.type === 'asset.bound') return zh ? '已绑定素材引用' : 'Asset reference bound';
+  if (event.type === 'asset.invalidated') return zh ? '素材引用已失效' : 'Asset reference invalidated';
+  if (event.type === 'agent.planned') return zh ? 'Agent 已完成规划' : 'Agent plan completed';
+  const status = event.metadata.status;
+  if (status === 'queued' || status === 'processing' || status === 'completed' || status === 'failed') return statusLabel(status, zh);
+  return zh ? '生成状态已更新' : 'Generation status updated';
+}
+
+function canvasReferenceRoleLabel(role: CanvasAssetRole, zh: boolean) {
+  const labels: Record<CanvasAssetRole, string> = {
+    generic: zh ? '素材' : 'Asset',
+    start_frame: 'START',
+    end_frame: 'END',
+    reference: zh ? '参考' : 'Reference',
+    output: zh ? '输出' : 'Output',
+    character: zh ? '人物' : 'Character',
+    motion: zh ? '动作' : 'Motion',
+    style: zh ? '风格' : 'Style',
+    scene: zh ? '场景' : 'Scene',
+    prop: zh ? '道具' : 'Prop',
+    script: zh ? '脚本' : 'Script',
+    storyboard: zh ? '分镜' : 'Storyboard',
+  };
+  return labels[role];
+}
 
 function formatHistoryTime(value: string, zh: boolean) {
   const date = new Date(value);
@@ -387,6 +416,13 @@ export default function VideoCanvasStudio({
   const effectiveAccess = account ? access : 'signed-out';
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
   const assetMentionValidation = useMemo(() => validateCanvasAssetMentions(canvasSemantics, prompt), [canvasSemantics, prompt]);
+  const activeReferenceBindings = useMemo(() => canvasSemantics.references
+    .filter(reference => reference.shotId === canvasSemantics.shot.id)
+    .slice(-9), [canvasSemantics.references, canvasSemantics.shot.id]);
+  const recentCanvasEvents = useMemo(() => canvasSemantics.events
+    .filter(event => event.shotId === canvasSemantics.shot.id)
+    .slice(-5)
+    .reverse(), [canvasSemantics.events, canvasSemantics.shot.id]);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
   const preflight = useMemo(() => preflightVideoGeneration({
     language: zh ? 'zh' : 'en',
@@ -551,7 +587,17 @@ export default function VideoCanvasStudio({
       const merged = [next, ...previous.filter(item => item.id !== next.id)];
       return merged.toSorted((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
     });
-    setCanvasSemantics(previous => recordCanvasGeneration(previous, next));
+    setCanvasSemantics(previous => recordCanvasEvent(recordCanvasGeneration(previous, next), {
+      id: `generation-status-${next.id}-${next.status}`,
+      type: 'generation.status',
+      actor: 'system',
+      message: next.status,
+      metadata: {
+        generationId: next.id,
+        status: next.status,
+        progress: Math.round(Number(next.progress) || 0),
+      },
+    }));
   }, []);
 
   const patchSemanticNode = useCallback((nodeId: NodeId, patch: Parameters<typeof patchCanvasNode>[2]) => {
@@ -567,6 +613,17 @@ export default function VideoCanvasStudio({
       name: frame.name,
       width: frame.width,
       height: frame.height,
+    }));
+  }, []);
+
+  const retireAsset = useCallback((assetId: string | null | undefined) => {
+    if (!assetId) return;
+    setCanvasSemantics(previous => recordCanvasEvent(markCanvasAssetUnavailable(previous, assetId), {
+      id: `asset-invalidated-${assetId}`,
+      type: 'asset.invalidated',
+      actor: 'user',
+      message: 'reference-invalidated',
+      metadata: { assetId },
     }));
   }, []);
 
@@ -917,12 +974,12 @@ export default function VideoCanvasStudio({
     try {
       const next = await uploadFrame(file);
       if (slot === 'start') {
-        if (startFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, startFrame.assetId));
+        if (startFrame) retireAsset(startFrame.assetId);
         setStartFrame(next);
         rememberImageAsset(next, 'start_frame');
         patchSemanticNode('source', { role: 'reference', assetId: next.assetId, status: 'draft' });
       } else {
-        if (endFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, endFrame.assetId));
+        if (endFrame) retireAsset(endFrame.assetId);
         setEndFrame(next);
         rememberImageAsset(next, 'end_frame');
         patchSemanticNode('source', { role: 'reference', assetId: next.assetId, status: 'draft' });
@@ -974,7 +1031,7 @@ export default function VideoCanvasStudio({
   const removeReference = (index: number) => {
     const target = referenceFrames[index];
     if (target) {
-      setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, target.assetId));
+      retireAsset(target.assetId);
       if (highlightedAssetId === target.assetId) setHighlightedAssetId(null);
     }
     setReferenceFrames(current => {
@@ -988,13 +1045,19 @@ export default function VideoCanvasStudio({
     if (!frame) return;
     const mentionIndex = frameReferenceIndex(frame, index);
     const mention = zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`;
-    setCanvasSemantics(previous => bindCanvasAssetReference(previous, {
+    setCanvasSemantics(previous => recordCanvasEvent(bindCanvasAssetReference(previous, {
       token: mention,
       assetId: frame.assetId,
       role: index === 0 ? 'start_frame' : 'reference',
       priority: Math.max(10, 100 - index * 10),
       strength: index === 0 ? 'strong' : 'weak',
       required: index === 0,
+    }), {
+      id: `asset-bound-${frame.assetId}-${mentionIndex}`,
+      type: 'asset.bound',
+      actor: 'user',
+      message: 'reference-bound',
+      metadata: { assetId: frame.assetId, mentionId: `image:${mentionIndex}`, role: index === 0 ? 'start_frame' : 'reference' },
     }));
     setSelectedNodeId('source');
     setHighlightedAssetId(frame.assetId);
@@ -1059,6 +1122,19 @@ export default function VideoCanvasStudio({
       if (next.aspectRatio) setAspectRatio(next.aspectRatio);
       setResolution(next.resolution);
       patchSemanticNode('agent', { role: 'agent', status: 'completed', model: next.model, provider: next.director.provider || null });
+      setCanvasSemantics(previous => recordCanvasEvent(previous, {
+        id: `agent-planned-${previous.shot.id}-${Date.now()}`,
+        type: 'agent.planned',
+        actor: 'agent',
+        message: next.agentFallback ? 'rules-fallback' : 'agent-plan',
+        metadata: {
+          model: next.model,
+          director: next.director.id,
+          confidence: typeof next.confidence === 'number' ? next.confidence : null,
+          referenceCount: next.referenceCount,
+          warningCount: next.warnings.length,
+        },
+      }));
       notify(zh ? `Agent 已完成规划：${next.modelLabel}。请确认后再生成。` : `Agent selected ${next.modelLabel}. Review the plan before generating.`);
     } catch (cause) {
       setError(clientMessage(cause));
@@ -1579,8 +1655,8 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'start-end' ? <>
-                <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { if (startFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, startFrame.assetId)); setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
-                <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => { if (endFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, endFrame.assetId)); setEndFrame(null); if (!startFrame) patchSemanticNode('source', { assetId: null }); }} />
+                <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { retireAsset(startFrame?.assetId); setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
+                <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => { retireAsset(endFrame?.assetId); setEndFrame(null); if (!startFrame) patchSemanticNode('source', { assetId: null }); }} />
               </> : <div className="canvas-omni-node">
                 <div className="canvas-omni-node-head"><b>{zh ? '全能参考' : 'Omni reference'}</b><span>{referenceFrames.length}/9</span></div>
                 <div className="canvas-omni-grid">
@@ -1602,7 +1678,29 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'Agent 导演节点。拖动，或使用方向键移动。' : 'Agent director node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('agent')} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
-              {agentPlan ? <><strong>{agentPlan.modelLabel}</strong><p>{agentPlan.reasoning}</p>{agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `References: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}{typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}{agentPlan.warnings.slice(0, 1).map(warning => <small key={warning} className="canvas-agent-warning">{warning}</small>)}</> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
+              {agentPlan ? <>
+                <strong>{agentPlan.modelLabel}</strong>
+                <p>{agentPlan.reasoning}</p>
+                <div className="canvas-agent-explainability" aria-label={zh ? 'Agent 规划说明' : 'Agent plan explanation'}>
+                  <div className="canvas-agent-explainability-head"><span>{zh ? '规划依据' : 'PLAN TRACE'}</span><b>{model === 'auto' ? (zh ? '自动模式' : 'Auto mode') : (zh ? '模型已锁定' : 'Model locked')}</b></div>
+                  <div className="canvas-agent-plan-facts">
+                    <span>{zh ? `时长 ${agentPlan.duration}` : `Duration ${agentPlan.duration}`}</span>
+                    <span>{agentPlan.aspectRatio || aspectRatio}</span>
+                    <span>{agentPlan.resolution}</span>
+                  </div>
+                  {activeReferenceBindings.length > 0 && <div className="canvas-agent-reference-list">
+                    <small>{zh ? '素材绑定' : 'Bound assets'}</small>
+                    {activeReferenceBindings.map(reference => <div className="canvas-agent-reference-row" key={`${reference.mentionId}-${reference.assetId}`}>
+                      <b>{reference.token}</b><span>{canvasReferenceRoleLabel(reference.role, zh)}</span><em className={reference.strength}>{reference.strength === 'strong' ? (zh ? '强约束' : 'Strong') : (zh ? '弱参考' : 'Weak')}</em><code>{reference.assetId.slice(0, 14)}…</code>
+                    </div>)}
+                  </div>}
+                  {agentPlan.warnings.length > 0 && <div className="canvas-agent-corrections"><small>{zh ? '校正 / 风险' : 'Corrections / risks'}</small>{agentPlan.warnings.slice(0, 2).map(warning => <span key={warning}>{warning}</span>)}</div>}
+                  <small className="canvas-agent-confirmation">{zh ? '规划只读，需你确认后才会提交付费生成任务。' : 'Planning is read-only. Confirm before submitting a paid generation task.'}</small>
+                </div>
+                {agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small className="canvas-agent-confidence">{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => item.role).join(' · ')}`}</small>}
+                {typeof agentPlan.confidence === 'number' && <small className="canvas-agent-confidence">{zh ? `规划置信度 ${Math.round(agentPlan.confidence * 100)}%` : `${Math.round(agentPlan.confidence * 100)}% planning confidence`}</small>}
+                {recentCanvasEvents.length > 0 && <div className="canvas-agent-event-log"><small>{zh ? '最近事件' : 'Recent events'}</small>{recentCanvasEvents.slice(0, 3).map(event => <div key={event.id}><i>{event.actor === 'agent' ? '✦' : '•'}</i><span>{canvasEventLabel(event, zh)}</span><time>{formatHistoryTime(event.createdAt, zh)}</time></div>)}</div>}
+              </> : <p>{zh ? '理解 Prompt 和参考图，选择 H3 或 Seedance，再交给异步任务。' : 'Read the prompt and references, choose H3 or Seedance, then hand off to the async task.'}</p>}
               <small className="canvas-agent-context" aria-live="polite">{selectedNodeId ? (zh ? `已带入选中节点：${canvasNodeName(selectedNodeId, zh)}` : `Selected node included: ${canvasNodeName(selectedNodeId, zh)}`) : (zh ? '当前镜头上下文会随规划一并发送' : 'Current shot context will be included with the plan')}</small>
               <button type="button" className="canvas-agent-plan-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? '根据 Prompt 规划' : 'Plan from prompt') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
               {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}

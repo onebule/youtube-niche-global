@@ -74,6 +74,7 @@ export function createCanvasAgentContext(snapshot: ShotSnapshot, selectedNodeId:
     references: snapshot.semantics.references.slice(-24),
     generations: snapshot.semantics.generations.slice(-24),
     versions: snapshot.semantics.versions.slice(-24),
+    events: snapshot.semantics.events.slice(-24),
     input: {
       prompt: snapshot.prompt.slice(0, 1200),
       model: snapshot.model,
