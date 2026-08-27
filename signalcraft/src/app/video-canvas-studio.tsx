@@ -1016,6 +1016,10 @@ export default function VideoCanvasStudio({
         onPointerUp={endPan}
         onPointerCancel={endPan}
         onWheel={wheel}
+        onClick={event => {
+          const target = event.target as HTMLElement;
+          if (!target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) setSelectedNodeId(null);
+        }}
       >
         <div className="video-canvas-toolbar" aria-label={zh ? '画布缩放' : 'Canvas zoom'}>
           <button type="button" onClick={() => zoomAt(viewport.scale / 1.12)} aria-label={zh ? '缩小' : 'Zoom out'}>−</button>
