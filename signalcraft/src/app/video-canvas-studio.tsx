@@ -118,6 +118,19 @@ const CONNECTIONS: Array<[NodeId, NodeId]> = [
 ];
 
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGeneration) => {
+  if (!previous || previous.id !== next.id) return next;
+  return {
+    ...next,
+    generationSpec: next.generationSpec ?? previous.generationSpec ?? null,
+    generationGroupId: next.generationGroupId ?? previous.generationGroupId ?? null,
+    shotId: next.shotId ?? previous.shotId ?? null,
+    shotOrder: next.shotOrder ?? previous.shotOrder ?? null,
+    characterSetId: next.characterSetId ?? previous.characterSetId ?? null,
+    sceneSetId: next.sceneSetId ?? previous.sceneSetId ?? null,
+    continuityFromShotId: next.continuityFromShotId ?? previous.continuityFromShotId ?? null,
+  };
+};
 const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
   source: zh ? '镜头边界' : 'Shot boundary',
   prompt: 'Motion Prompt',
@@ -384,8 +397,16 @@ export default function VideoCanvasStudio({
   // routing or billing. A fresh browser session intentionally starts a fresh
   // generation group.
   const generationGroupIdRef = useRef<string | null>(null);
+  const generationContextRef = useRef<VideoGeneration | null>(null);
   const historyRestoreRequestRef = useRef(0);
   const fullscreenFallbackRef = useRef(false);
+
+  const setActiveGeneration = useCallback((next: VideoGeneration | null) => {
+    const resolved = next ? mergeGenerationContext(generationContextRef.current, next) : null;
+    generationContextRef.current = resolved;
+    setGeneration(resolved);
+    return resolved;
+  }, []);
 
   const captureCurrentShot = () : ShotSnapshot => ({
     shot,
@@ -417,7 +438,7 @@ export default function VideoCanvasStudio({
     setEndFrame(cloneFrame(snapshot.endFrame));
     setReferenceMode(snapshot.referenceMode);
     setReferenceFrames(snapshot.referenceFrames.map(frame => ({ ...frame })));
-    setGeneration(snapshot.generation);
+    setActiveGeneration(snapshot.generation);
     setCancelling(false);
     setRestoredGenerationId(snapshot.restoredGenerationId);
     setVideoUrl(snapshot.videoUrl);
@@ -736,9 +757,9 @@ export default function VideoCanvasStudio({
 
   const restoreHistoryItem = async (item: VideoGeneration) => {
     const requestId = ++historyRestoreRequestRef.current;
-    setGeneration(item);
+    const activeItem = setActiveGeneration(item);
     setCancelling(false);
-    rememberGeneration(item);
+    if (activeItem) rememberGeneration(activeItem);
     setRestoredGenerationId(item.id);
     setPrompt(item.prompt);
     setModel(item.model);
@@ -994,8 +1015,8 @@ export default function VideoCanvasStudio({
         if (restoredGenerationId && !generation) {
           const next = await refreshVideoGeneration(restoredGenerationId);
           if (!cancelled) {
-            setGeneration(next);
-            rememberGeneration(next);
+            const activeNext = setActiveGeneration(next);
+            if (activeNext) rememberGeneration(activeNext);
           }
         }
       } catch (cause) {
@@ -1004,7 +1025,7 @@ export default function VideoCanvasStudio({
     };
     void restore();
     return () => { cancelled = true; };
-  }, [effectiveAccess, endFrame, generation, referenceFrames, rememberGeneration, restoredGenerationId, startFrame]);
+  }, [effectiveAccess, endFrame, generation, referenceFrames, rememberGeneration, restoredGenerationId, setActiveGeneration, startFrame]);
 
   useEffect(() => {
     if (!generationId || !generationStatus || !['queued', 'processing'].includes(generationStatus)) return;
@@ -1014,8 +1035,8 @@ export default function VideoCanvasStudio({
       try {
         const next = await refreshVideoGeneration(generationId);
         if (cancelled) return;
-        setGeneration(next);
-        rememberGeneration(next);
+        const activeNext = setActiveGeneration(next);
+        if (activeNext) rememberGeneration(activeNext);
         if (['queued', 'processing'].includes(next.status)) timer = window.setTimeout(() => { void poll(); }, 4500);
       } catch (cause) {
         if (!cancelled) setError(clientMessage(cause));
@@ -1026,7 +1047,7 @@ export default function VideoCanvasStudio({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [generationId, generationStatus, rememberGeneration]);
+  }, [generationId, generationStatus, rememberGeneration, setActiveGeneration]);
 
   useEffect(() => {
     if (!generationInFlight) return;
@@ -1328,9 +1349,11 @@ export default function VideoCanvasStudio({
         shotId: canvasSemantics.shot.id,
         shotOrder: canvasSemantics.shot.order,
       });
-      setGeneration(next);
-      rememberGeneration(next);
-      setRestoredGenerationId(next.id);
+      const activeNext = setActiveGeneration(next);
+      if (activeNext) {
+        rememberGeneration(activeNext);
+        setRestoredGenerationId(activeNext.id);
+      }
       notify(zh ? '镜头任务已创建，画布会自动同步进度。' : 'Shot created. The canvas will sync progress automatically.');
     } catch (cause) {
       setError(clientMessage(cause));
@@ -1419,9 +1442,11 @@ export default function VideoCanvasStudio({
     setError('');
     try {
       const result = await cancelVideoGeneration(generation.id);
-      setGeneration(result.generation);
-      rememberGeneration(result.generation);
-      setRestoredGenerationId(result.generation.id);
+      const activeGeneration = setActiveGeneration(result.generation);
+      if (activeGeneration) {
+        rememberGeneration(activeGeneration);
+        setRestoredGenerationId(activeGeneration.id);
+      }
       const providerStopped = result.providerCancellation === 'confirmed' || result.providerCancellation === 'requested';
       notify(providerStopped
         ? (zh ? '已停止生成，并向中转站发送了取消请求。冻结积分已退回。' : 'Generation stopped and a cancellation was sent upstream. Frozen credits were returned.')
