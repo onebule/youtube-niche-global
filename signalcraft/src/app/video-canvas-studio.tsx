@@ -86,6 +86,7 @@ type SavedCanvas = {
   referenceMode?: ReferenceMode;
   referenceFrames?: Array<Omit<UploadedFrame, 'previewUrl'>>;
   generationId: string | null;
+  generationGroupId?: string | null;
   semantics?: CanvasSemantics;
   activeShot?: number;
   shots?: SavedShot[];
@@ -881,6 +882,7 @@ export default function VideoCanvasStudio({
           setReferenceMode(restoredReferenceMode);
           setReferenceFrames((saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })));
           setRestoredGenerationId(saved.generationId || null);
+          if (saved.generationGroupId) generationGroupIdRef.current = saved.generationGroupId;
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
           if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(savedShot => restoreSavedShot(savedShot, restoreNodePositions)));
         }
@@ -928,6 +930,7 @@ export default function VideoCanvasStudio({
       referenceMode,
       referenceFrames: referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
       generationId: generation?.id || restoredGenerationId,
+      generationGroupId: generationGroupIdRef.current,
       semantics: canvasSemantics,
       activeShot: shot,
       shots: savedShots,
