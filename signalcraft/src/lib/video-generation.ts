@@ -46,6 +46,8 @@ export function estimateVideoCredits(model: VideoModel | null | undefined, durat
 export type VideoGeneration = {
   id: string;
   provider: string;
+  /** Optional until older API deployments expose the provider task id. */
+  providerTaskId?: string | null;
   model: VideoModelId;
   prompt: string;
   startImageAssetId: string;
