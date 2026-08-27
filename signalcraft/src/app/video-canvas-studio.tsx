@@ -450,6 +450,8 @@ export default function VideoCanvasStudio({
   const [comparePreviewError, setComparePreviewError] = useState('');
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [customLayoutMode, setCustomLayoutMode] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
@@ -1908,6 +1910,17 @@ export default function VideoCanvasStudio({
     setCanvasSemantics(previous => patchCanvasShot(previous, { collapsed: !previous.shot.collapsed }));
   };
 
+  const toggleCustomLayoutMode = () => {
+    const next = !customLayoutMode;
+    setCustomLayoutMode(next);
+    if (next && canvasSemantics.shot.collapsed) {
+      setCanvasSemantics(previous => patchCanvasShot(previous, { collapsed: false }));
+    }
+    notify(next
+      ? (zh ? '已进入自定义排列：拖动节点即可调整，位置会自动保存。' : 'Custom layout is on. Drag nodes to arrange them; positions save automatically.')
+      : (zh ? '已退出自定义排列。' : 'Custom layout is off.'));
+  };
+
   const shotFrame = useMemo(() => {
     const ids: NodeId[] = ['source', 'agent', 'task', 'result'];
     const minX = Math.min(...ids.map(id => nodes[id].x));
@@ -1987,7 +2000,7 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-history-toolbar-button" aria-expanded={historyOpen} aria-controls="canvas-history-panel" onClick={toggleHistory} aria-label={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')} title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}><span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}</button>
           <button type="button" className="canvas-fullscreen-button" onClick={() => void toggleCanvasFullscreen()} aria-label={isCanvasFullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '进入全屏' : 'Enter fullscreen')} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}><span aria-hidden="true">{isCanvasFullscreen ? '↙' : '⛶'}</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b></button>
         </div>
-        <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
+        <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
           <div
             className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
             data-shot-id={canvasSemantics.shot.id}
@@ -2164,8 +2177,17 @@ export default function VideoCanvasStudio({
         <p className="canvas-history-footnote">{zh ? '版本只改变当前镜头的选择状态，不会重新提交或重复扣费。' : 'Version selection never resubmits a task or charges credits again.'}</p>
       </aside>}
 
-      <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
-          <div className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
+      <section className={'video-canvas-composer ' + (composerCollapsed ? 'is-composer-collapsed ' : '') + (customLayoutMode ? 'is-layout-mode' : '')} aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
+          <div className="canvas-composer-toolbar">
+            <div className="canvas-composer-toolbar-copy"><span>{zh ? `镜头 ${String(shot).padStart(2, '0')} · 生成台` : `SHOT ${String(shot).padStart(2, '0')} · GENERATOR`}</span><b>{generationInFlight ? (zh ? '任务进行中' : 'Task in progress') : composerCollapsed ? (zh ? '已折叠，参数仍保留' : 'Collapsed · settings retained') : (zh ? '参数与素材' : 'Inputs and settings')}</b></div>
+            <div className="canvas-composer-toolbar-actions">
+              <button type="button" className={'canvas-composer-arrange-button ' + (customLayoutMode ? 'is-active' : '')} aria-pressed={customLayoutMode} onClick={toggleCustomLayoutMode}><span aria-hidden="true">⌘</span>{customLayoutMode ? (zh ? '完成排列' : 'Finish layout') : (zh ? '自定义排列' : 'Custom layout')}</button>
+              <button type="button" className="canvas-composer-collapse-button" aria-expanded={!composerCollapsed} aria-controls="canvas-composer-content" onClick={() => setComposerCollapsed(current => !current)}>{composerCollapsed ? (zh ? '展开生成台' : 'Expand composer') : (zh ? '折叠' : 'Collapse')}<span aria-hidden="true">{composerCollapsed ? '⌃' : '⌄'}</span></button>
+            </div>
+          </div>
+          {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前设备。' : 'Drag nodes on the canvas to arrange your workflow. Positions save on this device.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
+          {!composerCollapsed && <>
+          <div id={!composerCollapsed ? 'canvas-composer-content' : undefined} className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
             {referenceMode === 'start-end' ? <>
             <label className={'canvas-reference-chip ' + (startFrame ? 'has-media' : '')}>
               <input type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload('start', file); event.currentTarget.value = ''; }} />
@@ -2299,6 +2321,12 @@ export default function VideoCanvasStudio({
             </div>}
             <p>{generationInFlight ? (zh ? '生成中发现需要修改？点击“停止生成”后即可调整 Prompt，再次提交。' : 'Need to change something while rendering? Stop the task, edit the Prompt, and submit again.') : referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。MiniMax H3、Seedance 2.0 / 2.5 均可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. MiniMax H3 and Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 首尾帧模式将沿用 START 图片比例。' : 'MiniMax H3 start/end mode follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
+          </>}
+          {composerCollapsed && <div id="canvas-composer-content" className="canvas-composer-collapsed-summary" aria-live="polite">
+            <div className="canvas-composer-summary-references"><span>{zh ? '参考' : 'References'}</span><b>{referenceMode === 'omni' ? `${referenceFrames.length}/9` : `${startFrame ? 1 : 0}${endFrame ? ' + END' : ''}`}</b></div>
+            <div className="canvas-composer-summary-prompt"><span>{zh ? 'Prompt' : 'Prompt'}</span><b>{prompt.trim() || (zh ? '尚未填写' : 'Not written yet')}</b></div>
+            <div className="canvas-composer-summary-settings"><b>{modelName(model)}</b><span>{duration} · {resolution} · {aspectRatio}</span><em className={generation?.status || 'draft'}>{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '草稿' : 'Draft')}</em></div>
+          </div>}
         </section>
     </section>
   </main>;
