@@ -7598,3 +7598,64 @@
     font-size: 12px;
   }
 }
+
+/* Crisp copy pass: avoid the light Arial/PingFang fallback in the canvas and
+   give Chinese UI text a stable Windows-friendly face and stronger ink. */
+.video-canvas-page {
+  --canvas-muted: #59636a;
+  --canvas-font-sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+  font-family: var(--canvas-font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: auto;
+}
+
+.video-canvas-page button,
+.video-canvas-page input,
+.video-canvas-page select,
+.video-canvas-page textarea {
+  font-family: var(--canvas-font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+.video-canvas-page .canvas-node-body,
+.video-canvas-page .canvas-composer,
+.video-canvas-page .canvas-preferences-panel,
+.video-canvas-page .canvas-history-panel,
+.video-canvas-page .canvas-node-palette {
+  -webkit-font-smoothing: auto;
+}
+
+.video-canvas-page .canvas-node-body p,
+.video-canvas-page .canvas-node-body li,
+.video-canvas-page .canvas-node-body dt,
+.video-canvas-page .canvas-node-body dd,
+.video-canvas-page .canvas-node-body small,
+.video-canvas-page .canvas-composer-main > p,
+.video-canvas-page .canvas-preflight-review li,
+.video-canvas-page .canvas-script-ocr-entry small,
+.video-canvas-page .canvas-script-ocr-panel-head small,
+.video-canvas-page .canvas-history-row-copy small,
+.video-canvas-page .canvas-history-row-meta small {
+  font-weight: 600;
+}
+
+.video-canvas-page .canvas-node-body p,
+.video-canvas-page .canvas-node-body small,
+.video-canvas-page .canvas-task-model > div small,
+.video-canvas-page .canvas-composer-main > p,
+.video-canvas-page .canvas-composer-count,
+.video-canvas-page .canvas-preferences-trigger-copy small,
+.video-canvas-page .canvas-history-row-copy small,
+.video-canvas-page .canvas-history-row-meta small {
+  color: var(--canvas-muted);
+}
+
+.video-canvas-page .canvas-node-grip b,
+.video-canvas-page .canvas-agent-body strong,
+.video-canvas-page .canvas-task-model > div b,
+.video-canvas-page .canvas-result-empty b,
+.video-canvas-page .canvas-composer-prompt textarea,
+.video-canvas-page .canvas-composer-controls select,
+.video-canvas-page .canvas-preferences-trigger-copy b {
+  font-weight: 700;
+}
