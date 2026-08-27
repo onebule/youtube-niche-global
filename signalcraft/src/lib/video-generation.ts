@@ -1,6 +1,7 @@
 'use client';
 
 import { authHeaders } from './auth';
+import type { CanvasAgentContext } from './canvas-domain';
 
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
@@ -127,6 +128,7 @@ export async function planVideoGeneration(input: {
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
+  canvasContext?: CanvasAgentContext;
 }) {
   // Keep this endpoint to one path segment because the production Vercel
   // function router is configured around `/api/video/[...path]` and only

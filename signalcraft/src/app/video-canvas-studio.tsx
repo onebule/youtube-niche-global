@@ -8,6 +8,7 @@ import type { UiLocale } from '@/src/lib/ui-language';
 import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
   cloneFrame,
+  createCanvasAgentContext,
   limitShotSnapshots,
   removeShotSnapshot,
   reorderShotSnapshots,
@@ -812,6 +813,7 @@ export default function VideoCanvasStudio({
         duration,
         aspectRatio,
         resolution,
+        canvasContext: createCanvasAgentContext(captureCurrentShot(), selectedNodeId),
       });
       setAgentPlan(next);
       setModel(next.model);

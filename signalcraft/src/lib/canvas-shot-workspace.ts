@@ -1,5 +1,5 @@
 import { type CanvasNodePositions } from './canvas-commands';
-import { normalizeCanvasSemantics, type CanvasSemantics } from './canvas-domain';
+import { normalizeCanvasSemantics, type CanvasAgentContext, type CanvasNodeId, type CanvasSemantics } from './canvas-domain';
 import { normalizeVideoDuration, type VideoGeneration, type VideoGenerationPlan, type VideoModelId } from './video-generation';
 
 export type CanvasAspectRatio = '9:16' | '16:9' | '1:1';
@@ -42,6 +42,12 @@ export type SavedShot = {
   semantics?: CanvasSemantics;
 };
 
+/**
+ * Small, provider-neutral context packet sent with an Agent planning request.
+ * It contains semantic IDs and settings, never blob URLs or provider secrets.
+ */
+export type { CanvasAgentContext } from './canvas-domain';
+
 export function cloneFrame(frame: UploadedFrame | null): UploadedFrame | null {
   return frame ? { ...frame } : null;
 }
@@ -53,6 +59,32 @@ export function stripFrame(frame: UploadedFrame | null): PersistedFrame | null {
 
 export function restoreFrame(frame: PersistedFrame | null | undefined): UploadedFrame | null {
   return frame ? { ...frame, previewUrl: '' } : null;
+}
+
+export function createCanvasAgentContext(snapshot: ShotSnapshot, selectedNodeId: CanvasNodeId | null): CanvasAgentContext {
+  const selectedNode = selectedNodeId ? snapshot.semantics.nodes[selectedNodeId] || null : null;
+  return {
+    schemaVersion: 1,
+    shot: snapshot.semantics.shot,
+    selectedNodeId,
+    selectedNode,
+    nodes: snapshot.semantics.nodes,
+    nodePositions: snapshot.nodes,
+    assets: snapshot.semantics.assets.slice(-24),
+    generations: snapshot.semantics.generations.slice(-24),
+    versions: snapshot.semantics.versions.slice(-24),
+    input: {
+      prompt: snapshot.prompt.slice(0, 1200),
+      model: snapshot.model,
+      duration: snapshot.duration,
+      aspectRatio: snapshot.aspectRatio,
+      resolution: snapshot.resolution,
+      referenceMode: snapshot.referenceMode,
+      startAssetId: snapshot.startFrame?.assetId || null,
+      endAssetId: snapshot.endFrame?.assetId || null,
+      referenceAssetIds: snapshot.referenceFrames.slice(0, 9).map(frame => frame.assetId),
+    },
+  };
 }
 
 export function restoreSavedShot(saved: SavedShot, restoreNodes: (value: unknown) => CanvasNodePositions): ShotSnapshot {

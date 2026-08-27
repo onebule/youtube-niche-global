@@ -85,6 +85,33 @@ export type CanvasSemantics = {
   versions: CanvasVersionSemantic[];
 };
 
+/**
+ * Small, provider-neutral context packet sent with an Agent planning request.
+ * It contains semantic IDs and settings, never blob URLs or provider secrets.
+ */
+export type CanvasAgentContext = {
+  schemaVersion: 1;
+  shot: CanvasSemantics['shot'];
+  selectedNodeId: CanvasNodeId | null;
+  selectedNode: CanvasNodeSemantic | null;
+  nodes: CanvasSemantics['nodes'];
+  nodePositions: Record<CanvasNodeId, { x: number; y: number }>;
+  assets: CanvasSemantics['assets'];
+  generations: CanvasSemantics['generations'];
+  versions: CanvasSemantics['versions'];
+  input: {
+    prompt: string;
+    model: VideoModelId;
+    duration: string;
+    aspectRatio: '9:16' | '16:9' | '1:1';
+    resolution: string;
+    referenceMode: 'start-end' | 'omni';
+    startAssetId: string | null;
+    endAssetId: string | null;
+    referenceAssetIds: string[];
+  };
+};
+
 const NODE_IDS: CanvasNodeId[] = ['source', 'prompt', 'model', 'agent', 'task', 'result'];
 const NODE_ROLES: CanvasNodeRole[] = ['generic', 'reference', 'agent', 'generation', 'video_result'];
 const ASSET_KINDS: CanvasAssetKind[] = ['image', 'video'];
