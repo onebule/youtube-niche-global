@@ -4,7 +4,7 @@ import { authHeaders } from './auth';
 type ApiOpportunity = {
   title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
-  format:'short'|'long'; formatConfidence?:'high'|'medium'|'low'; formatSignals?:string[]; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
+  format:'short'|'long'|'unknown'; formatConfidence?:'high'|'medium'|'low'; formatSignals?:string[]; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
 };
 
 export type PublicRankingScope = {

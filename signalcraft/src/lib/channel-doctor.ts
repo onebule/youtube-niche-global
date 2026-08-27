@@ -24,7 +24,7 @@ export type ChannelDoctorReport = {
   funnel:{key:string;label:string;status:'ok'|'watch'|'unknown';reason:string}[];
   findings:DoctorFinding[];
   topicClusters:{name:string;count:number;percent:number}[];
-  videos:{id:string;title:string;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long';thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
+  videos:{id:string;title:string;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long'|'unknown';formatConfidence?:'high'|'medium'|'low';formatSignals?:string[];thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
   dataLimitations:string[];
   oauthAvailable:boolean;
 };
