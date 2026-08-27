@@ -35,10 +35,12 @@ export type GenerationSpecV2 = {
   rawPrompt: string;
   normalizedPrompt: string;
   references: GenerationSpecReference[];
+  generationGroupId: string | null;
   shotId: string | null;
   shotOrder: number | null;
   characterSetId: string | null;
   sceneSetId: string | null;
+  continuityFromShotId: string | null;
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
@@ -283,6 +285,12 @@ export function estimateVideoCredits(model: VideoModel | null | undefined, durat
 export type VideoGeneration = {
   id: string;
   provider: string;
+  generationGroupId?: string | null;
+  shotId?: string | null;
+  shotOrder?: number | null;
+  characterSetId?: string | null;
+  sceneSetId?: string | null;
+  continuityFromShotId?: string | null;
   /** Optional until older API deployments expose the provider task id. */
   providerTaskId?: string | null;
   model: VideoModelId;
@@ -370,7 +378,12 @@ export function buildGenerationSpecV2(input: {
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
-}, { requestId, idempotencyKey, shotId = null, shotOrder = null, userConfirmed = true }: { requestId: string; idempotencyKey: string; shotId?: string | null; shotOrder?: number | null; userConfirmed?: boolean }): GenerationSpecV2 {
+  generationGroupId?: string | null;
+  shotId?: string | null;
+  shotOrder?: number | null;
+  characterSetId?: string | null;
+  continuityFromShotId?: string | null;
+}, { requestId, idempotencyKey, generationGroupId = null, shotId = null, shotOrder = null, characterSetId = null, continuityFromShotId = null, userConfirmed = true }: { requestId: string; idempotencyKey: string; generationGroupId?: string | null; shotId?: string | null; shotOrder?: number | null; characterSetId?: string | null; continuityFromShotId?: string | null; userConfirmed?: boolean }): GenerationSpecV2 {
   const referenceIds = input.referenceMode === 'omni'
     ? Array.from(new Set(input.referenceImageAssetIds || []))
     : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
@@ -406,9 +419,10 @@ export function buildGenerationSpecV2(input: {
     rawPrompt: input.prompt.trim(),
     normalizedPrompt: input.prompt.trim(),
     references,
+    generationGroupId,
     shotId,
     shotOrder,
-    characterSetId: null,
+    characterSetId,
     sceneSetId: null,
     duration: input.duration,
     aspectRatio: input.aspectRatio,
@@ -416,6 +430,7 @@ export function buildGenerationSpecV2(input: {
     styleConstraints: [],
     motionConstraints: [],
     identityConstraints: [],
+    continuityFromShotId,
     outputDestination: 'private-media',
     idempotencyKey,
     retryPolicy: { mode: 'manual', maxAttempts: 0, retryableOnly: true },
@@ -477,15 +492,21 @@ export async function createVideoGeneration(input: {
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
+  generationGroupId?: string | null;
   shotId?: string | null;
   shotOrder?: number | null;
+  characterSetId?: string | null;
+  continuityFromShotId?: string | null;
 }) {
   const idempotencyKey = globalThis.crypto?.randomUUID?.() || `video-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const generationSpec = buildGenerationSpecV2(input, {
     requestId: idempotencyKey,
     idempotencyKey,
+    generationGroupId: input.generationGroupId,
     shotId: input.shotId,
     shotOrder: input.shotOrder,
+    characterSetId: input.characterSetId,
+    continuityFromShotId: input.continuityFromShotId,
     userConfirmed: true,
   });
   const payload = await request<{ generation: VideoGeneration }>('generate', {
