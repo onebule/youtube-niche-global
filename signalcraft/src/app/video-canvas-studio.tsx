@@ -41,8 +41,42 @@ type NodeId = CanvasNodeId;
 type NodePositions = CanvasNodePositions;
 type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
 type ReferenceMode = 'start-end' | 'omni';
+type PersistedFrame = Omit<UploadedFrame, 'previewUrl'>;
+type ShotSnapshot = {
+  shot: number;
+  nodes: NodePositions;
+  prompt: string;
+  model: VideoModelId;
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+  startFrame: UploadedFrame | null;
+  endFrame: UploadedFrame | null;
+  referenceMode: ReferenceMode;
+  referenceFrames: UploadedFrame[];
+  generation: VideoGeneration | null;
+  restoredGenerationId: string | null;
+  videoUrl: string;
+  agentPlan: VideoGenerationPlan | null;
+  semantics: CanvasSemantics;
+};
+type SavedShot = {
+  shot: number;
+  nodes: NodePositions;
+  prompt: string;
+  model: VideoModelId;
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+  startFrame: PersistedFrame | null;
+  endFrame: PersistedFrame | null;
+  referenceMode?: ReferenceMode;
+  referenceFrames?: PersistedFrame[];
+  generationId: string | null;
+  semantics?: CanvasSemantics;
+};
 type SavedCanvas = {
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -56,6 +90,8 @@ type SavedCanvas = {
   referenceFrames?: Array<Omit<UploadedFrame, 'previewUrl'>>;
   generationId: string | null;
   semantics?: CanvasSemantics;
+  activeShot?: number;
+  shots?: SavedShot[];
 };
 
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
@@ -124,6 +160,65 @@ function restoreNodePositions(value: unknown): NodePositions {
     }
   });
   return next;
+}
+
+function cloneFrame(frame: UploadedFrame | null): UploadedFrame | null {
+  return frame ? { ...frame } : null;
+}
+
+function stripFrame(frame: UploadedFrame | null): PersistedFrame | null {
+  if (!frame) return null;
+  return { assetId: frame.assetId, name: frame.name, width: frame.width, height: frame.height };
+}
+
+function restoreFrame(frame: PersistedFrame | null | undefined): UploadedFrame | null {
+  return frame ? { ...frame, previewUrl: '' } : null;
+}
+
+function restoreSavedShot(saved: SavedShot): ShotSnapshot {
+  const shot = Number.isInteger(saved.shot) && saved.shot > 0 ? saved.shot : 1;
+  const model = saved.model || 'seedance-2';
+  return {
+    shot,
+    nodes: restoreNodePositions(saved.nodes),
+    prompt: saved.prompt || '',
+    model,
+    duration: normalizeVideoDuration(model, saved.duration || '5s'),
+    aspectRatio: saved.aspectRatio || '9:16',
+    resolution: saved.resolution || '720p',
+    startFrame: restoreFrame(saved.startFrame),
+    endFrame: restoreFrame(saved.endFrame),
+    referenceMode: saved.referenceMode || 'start-end',
+    referenceFrames: (saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })),
+    generation: null,
+    restoredGenerationId: saved.generationId || null,
+    videoUrl: '',
+    agentPlan: null,
+    semantics: normalizeCanvasSemantics(saved.semantics, shot),
+  };
+}
+
+function upsertShotSnapshot(snapshots: ShotSnapshot[], snapshot: ShotSnapshot) {
+  return [...snapshots.filter(item => item.shot !== snapshot.shot), snapshot]
+    .sort((left, right) => left.shot - right.shot);
+}
+
+function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
+  return {
+    shot: snapshot.shot,
+    nodes: snapshot.nodes,
+    prompt: snapshot.prompt,
+    model: snapshot.model,
+    duration: snapshot.duration,
+    aspectRatio: snapshot.aspectRatio,
+    resolution: snapshot.resolution,
+    startFrame: stripFrame(snapshot.startFrame),
+    endFrame: stripFrame(snapshot.endFrame),
+    referenceMode: snapshot.referenceMode,
+    referenceFrames: snapshot.referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
+    generationId: snapshot.generation?.id || snapshot.restoredGenerationId,
+    semantics: snapshot.semantics,
+  };
 }
 
 function imageDimensions(file: File) {
@@ -252,6 +347,7 @@ export default function VideoCanvasStudio({
   const [hydrated, setHydrated] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
+  const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -261,6 +357,47 @@ export default function VideoCanvasStudio({
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
   const fullscreenFallbackRef = useRef(false);
+
+  const captureCurrentShot = () : ShotSnapshot => ({
+    shot,
+    nodes: { ...nodes },
+    prompt,
+    model,
+    duration,
+    aspectRatio,
+    resolution,
+    startFrame: cloneFrame(startFrame),
+    endFrame: cloneFrame(endFrame),
+    referenceMode,
+    referenceFrames: referenceFrames.map(frame => ({ ...frame })),
+    generation,
+    restoredGenerationId,
+    videoUrl,
+    agentPlan,
+    semantics: canvasSemantics,
+  });
+
+  const applyShotSnapshot = (snapshot: ShotSnapshot) => {
+    setNodes({ ...snapshot.nodes });
+    setPrompt(snapshot.prompt);
+    setModel(snapshot.model);
+    setDuration(normalizeVideoDuration(snapshot.model, snapshot.duration));
+    setAspectRatio(snapshot.aspectRatio);
+    setResolution(snapshot.resolution);
+    setStartFrame(cloneFrame(snapshot.startFrame));
+    setEndFrame(cloneFrame(snapshot.endFrame));
+    setReferenceMode(snapshot.referenceMode);
+    setReferenceFrames(snapshot.referenceFrames.map(frame => ({ ...frame })));
+    setGeneration(snapshot.generation);
+    setRestoredGenerationId(snapshot.restoredGenerationId);
+    setVideoUrl(snapshot.videoUrl);
+    setAgentPlan(snapshot.agentPlan);
+    setCanvasSemantics(snapshot.semantics);
+    setShot(snapshot.shot);
+    setSelectedNodeId(null);
+    setHistoryOpen(false);
+    setNodePaletteOpen(false);
+  };
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
@@ -294,6 +431,17 @@ export default function VideoCanvasStudio({
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
+  const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
+  const shotNumbers = useMemo(() => Array.from(new Set([...shotSnapshots.map(snapshot => snapshot.shot), shot])).sort((left, right) => left - right), [shot, shotSnapshots]);
+  const nextShotNumber = () => Math.max(shot, ...shotSnapshots.map(snapshot => snapshot.shot), 0) + 1;
+
+  const switchShot = (targetShot: number) => {
+    if (targetShot === shot) return;
+    const target = shotSnapshotsByNumber.get(targetShot);
+    if (!target) return;
+    setShotSnapshots(previous => upsertShotSnapshot(previous, captureCurrentShot()));
+    applyShotSnapshot(target);
+  };
 
   const rememberGeneration = useCallback((next: VideoGeneration) => {
     setHistory(previous => {
@@ -400,13 +548,13 @@ export default function VideoCanvasStudio({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4) {
+        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5) {
           // Hydration intentionally mirrors an external localStorage snapshot
           // after mount; this is the one synchronous state sync in this effect.
           // v3 reserves a dedicated composer row, so older layouts need the
           // new compact positions once instead of restoring covered nodes.
           // eslint-disable-next-line react-hooks/set-state-in-effect
-          setNodes(saved.version === 3 ? restoreNodePositions(saved.nodes) : INITIAL_NODES);
+          setNodes(saved.version >= 3 ? restoreNodePositions(saved.nodes) : INITIAL_NODES);
           setPrompt(saved.prompt || '');
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
@@ -414,13 +562,14 @@ export default function VideoCanvasStudio({
           setDuration(normalizeVideoDuration(restoredModel, saved.duration || '5s'));
           setAspectRatio(saved.aspectRatio || '9:16');
           setResolution(saved.resolution || '720p');
-          setShot(saved.shot || 1);
+          setShot(saved.activeShot || saved.shot || 1);
           if (saved.startFrame) setStartFrame({ ...saved.startFrame, previewUrl: '' });
           if (saved.endFrame) setEndFrame({ ...saved.endFrame, previewUrl: '' });
           setReferenceMode(restoredReferenceMode);
           setReferenceFrames((saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })));
           setRestoredGenerationId(saved.generationId || null);
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
+          if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(restoreSavedShot));
         }
       }
     } catch {
@@ -432,14 +581,29 @@ export default function VideoCanvasStudio({
 
   useEffect(() => {
     if (!hydrated) return;
-    const stripUrl = (frame: UploadedFrame | null) => frame ? {
-      assetId: frame.assetId,
-      name: frame.name,
-      width: frame.width,
-      height: frame.height,
-    } : null;
+    const currentSnapshot: ShotSnapshot = {
+      shot,
+      nodes: { ...nodes },
+      prompt,
+      model,
+      duration,
+      aspectRatio,
+      resolution,
+      startFrame: cloneFrame(startFrame),
+      endFrame: cloneFrame(endFrame),
+      referenceMode,
+      referenceFrames: referenceFrames.map(frame => ({ ...frame })),
+      generation,
+      restoredGenerationId,
+      videoUrl,
+      agentPlan,
+      semantics: canvasSemantics,
+    };
+    const savedShots = upsertShotSnapshot(shotSnapshots, currentSnapshot)
+      .slice(-24)
+      .map(serializeShotSnapshot);
     const saved: SavedCanvas = {
-      version: 4,
+      version: 5,
       nodes,
       prompt,
       model,
@@ -447,15 +611,17 @@ export default function VideoCanvasStudio({
       aspectRatio,
       resolution,
       shot,
-      startFrame: stripUrl(startFrame),
-      endFrame: stripUrl(endFrame),
+      startFrame: stripFrame(startFrame),
+      endFrame: stripFrame(endFrame),
       referenceMode,
-      referenceFrames: referenceFrames.map(frame => stripUrl(frame)).filter((frame): frame is Omit<UploadedFrame, 'previewUrl'> => Boolean(frame)),
+      referenceFrames: referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
       generationId: generation?.id || restoredGenerationId,
       semantics: canvasSemantics,
+      activeShot: shot,
+      shots: savedShots,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [aspectRatio, canvasSemantics, duration, endFrame, generation?.id, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, shot, startFrame]);
+  }, [agentPlan, aspectRatio, canvasSemantics, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -776,39 +942,49 @@ export default function VideoCanvasStudio({
     setError('');
     try {
       const url = await loadVideoAssetUrl(generation.thumbnailAssetId);
-      setStartFrame({
+      const currentSnapshot = captureCurrentShot();
+      const nextShot = nextShotNumber();
+      const nextStartFrame: UploadedFrame = {
         assetId: generation.thumbnailAssetId,
         name: (zh ? '镜头 ' : 'Shot ') + String(shot) + (zh ? ' 结果帧' : ' result frame'),
         previewUrl: url,
         width: 1280,
         height: 720,
-      });
-      setCanvasSemantics(previous => {
-        const nextShot = shot + 1;
-        const nextSemantics = createCanvasSemantics(nextShot);
-        nextSemantics.assets = [...previous.assets, {
-          assetId: generation.thumbnailAssetId as string,
-          kind: 'image',
-          role: 'start_frame',
-          shotId: nextSemantics.shot.id,
-          generationId: generation.id,
-          versionId: `generation-${generation.id}-v1`,
-          name: (zh ? '镜头 ' : 'Shot ') + String(shot) + (zh ? ' 结果帧' : ' result frame'),
-          width: 1280,
-          height: 720,
-        }];
-        nextSemantics.generations = previous.generations;
-        nextSemantics.versions = previous.versions;
-        return patchCanvasNode(nextSemantics, 'source', { role: 'reference', assetId: generation.thumbnailAssetId, status: 'draft' });
-      });
-      setReferenceMode('start-end');
-      setReferenceFrames([]);
-      setEndFrame(null);
-      setPrompt('');
-      setGeneration(null);
-      setRestoredGenerationId(null);
-      setVideoUrl('');
-      setShot(value => value + 1);
+      };
+      const nextSemantics = createCanvasSemantics(nextShot);
+      nextSemantics.assets = [...canvasSemantics.assets, {
+        assetId: generation.thumbnailAssetId,
+        kind: 'image',
+        role: 'start_frame',
+        shotId: nextSemantics.shot.id,
+        generationId: generation.id,
+        versionId: `generation-${generation.id}-v1`,
+        name: (zh ? '镜头 ' : 'Shot ') + String(shot) + (zh ? ' 结果帧' : ' result frame'),
+        width: 1280,
+        height: 720,
+      }];
+      nextSemantics.generations = canvasSemantics.generations;
+      nextSemantics.versions = canvasSemantics.versions;
+      const nextSnapshot: ShotSnapshot = {
+        shot: nextShot,
+        nodes: { ...nodes },
+        prompt: '',
+        model,
+        duration,
+        aspectRatio,
+        resolution,
+        startFrame: nextStartFrame,
+        endFrame: null,
+        referenceMode: 'start-end',
+        referenceFrames: [],
+        generation: null,
+        restoredGenerationId: null,
+        videoUrl: '',
+        agentPlan: null,
+        semantics: patchCanvasNode(nextSemantics, 'source', { role: 'reference', assetId: generation.thumbnailAssetId, status: 'draft' }),
+      };
+      setShotSnapshots(previous => upsertShotSnapshot(upsertShotSnapshot(previous, currentSnapshot), nextSnapshot));
+      applyShotSnapshot(nextSnapshot);
       notify(zh ? '已创建下一镜头，结果缩略帧已设为 START。' : 'Next shot created from the result thumbnail.');
     } catch (cause) {
       setError(clientMessage(cause));
@@ -957,39 +1133,56 @@ export default function VideoCanvasStudio({
   };
 
   const createNextShot = (duplicate = false) => {
-    const nextShot = shot + 1;
+    const currentSnapshot = captureCurrentShot();
+    const nextShot = nextShotNumber();
     const nextSemantics = createCanvasSemantics(nextShot);
     nextSemantics.assets = canvasSemantics.assets
       .filter(asset => asset.role !== 'output')
       .map(asset => ({ ...asset, shotId: nextSemantics.shot.id }));
     nextSemantics.generations = canvasSemantics.generations;
     nextSemantics.versions = canvasSemantics.versions;
+    const primaryAssetId = referenceMode === 'omni' ? referenceFrames[0]?.assetId : startFrame?.assetId;
+    const nextSnapshot: ShotSnapshot = duplicate ? {
+      ...currentSnapshot,
+      shot: nextShot,
+      startFrame: cloneFrame(currentSnapshot.startFrame),
+      endFrame: cloneFrame(currentSnapshot.endFrame),
+      referenceFrames: currentSnapshot.referenceFrames.map(frame => ({ ...frame })),
+      generation: null,
+      restoredGenerationId: null,
+      videoUrl: '',
+      agentPlan: null,
+      semantics: nextSemantics,
+    } : {
+      shot: nextShot,
+      nodes: { ...nodes },
+      prompt: '',
+      model,
+      duration,
+      aspectRatio,
+      resolution,
+      startFrame: null,
+      endFrame: null,
+      referenceMode: 'start-end',
+      referenceFrames: [],
+      generation: null,
+      restoredGenerationId: null,
+      videoUrl: '',
+      agentPlan: null,
+      semantics: nextSemantics,
+    };
     if (duplicate) {
-      const primaryAssetId = referenceMode === 'omni' ? referenceFrames[0]?.assetId : startFrame?.assetId;
-      setCanvasSemantics(patchCanvasNode(nextSemantics, 'source', {
+      nextSnapshot.semantics = patchCanvasNode(nextSemantics, 'source', {
         role: 'reference',
         assetId: primaryAssetId || null,
         status: 'draft',
-      }));
-      setReferenceFrames(previous => previous.map(frame => ({ ...frame })));
-      setStartFrame(previous => previous ? { ...previous } : null);
-      setEndFrame(previous => previous ? { ...previous } : null);
-      notify(zh ? `已复制镜头 ${String(shot).padStart(2, '0')}，创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} duplicated as shot ${String(nextShot).padStart(2, '0')}.`);
-    } else {
-      setCanvasSemantics(nextSemantics);
-      setReferenceMode('start-end');
-      setReferenceFrames([]);
-      setStartFrame(null);
-      setEndFrame(null);
-      setPrompt('');
-      notify(zh ? `已创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(nextShot).padStart(2, '0')} created.`);
+      });
     }
-    setGeneration(null);
-    setRestoredGenerationId(null);
-    setVideoUrl('');
-    setShot(nextShot);
-    setSelectedNodeId(null);
-    setHistoryOpen(false);
+    setShotSnapshots(previous => upsertShotSnapshot(upsertShotSnapshot(previous, currentSnapshot), nextSnapshot));
+    applyShotSnapshot(nextSnapshot);
+    notify(duplicate
+      ? (zh ? `已复制镜头 ${String(shot).padStart(2, '0')}，创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} duplicated as shot ${String(nextShot).padStart(2, '0')}.`)
+      : (zh ? `已创建镜头 ${String(nextShot).padStart(2, '0')}。` : `Shot ${String(nextShot).padStart(2, '0')} created.`));
   };
 
   const toggleShotCollapsed = () => {
@@ -1042,7 +1235,16 @@ export default function VideoCanvasStudio({
     <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
       <div className="video-canvas-caption">
         <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{zh ? '未命名镜头项目' : 'Untitled shot project'}</b><small><i aria-hidden="true" />{zh ? '已保存到本地' : 'Saved locally'}</small></div></div>
-        <div className="video-canvas-caption-center"><span>{String(shot).padStart(2, '0')} · {zh ? '当前镜头' : 'Current shot'}</span><p>{zh ? '拖动空白区域移动画布，滚轮缩放。' : 'Drag the background to pan, use the wheel to zoom.'}</p></div>
+        <div className="video-canvas-caption-center">
+          <div className="canvas-shot-rail" aria-label={zh ? '镜头列表' : 'Shot list'}>
+            <small>SHOTS</small>
+            {shotNumbers.map(index => {
+              const status = index === shot ? canvasSemantics.shot.status : shotSnapshotsByNumber.get(index)?.semantics.shot.status || 'draft';
+              return <button key={index} type="button" className={'canvas-shot-rail-item ' + (index === shot ? 'is-current' : '')} aria-current={index === shot ? 'step' : undefined} onClick={() => switchShot(index)}><b>{String(index).padStart(2, '0')}</b><i className={status} aria-hidden="true" /></button>;
+            })}
+          </div>
+          <p>{zh ? '拖动空白区域移动画布，滚轮缩放。' : 'Drag the background to pan, use the wheel to zoom.'}</p>
+        </div>
         <div className="video-canvas-caption-actions"><button type="button" className={'canvas-add-node-trigger ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭面板' : 'Close panel') : (zh ? '添加节点' : 'Add node')}</button></div>
       </div>
       <div
