@@ -7355,3 +7355,246 @@
     transition: none;
   }
 }
+
+/* Reading-first type scale. The canvas is commonly viewed below 100% so the
+   full workflow fits on screen; keep metadata compact, but make every
+   decision, status, and next action readable without browser zoom. */
+@media (min-width: 721px) {
+  .video-canvas-caption {
+    min-height: 78px;
+    padding: 15px 24px;
+  }
+
+  .video-canvas-caption-project b {
+    font-size: 16px;
+  }
+
+  .video-canvas-caption-project small,
+  .video-canvas-caption .canvas-shot-rail-item,
+  .video-canvas-caption .canvas-shot-rail > small,
+  .video-canvas-caption .canvas-shot-rail-item i {
+    font-size: 11px;
+  }
+
+  .video-canvas-caption .canvas-shot-rail-item {
+    width: 36px;
+    height: 30px;
+  }
+
+  .video-canvas-caption .canvas-shot-rail-item i {
+    width: 6px;
+    height: 6px;
+  }
+
+  .canvas-node-grip {
+    min-height: 56px;
+    padding: 9px 14px 9px 10px;
+  }
+
+  .canvas-node-grip b {
+    font-size: 15px;
+  }
+
+  .canvas-node-grip span {
+    width: 34px;
+    height: 34px;
+    font-size: 11px;
+  }
+
+  .canvas-node-grip i {
+    font-size: 16px;
+  }
+
+  .canvas-node-body {
+    padding: 18px;
+    font-size: 14px;
+  }
+
+  .canvas-upload-head b,
+  .canvas-omni-node-head b,
+  .canvas-upload-empty b,
+  .canvas-agent-badge b,
+  .canvas-task-model > div b {
+    font-size: 14px;
+  }
+
+  .canvas-upload-head small,
+  .canvas-omni-node > small,
+  .canvas-reference-chip small,
+  .canvas-task-body > small,
+  .canvas-result-body > small,
+  .canvas-agent-badge small,
+  .canvas-agent-confidence,
+  .canvas-agent-prerequisite,
+  .canvas-agent-warning,
+  .canvas-task-model > div small {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .canvas-upload-empty span,
+  .canvas-omni-add span {
+    font-size: 26px;
+  }
+
+  .canvas-upload-preview span,
+  .canvas-upload-preview button,
+  .canvas-model-fields label,
+  .canvas-model-fields select,
+  .canvas-task-model > button {
+    font-size: 13px;
+  }
+
+  .canvas-agent-body strong {
+    font-size: 19px;
+  }
+
+  .canvas-agent-body p {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .canvas-agent-plan-button,
+  .canvas-agent-inline-button,
+  .canvas-source-animate-button,
+  .canvas-result-actions button,
+  .canvas-branch-button,
+  .canvas-best-take-button,
+  .canvas-compare-button {
+    font-size: 13px;
+  }
+
+  .canvas-cost span,
+  .canvas-task-body li,
+  .canvas-result-body dt,
+  .canvas-result-body dd,
+  .canvas-task-state,
+  .canvas-status,
+  .canvas-task-next {
+    font-size: 13px;
+  }
+
+  .canvas-cost b {
+    font-size: 25px;
+  }
+
+  .canvas-result-empty b {
+    font-size: 17px;
+  }
+
+  .canvas-result-empty p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .canvas-composer-prompt-head label,
+  .canvas-composer-controls select,
+  .canvas-composer-controls label,
+  .canvas-reference-mode,
+  .canvas-composer-cost,
+  .canvas-preferences-trigger {
+    font-size: 13px;
+  }
+
+  .canvas-composer-prompt textarea {
+    min-height: 82px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .canvas-composer-count,
+  .canvas-composer-main > p,
+  .canvas-composer-prompt-head small,
+  .canvas-composer-controls label > span,
+  .canvas-composer-cost small,
+  .canvas-preferences-trigger-copy small,
+  .canvas-preferences-trigger-arrow {
+    font-size: 11px;
+  }
+
+  .canvas-composer-prompt-head small {
+    padding: 4px 7px;
+  }
+
+  .canvas-composer-cost b {
+    font-size: 22px;
+  }
+
+  .canvas-preflight-review,
+  .canvas-agent-plan-result,
+  .canvas-script-ocr-entry,
+  .canvas-script-ocr-panel,
+  .canvas-asset-reference-warning {
+    font-size: 12px;
+  }
+
+  .canvas-preflight-review-head span,
+  .canvas-preflight-review-head b,
+  .canvas-preflight-review li,
+  .canvas-script-ocr-entry b,
+  .canvas-script-ocr-entry small,
+  .canvas-script-ocr-panel-head b,
+  .canvas-script-ocr-panel-head small,
+  .canvas-script-ocr-panel textarea,
+  .canvas-script-ocr-actions button {
+    font-size: 12px;
+  }
+
+  .canvas-status-time strong {
+    font-size: 13px;
+  }
+
+  .canvas-status-time small,
+  .canvas-cancel-note,
+  .canvas-failure-stage {
+    font-size: 11px;
+  }
+
+  .canvas-composer-arrange-button,
+  .canvas-composer-collapse-button {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .video-canvas-caption-project b,
+  .canvas-node-grip b,
+  .canvas-upload-head b,
+  .canvas-omni-node-head b,
+  .canvas-agent-badge b,
+  .canvas-task-model > div b {
+    font-size: 13px;
+  }
+
+  .canvas-node-body {
+    font-size: 13px;
+  }
+
+  .canvas-node-grip {
+    min-height: 52px;
+  }
+
+  .canvas-composer-prompt textarea {
+    min-height: 66px;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .canvas-composer-count,
+  .canvas-composer-main > p,
+  .canvas-composer-prompt-head small,
+  .canvas-composer-controls label > span,
+  .canvas-composer-cost small {
+    font-size: 10px;
+  }
+
+  .canvas-composer-controls select,
+  .canvas-composer-controls label,
+  .canvas-reference-mode,
+  .canvas-composer-cost,
+  .canvas-preferences-trigger {
+    font-size: 12px;
+  }
+}
