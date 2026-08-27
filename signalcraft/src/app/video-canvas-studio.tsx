@@ -192,6 +192,8 @@ function canvasReferenceRoleLabel(role: CanvasAssetRole, zh: boolean) {
   return labels[role];
 }
 
+const OMNI_REFERENCE_ROLE_VALUES: CanvasAssetRole[] = ['character', 'script', 'storyboard', 'motion', 'style', 'scene', 'prop', 'reference', 'start_frame'];
+
 function failureStageLabel(stage: VideoGeneration['failureStage'], zh: boolean) {
   if (stage === 'provider') return zh ? '模型服务' : 'Provider';
   if (stage === 'media') return zh ? '媒体读取' : 'Media read';
@@ -234,6 +236,17 @@ function frameReferenceIndex(frame: UploadedFrame, fallbackIndex: number) {
   return Number.isInteger(frame.referenceIndex) && frame.referenceIndex! >= 1 && frame.referenceIndex! <= 9
     ? frame.referenceIndex!
     : fallbackIndex + 1;
+}
+
+function referenceBindingForFrame(frame: UploadedFrame, index: number, bindings: CanvasSemantics['references']) {
+  const mentionIndex = frameReferenceIndex(frame, index);
+  return bindings.find(reference => reference.assetId === frame.assetId && reference.mentionId === `image:${mentionIndex}`) || {
+    role: index === 0 ? 'start_frame' as const : 'reference' as const,
+    strength: index === 0 ? 'strong' as const : 'weak' as const,
+    priority: Math.max(10, 100 - index * 10),
+    required: index === 0,
+    constraints: [],
+  };
 }
 
 function restoreNodePositions(value: unknown): NodePositions {
@@ -314,20 +327,42 @@ function OmniReferenceChip({
   mentionLabel,
   loadingLabel,
   removeLabel,
+  role,
+  roleLabel,
+  strength,
+  zh,
+  roleOptions,
+  editable = false,
   onMention,
   onRemove,
+  onRoleChange,
+  onStrengthChange,
   highlighted,
 }: {
   frame: UploadedFrame;
   mentionLabel: string;
   loadingLabel: string;
   removeLabel: string;
+  role: CanvasAssetRole;
+  roleLabel: string;
+  strength: 'strong' | 'weak';
+  zh: boolean;
+  roleOptions?: Array<{ value: CanvasAssetRole; label: string }>;
+  editable?: boolean;
   onMention: () => void;
   onRemove: () => void;
+  onRoleChange?: (role: CanvasAssetRole) => void;
+  onStrengthChange?: () => void;
   highlighted?: boolean;
 }) {
   return <div className={'canvas-omni-reference ' + (highlighted ? 'is-highlighted' : '')} data-highlighted={highlighted ? 'true' : undefined}>
     {frame.previewUrl ? <img src={frame.previewUrl} alt={frame.name} /> : <div className="canvas-media-loading">{loadingLabel}</div>}
+    {editable && roleOptions && onRoleChange ? <div className="canvas-reference-controls" onPointerDown={event => event.stopPropagation()}>
+      <select value={role} aria-label={`${mentionLabel} ${roleLabel}`} onChange={event => onRoleChange(event.target.value as CanvasAssetRole)}>
+        {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      {onStrengthChange && <button type="button" className={'canvas-reference-strength ' + strength} aria-pressed={strength === 'strong'} aria-label={strength === 'strong' ? `${mentionLabel} ${roleLabel}: ${zh ? '强约束' : 'strong constraint'}` : `${mentionLabel} ${roleLabel}: ${zh ? '弱参考' : 'weak reference'}`} title={strength === 'strong' ? (zh ? '强约束：尽量保持该素材特征' : 'Strong constraint: preserve this asset’s features') : (zh ? '弱参考：仅提供方向，不强制复刻' : 'Weak reference: guide the direction without forcing a match')} onClick={onStrengthChange}>{strength === 'strong' ? (zh ? '强' : 'S') : (zh ? '弱' : 'W')}</button>}
+    </div> : <span className="canvas-reference-role-pill">{roleLabel}</span>}
     <button type="button" className="canvas-reference-mention" onClick={onMention}>{mentionLabel}</button>
     <button type="button" className="canvas-reference-remove" onClick={onRemove} aria-label={removeLabel}>×</button>
   </div>;
@@ -477,6 +512,10 @@ export default function VideoCanvasStudio({
   const activeReferenceBindings = useMemo(() => canvasSemantics.references
     .filter(reference => reference.shotId === canvasSemantics.shot.id)
     .slice(-9), [canvasSemantics.references, canvasSemantics.shot.id]);
+  const omniReferenceRoleOptions = useMemo(() => OMNI_REFERENCE_ROLE_VALUES.map(value => ({
+    value,
+    label: canvasReferenceRoleLabel(value, zh),
+  })), [zh]);
   const recentCanvasEvents = useMemo(() => canvasSemantics.events
     .filter(event => event.shotId === canvasSemantics.shot.id)
     .slice(-5)
@@ -1181,25 +1220,65 @@ export default function VideoCanvasStudio({
     if (!frame) return;
     const mentionIndex = frameReferenceIndex(frame, index);
     const mention = zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`;
+    const current = referenceBindingForFrame(frame, index, activeReferenceBindings);
     setCanvasSemantics(previous => recordCanvasEvent(bindCanvasAssetReference(previous, {
       token: mention,
       assetId: frame.assetId,
-      role: index === 0 ? 'start_frame' : 'reference',
-      priority: Math.max(10, 100 - index * 10),
-      strength: index === 0 ? 'strong' : 'weak',
-      required: index === 0,
+      role: current.role,
+      priority: current.priority,
+      strength: current.strength,
+      required: current.required,
+      constraints: current.constraints,
     }), {
       id: `asset-bound-${frame.assetId}-${mentionIndex}`,
       type: 'asset.bound',
       actor: 'user',
       message: 'reference-bound',
-      metadata: { assetId: frame.assetId, mentionId: `image:${mentionIndex}`, role: index === 0 ? 'start_frame' : 'reference' },
+      metadata: { assetId: frame.assetId, mentionId: `image:${mentionIndex}`, role: current.role },
     }));
     setSelectedNodeId('source');
     setHighlightedAssetId(frame.assetId);
     setPrompt(current => parseCanvasAssetMentions(current).some(item => item.mentionId === `image:${mentionIndex}`)
       ? current
       : `${current.trim()} ${mention} `.trimStart());
+  };
+
+  const updateReferenceRole = (index: number, nextRole: CanvasAssetRole) => {
+    const frame = referenceFrames[index];
+    if (!frame) return;
+    const mentionIndex = frameReferenceIndex(frame, index);
+    const current = referenceBindingForFrame(frame, index, activeReferenceBindings);
+    const scriptLike = nextRole === 'script' || nextRole === 'storyboard';
+    setCanvasSemantics(previous => bindCanvasAssetReference(previous, {
+      token: `@${zh ? '图片' : 'image'}${mentionIndex}`,
+      assetId: frame.assetId,
+      role: nextRole,
+      priority: scriptLike ? Math.min(current.priority, 40) : current.priority,
+      strength: scriptLike ? 'weak' : current.strength,
+      required: scriptLike ? false : current.required,
+      shotId: previous.shot.id,
+      constraints: current.constraints,
+    }));
+    setAgentPlan(null);
+    notify(zh ? `参考图 ${mentionIndex} 已标记为${canvasReferenceRoleLabel(nextRole, true)}。` : `Reference image ${mentionIndex} is now ${canvasReferenceRoleLabel(nextRole, false)}.`);
+  };
+
+  const toggleReferenceStrength = (index: number) => {
+    const frame = referenceFrames[index];
+    if (!frame) return;
+    const mentionIndex = frameReferenceIndex(frame, index);
+    const current = referenceBindingForFrame(frame, index, activeReferenceBindings);
+    setCanvasSemantics(previous => bindCanvasAssetReference(previous, {
+      token: `@${zh ? '图片' : 'image'}${mentionIndex}`,
+      assetId: frame.assetId,
+      role: current.role,
+      priority: current.priority,
+      strength: current.strength === 'strong' ? 'weak' : 'strong',
+      required: current.required,
+      shotId: previous.shot.id,
+      constraints: current.constraints,
+    }));
+    setAgentPlan(null);
   };
 
   const changeReferenceMode = (next: ReferenceMode) => {
@@ -1828,10 +1907,14 @@ export default function VideoCanvasStudio({
               </> : <div className="canvas-omni-node">
                 <div className="canvas-omni-node-head"><b>{zh ? '全能参考' : 'Omni reference'}</b><span>{referenceFrames.length}/9</span></div>
                 <div className="canvas-omni-grid">
-                  {referenceFrames.map((frame, index) => { const mentionIndex = frameReferenceIndex(frame, index); return <OmniReferenceChip key={frame.assetId} frame={frame} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />; })}
+                  {referenceFrames.map((frame, index) => {
+                    const mentionIndex = frameReferenceIndex(frame, index);
+                    const binding = referenceBindingForFrame(frame, index, activeReferenceBindings);
+                    return <OmniReferenceChip key={frame.assetId} frame={frame} role={binding.role} roleLabel={canvasReferenceRoleLabel(binding.role, zh)} strength={binding.strength} zh={zh} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />;
+                  })}
                   {referenceFrames.length < 9 && <label className="canvas-omni-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span>＋</span><b>{uploading === 'reference' ? (zh ? '上传中' : 'Uploading') : (zh ? '加入图片' : 'Add images')}</b></label>}
                 </div>
-                <small>{zh ? '点击 @图片编号，把素材引用插入提示词。' : 'Use an @image label to reference a source in the prompt.'}</small>
+                <small>{zh ? '先在底部设置图片用途，再点击 @图片编号插入提示词。' : 'Set each image’s purpose below, then use its @image label in the prompt.'}</small>
               </div>}
               <div className="canvas-source-actions">
                 <button type="button" className="canvas-source-animate-button" disabled={shotActionsDisabled} data-canvas-action="animate" onClick={animateCurrentReference}>{zh ? 'Animate 当前素材' : 'Animate current reference'}<span aria-hidden="true">→</span></button>
@@ -1979,7 +2062,11 @@ export default function VideoCanvasStudio({
               <b>END</b><small>{endFrame ? (zh ? '更换' : 'Replace') : (zh ? '可选' : 'Optional')}</small>
             </label>
             </> : <>
-              {referenceFrames.map((frame, index) => { const mentionIndex = frameReferenceIndex(frame, index); return <OmniReferenceChip key={frame.assetId} frame={frame} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />; })}
+              {referenceFrames.map((frame, index) => {
+                const mentionIndex = frameReferenceIndex(frame, index);
+                const binding = referenceBindingForFrame(frame, index, activeReferenceBindings);
+                return <OmniReferenceChip key={frame.assetId} frame={frame} role={binding.role} roleLabel={canvasReferenceRoleLabel(binding.role, zh)} strength={binding.strength} zh={zh} roleOptions={omniReferenceRoleOptions} editable onRoleChange={nextRole => updateReferenceRole(index, nextRole)} onStrengthChange={() => toggleReferenceStrength(index)} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />;
+              })}
               {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
             </>}
           </div>
@@ -1987,7 +2074,7 @@ export default function VideoCanvasStudio({
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
-              <textarea ref={promptRef} id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} />
+              <textarea ref={promptRef} id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '写清人物、脚本、动作和镜头；用 @图片1 指定参考图…' : 'Describe the subject, script, motion, and camera; use @image1 for a reference…'} />
               <span className="canvas-composer-count">{prompt.length}/1200</span>
               {assetMentionValidation.hasInvalid && <p className="canvas-asset-reference-warning" role="alert">{assetMentionValidation.unbound.length > 0
                 ? (zh ? `有 ${assetMentionValidation.unbound.length} 个 @图片引用尚未绑定，请点击对应参考图的引用按钮。` : `${assetMentionValidation.unbound.length} image mention${assetMentionValidation.unbound.length > 1 ? 's are' : ' is'} not bound. Click the matching reference chip to bind it.`)

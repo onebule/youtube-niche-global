@@ -6522,3 +6522,89 @@
     text-align: left;
   }
 }
+
+/* Reference semantics stay visible on the thumbnail instead of hiding in
+   prompt prose. The controls are intentionally compact so the composer keeps
+   its existing paper-and-coral rhythm on narrow screens. */
+.canvas-reference-role-pill {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  left: 5px;
+  max-width: calc(100% - 30px);
+  overflow: hidden;
+  padding: 3px 5px;
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 5px;
+  background: rgba(255, 253, 248, .94);
+  color: #263038;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-reference-controls {
+  position: absolute;
+  z-index: 2;
+  right: 4px;
+  bottom: 28px;
+  left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.canvas-reference-controls select,
+.canvas-reference-strength {
+  min-width: 0;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 5px;
+  background: rgba(31, 47, 49, .9);
+  color: #fffdf8;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.canvas-reference-controls select {
+  flex: 1 1 auto;
+  padding: 0 3px;
+  color-scheme: dark;
+}
+
+.canvas-reference-strength {
+  width: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.canvas-reference-strength.strong {
+  border-color: #ffb39f;
+  background: #c83b2d;
+}
+
+.canvas-reference-strength.weak {
+  border-color: rgba(255, 255, 255, .56);
+  background: rgba(31, 47, 49, .82);
+  color: #f5dfd2;
+}
+
+.canvas-reference-controls select:hover,
+.canvas-reference-controls select:focus-visible,
+.canvas-reference-strength:hover,
+.canvas-reference-strength:focus-visible {
+  border-color: #ffb39f;
+  outline: 2px solid rgba(200, 59, 45, .32);
+  outline-offset: 1px;
+}
+
+@media (max-width: 720px) {
+  .canvas-reference-controls select,
+  .canvas-reference-strength {
+    height: 22px;
+    font-size: 9px;
+  }
+}
