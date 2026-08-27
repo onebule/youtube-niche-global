@@ -162,6 +162,7 @@ const CUSTOM_NODE_LABELS: Record<CanvasCustomNodeType, { zh: string; en: string;
   other: { zh: '其他', en: 'Other', icon: '✦', hintZh: '自定义步骤或素材说明', hintEn: 'A custom step or asset note' },
 };
 
+const SCRIPT_OCR_MODEL_LABEL = 'GPT-5.6 Luna';
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
 const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
   ? (resolution === '2K' ? '2K' : '768P')
@@ -2585,7 +2586,7 @@ export default function VideoCanvasStudio({
                 <button type="button" disabled={scriptOcr.status === 'processing'} onClick={() => void extractScript(scriptReferenceFrames[0].frame)}>{scriptOcr.status === 'processing' ? (zh ? '识别中…' : 'Reading…') : (zh ? '提取文字' : 'Extract text')}</button>
               </div>}
               {scriptOcr.status !== 'idle' && scriptOcr.assetId && scriptReferenceFrames.some(item => item.frame.assetId === scriptOcr.assetId) && <div className={'canvas-script-ocr-panel ' + (scriptOcr.status === 'error' ? 'has-error' : '')} aria-label={zh ? '脚本文字识别结果' : 'Script OCR result'}>
-                <div className="canvas-script-ocr-panel-head"><div><span>{zh ? '识别结果 · 可编辑' : 'TRANSCRIPTION · EDITABLE'}</span><b>{scriptOcr.status === 'processing' ? (zh ? '正在读取脚本截图…' : 'Reading the script screenshot…') : scriptOcr.status === 'error' ? (zh ? '识别未完成' : 'Could not read the screenshot') : (zh ? '请确认后插入' : 'Review before inserting')}</b></div><small>{scriptOcr.result?.model || (zh ? '视觉模型' : 'Vision model')}</small></div>
+                <div className="canvas-script-ocr-panel-head"><div><span>{zh ? '识别结果 · 可编辑' : 'TRANSCRIPTION · EDITABLE'}</span><b>{scriptOcr.status === 'processing' ? (zh ? '正在读取脚本截图…' : 'Reading the script screenshot…') : scriptOcr.status === 'error' ? (zh ? '识别未完成' : 'Could not read the screenshot') : (zh ? '请确认后插入' : 'Review before inserting')}</b></div><small>{scriptOcr.result?.model || SCRIPT_OCR_MODEL_LABEL}</small></div>
                 {scriptOcr.status === 'processing' ? <div className="canvas-script-ocr-loading"><i /><span>{zh ? '正在按阅读顺序提取文字，通常需要几秒。' : 'Transcribing the reading order. This usually takes a few seconds.'}</span></div> : <textarea aria-label={zh ? '可编辑的脚本文字' : 'Editable script text'} value={scriptOcr.text} onChange={event => updateScriptOcrText(event.target.value)} rows={5} maxLength={12000} placeholder={zh ? '识别结果会显示在这里，也可以手动粘贴或修正。' : 'The transcription appears here. You can paste or correct it manually.'} />}
                 {scriptOcr.error && <p className="canvas-script-ocr-error" role="alert">{scriptOcr.error}</p>}
                 {scriptOcr.status !== 'processing' && <div className="canvas-script-ocr-actions"><button type="button" disabled={!scriptOcr.text.trim()} onClick={insertScriptOcr}>{zh ? '插入 Motion Prompt' : 'Insert into Motion Prompt'}</button><button type="button" className="is-quiet" onClick={() => { const source = scriptReferenceFrames.find(item => item.frame.assetId === scriptOcr.assetId); if (source) void extractScript(source.frame); }}>{zh ? '重新识别' : 'Run again'}</button></div>}
