@@ -888,7 +888,9 @@ export default function VideoCanvasStudio({
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
+    setSelectedNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
     panRef.current = { clientX: event.clientX, clientY: event.clientY, origin: { x: viewport.x, y: viewport.y } };
   };
