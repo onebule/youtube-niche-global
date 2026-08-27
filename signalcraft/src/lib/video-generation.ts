@@ -8,6 +8,49 @@ export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type VideoGenerationCancellation = 'confirmed' | 'requested' | 'unsupported' | 'failed' | 'not_applicable';
 
+export type GenerationSpecReferenceRole = 'character' | 'start_frame' | 'end_frame' | 'motion' | 'style' | 'scene' | 'prop' | 'script' | 'storyboard' | 'reference';
+export type GenerationSpecReference = {
+  assetId: string;
+  role: GenerationSpecReferenceRole;
+  priority: number;
+  strength: 'strong' | 'weak';
+  required: boolean;
+  shotId: string | null;
+  constraints: string[];
+};
+
+/** Provider-neutral request contract shared by the canvas and API boundary. */
+export type GenerationSpecV2 = {
+  schemaVersion: 2;
+  requestId: string;
+  taskType: 'image-to-video';
+  routing: {
+    mode: 'locked' | 'auto';
+    requestedModel: VideoModelId;
+    resolvedModel: Exclude<VideoModelId, 'auto'> | null;
+    reason: string;
+  };
+  requestedModel: VideoModelId;
+  resolvedModel: Exclude<VideoModelId, 'auto'> | null;
+  rawPrompt: string;
+  normalizedPrompt: string;
+  references: GenerationSpecReference[];
+  shotId: string | null;
+  shotOrder: number | null;
+  characterSetId: string | null;
+  sceneSetId: string | null;
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+  styleConstraints: string[];
+  motionConstraints: string[];
+  identityConstraints: string[];
+  outputDestination: 'private-media';
+  idempotencyKey: string;
+  retryPolicy: { mode: 'manual'; maxAttempts: 0; retryableOnly: true };
+  userConfirmed: boolean;
+};
+
 type VideoGenerationTimeProfile = { minSeconds: number; maxSeconds: number };
 
 const VIDEO_GENERATION_TIME_PROFILES: Record<VideoModelId, VideoGenerationTimeProfile> = {
@@ -166,6 +209,7 @@ export type VideoGeneration = {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  generationSpec?: GenerationSpecV2 | null;
 };
 
 export type VideoGenerationPlan = {
@@ -218,6 +262,63 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function loadVideoModels() {
   const payload = await request<{ models: VideoModel[] }>('models');
   return payload.models;
+}
+
+export function buildGenerationSpecV2(input: {
+  model: VideoModelId;
+  prompt: string;
+  startImageAssetId: string;
+  endImageAssetId?: string | null;
+  referenceMode?: 'start-end' | 'omni';
+  referenceImageAssetIds?: string[];
+  duration: string;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  resolution: string;
+}, { requestId, idempotencyKey, shotId = null, shotOrder = null, userConfirmed = true }: { requestId: string; idempotencyKey: string; shotId?: string | null; shotOrder?: number | null; userConfirmed?: boolean }): GenerationSpecV2 {
+  const referenceIds = input.referenceMode === 'omni'
+    ? Array.from(new Set(input.referenceImageAssetIds || []))
+    : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
+  const references = referenceIds.filter(Boolean).map((assetId, index) => ({
+    assetId,
+    role: input.referenceMode === 'omni' && index > 0 ? 'reference' as const : index === 0 ? 'start_frame' as const : 'end_frame' as const,
+    priority: index === 0 ? 100 : Math.max(10, 90 - index * 10),
+    strength: index === 0 || input.referenceMode === 'start-end' ? 'strong' as const : 'weak' as const,
+    required: index === 0,
+    shotId,
+    constraints: [],
+  }));
+  const mode = input.model === 'auto' ? 'auto' : 'locked';
+  const resolvedModel = input.model === 'auto' ? null : input.model;
+  return {
+    schemaVersion: 2,
+    requestId,
+    taskType: 'image-to-video',
+    routing: {
+      mode,
+      requestedModel: input.model,
+      resolvedModel,
+      reason: mode === 'locked' ? '用户明确指定模型，Agent 不得切换。' : '等待 Router 根据质量、成本和能力数据解析模型。',
+    },
+    requestedModel: input.model,
+    resolvedModel,
+    rawPrompt: input.prompt.trim(),
+    normalizedPrompt: input.prompt.trim(),
+    references,
+    shotId,
+    shotOrder,
+    characterSetId: null,
+    sceneSetId: null,
+    duration: input.duration,
+    aspectRatio: input.aspectRatio,
+    resolution: input.resolution,
+    styleConstraints: [],
+    motionConstraints: [],
+    identityConstraints: [],
+    outputDestination: 'private-media',
+    idempotencyKey,
+    retryPolicy: { mode: 'manual', maxAttempts: 0, retryableOnly: true },
+    userConfirmed,
+  };
 }
 
 export async function planVideoGeneration(input: {
@@ -275,10 +376,15 @@ export async function createVideoGeneration(input: {
   resolution: string;
 }) {
   const idempotencyKey = globalThis.crypto?.randomUUID?.() || `video-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const generationSpec = buildGenerationSpecV2(input, {
+    requestId: idempotencyKey,
+    idempotencyKey,
+    userConfirmed: true,
+  });
   const payload = await request<{ generation: VideoGeneration }>('generate', {
     method: 'POST',
     headers: { 'idempotency-key': idempotencyKey },
-    body: JSON.stringify({ ...input, idempotencyKey }),
+    body: JSON.stringify({ ...input, idempotencyKey, generationSpec }),
   });
   return payload.generation;
 }
