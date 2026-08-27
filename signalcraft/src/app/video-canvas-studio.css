@@ -5421,3 +5421,19 @@
 .video-canvas-caption .canvas-shot-rail-item i.failed {
   background: var(--canvas-danger);
 }
+
+.canvas-agent-context {
+  display: block;
+  margin-top: 7px;
+  color: #6b6590;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.canvas-agent-context::before {
+  content: '↳';
+  display: inline-block;
+  margin-right: 5px;
+  color: var(--canvas-purple);
+  font-weight: 900;
+}
