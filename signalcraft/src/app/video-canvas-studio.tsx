@@ -1404,6 +1404,7 @@ export default function VideoCanvasStudio({
       setError(zh ? '先写一段 Motion Prompt，再让 Agent 规划。' : 'Add a Motion Prompt before asking the Agent to plan.');
       return;
     }
+    const requestedModel = model;
     setPlanning(true);
     setError('');
     try {
@@ -1418,28 +1419,44 @@ export default function VideoCanvasStudio({
         resolution,
         canvasContext: createCanvasAgentContext(captureCurrentShot(), selectedNodeId),
       });
-      setAgentPlan(next);
+      // The selected model is a user decision. Treat the plan response as
+      // untrusted guidance and preserve the lock even if an upstream Agent
+      // returns a different model.
+      const lockedModel = requestedModel !== 'auto' ? requestedModel : next.model;
+      const modelWasCorrected = requestedModel !== 'auto' && next.model !== requestedModel;
+      const safePlan = modelWasCorrected
+        ? {
+            ...next,
+            model: lockedModel,
+            modelLabel: modelName(lockedModel),
+            warnings: Array.from(new Set([...next.warnings, `已保留你选择的 ${modelName(lockedModel)}，Agent 不会擅自切换模型。`])),
+          }
+        : next;
+      setAgentPlan(safePlan);
       setAppliedAgentActionIds([]);
-      setModel(next.model);
-      setReferenceMode(next.referenceMode);
-      setDuration(next.duration);
-      if (next.aspectRatio) setAspectRatio(next.aspectRatio);
-      setResolution(next.resolution);
-      patchSemanticNode('agent', { role: 'agent', status: 'completed', model: next.model, provider: next.director.provider || null });
+      setModel(lockedModel);
+      setReferenceMode(safePlan.referenceMode);
+      setDuration(normalizeVideoDuration(lockedModel, safePlan.duration));
+      if (safePlan.aspectRatio) setAspectRatio(safePlan.aspectRatio);
+      setResolution(safePlan.resolution);
+      patchSemanticNode('agent', { role: 'agent', status: 'completed', model: lockedModel, provider: safePlan.director.provider || null });
       setCanvasSemantics(previous => recordCanvasEvent(previous, {
         id: `agent-planned-${previous.shot.id}-${Date.now()}`,
         type: 'agent.planned',
         actor: 'agent',
         message: next.agentFallback ? 'rules-fallback' : 'agent-plan',
         metadata: {
-          model: next.model,
-          director: next.director.id,
-          confidence: typeof next.confidence === 'number' ? next.confidence : null,
-          referenceCount: next.referenceCount,
-          warningCount: next.warnings.length,
+          model: lockedModel,
+          director: safePlan.director.id,
+          confidence: typeof safePlan.confidence === 'number' ? safePlan.confidence : null,
+          referenceCount: safePlan.referenceCount,
+          warningCount: safePlan.warnings.length,
+          modelCorrected: modelWasCorrected,
         },
       }));
-      notify(zh ? `Agent 已完成规划：${next.modelLabel}。请确认后再生成。` : `Agent selected ${next.modelLabel}. Review the plan before generating.`);
+      notify(modelWasCorrected
+        ? (zh ? `已保留你锁定的 ${modelName(lockedModel)}；请检查 Agent 规划后再生成。` : `${modelName(lockedModel)} stays locked. Review the Agent plan before generating.`)
+        : (zh ? `Agent 已完成规划：${safePlan.modelLabel}。请确认后再生成。` : `Agent selected ${safePlan.modelLabel}. Review the plan before generating.`));
     } catch (cause) {
       setError(clientMessage(cause));
     } finally {
@@ -1458,6 +1475,14 @@ export default function VideoCanvasStudio({
       return;
     }
     void planWithAgent();
+  };
+
+  const applyAgentPrompt = () => {
+    const optimized = agentPlan?.prompt.trim().slice(0, 1200) || '';
+    if (!optimized || optimized === prompt.trim()) return;
+    setPrompt(optimized);
+    patchSemanticNode('prompt', { status: 'draft' });
+    notify(zh ? '已应用 Agent 优化 Prompt；请再次检查后生成。' : 'The Agent prompt was applied. Review it once more before generating.');
   };
 
   const animateCurrentReference = () => {
@@ -2248,6 +2273,15 @@ export default function VideoCanvasStudio({
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite">
               <div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div>
               <p>{agentPlan.reasoning}</p>
+              <div className="canvas-agent-prompt-review">
+                <div className="canvas-agent-prompt-review-head"><b>{zh ? 'Prompt 对比' : 'Prompt review'}</b><small>{agentPlan.prompt.trim() === prompt.trim() ? (zh ? '未改写' : 'No rewrite') : (zh ? '待你确认' : 'Awaiting confirmation')}</small></div>
+                <div className="canvas-agent-prompt-review-grid">
+                  <div><small>{zh ? '当前 Prompt' : 'Current prompt'}</small><p>{prompt.trim() || '—'}</p></div>
+                  <div><small>{zh ? 'Agent 优化版本' : 'Agent version'}</small><p>{agentPlan.prompt.trim() || '—'}</p></div>
+                </div>
+                <button type="button" className="canvas-agent-prompt-apply" disabled={!agentPlan.prompt.trim() || agentPlan.prompt.trim() === prompt.trim()} onClick={applyAgentPrompt}>{zh ? '应用优化 Prompt' : 'Apply optimized Prompt'}</button>
+                <small className="canvas-agent-prompt-note">{zh ? '只会替换文字，不会改变已锁定的模型；应用后仍需你确认再生成。' : 'This only replaces the text. The locked model stays unchanged; review again before generating.'}</small>
+              </div>
               {agentPlan.referenceImageRoles && agentPlan.referenceImageRoles.length > 0 && <small>{zh ? `参考图角色：${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join('、')}` : `Reference roles: ${agentPlan.referenceImageRoles.map(item => `${item.index + 1} · ${item.role}`).join(', ')}`}</small>}
               {agentPlan.imageModel && <small>{zh ? `缺少 START，可先用 ${agentPlan.imageModel} 准备首帧。` : `No START frame yet. Prepare one with ${agentPlan.imageModel}.`}</small>}
               {agentPlan.warnings.length > 0 && <ul>{agentPlan.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}

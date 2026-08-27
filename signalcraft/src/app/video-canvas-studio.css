@@ -6853,3 +6853,102 @@
     font-size: 9px;
   }
 }
+
+/* Agent prompt review keeps the rewrite explicit: planning may suggest text,
+   but only the user can apply it to the paid generation input. */
+.canvas-agent-prompt-review {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #d8d2c9;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.canvas-agent-prompt-review-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.canvas-agent-prompt-review-head b {
+  color: #25272a;
+  font-size: 11px;
+}
+
+.canvas-agent-prompt-review-head small,
+.canvas-agent-prompt-review-grid > div > small,
+.canvas-agent-prompt-note {
+  color: #737980;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.canvas-agent-prompt-review-head small {
+  color: #5f4ee7;
+  font-weight: 750;
+}
+
+.canvas-agent-prompt-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.canvas-agent-prompt-review-grid > div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #e2ded8;
+  border-radius: 8px;
+  background: #fffefa;
+}
+
+.canvas-agent-prompt-review-grid p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: #2d3033;
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow-wrap: anywhere;
+}
+
+.canvas-agent-prompt-apply {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #bcaef8;
+  border-radius: 7px;
+  background: #f0edff;
+  color: #4535aa;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.canvas-agent-prompt-apply:hover:not(:disabled),
+.canvas-agent-prompt-apply:focus-visible:not(:disabled) {
+  border-color: #5f4ee7;
+  background: #e6e0ff;
+  outline: 2px solid rgba(95, 78, 231, .2);
+  outline-offset: 2px;
+}
+
+.canvas-agent-prompt-apply:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.canvas-agent-prompt-note {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .canvas-agent-prompt-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
