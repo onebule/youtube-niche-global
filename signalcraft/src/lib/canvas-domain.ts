@@ -313,7 +313,19 @@ export function registerCanvasAsset(semantics: CanvasSemantics, asset: CanvasAss
 
 /** Records a generation as a version and mirrors its lifecycle onto nodes. */
 export function recordCanvasGeneration(semantics: CanvasSemantics, generation: VideoGeneration): CanvasSemantics {
-  const versionId = `generation-${generation.id}-v1`;
+  // A generation can be observed more than once while it moves from queued to
+  // processing to completed. Reuse its existing version in that case; a new
+  // generation for the same Shot becomes the next visible version.
+  const previousGeneration = semantics.generations.find(item => item.id === generation.id);
+  const previousVersion = previousGeneration
+    ? semantics.versions.find(item => item.id === previousGeneration.versionId)
+    : undefined;
+  const nextVersionNumber = previousVersion?.number || (
+    semantics.versions
+      .filter(item => item.shotId === semantics.shot.id)
+      .reduce((highest, item) => Math.max(highest, item.number), 0) + 1
+  );
+  const versionId = previousVersion?.id || `generation-${generation.id}-v${nextVersionNumber}`;
   const nextGeneration: CanvasGenerationSemantic = {
     id: generation.id,
     shotId: semantics.shot.id,
@@ -329,8 +341,10 @@ export function recordCanvasGeneration(semantics: CanvasSemantics, generation: V
     id: versionId,
     generationId: generation.id,
     shotId: semantics.shot.id,
-    number: 1,
-    bestTake: false,
+    number: nextVersionNumber,
+    // Keep a previously selected Best Take while refreshing the generation
+    // status. New versions start unselected until the user chooses one.
+    bestTake: previousVersion?.bestTake || false,
     createdAt: generation.createdAt,
   };
   const nextStatus: CanvasShotStatus = generation.status === 'completed'
@@ -365,8 +379,30 @@ export function recordCanvasGeneration(semantics: CanvasSemantics, generation: V
     versions: [...semantics.versions.filter(item => item.id !== versionId), version].slice(-MAX_SEMANTIC_ROWS),
   };
   return patchCanvasNode(
-    patchCanvasNode(next, 'task', { role: 'generation', generationId: generation.id, versionId, provider: generation.provider, model: generation.model, status: generation.status, version: 1 }),
+    patchCanvasNode(next, 'task', { role: 'generation', generationId: generation.id, versionId, provider: generation.provider, model: generation.model, status: generation.status, version: nextVersionNumber, bestTake: previousVersion?.bestTake || false }),
     'result',
-    { role: 'video_result', generationId: generation.id, versionId, provider: generation.provider, model: generation.model, status: generation.status, version: 1 },
+    { role: 'video_result', generationId: generation.id, versionId, provider: generation.provider, model: generation.model, status: generation.status, version: nextVersionNumber, bestTake: previousVersion?.bestTake || false },
   );
+}
+
+export function canvasVersionForGeneration(semantics: CanvasSemantics, generationId: string | null | undefined) {
+  if (!generationId) return null;
+  return semantics.versions.find(version => version.generationId === generationId && version.shotId === semantics.shot.id) || null;
+}
+
+/** Selects one completed generation as the Shot's Best Take without changing
+ * the active generation or submitting another provider request. */
+export function selectCanvasBestTake(semantics: CanvasSemantics, generationId: string) {
+  const target = canvasVersionForGeneration(semantics, generationId);
+  if (!target) return semantics;
+  const versions = semantics.versions.map(version => version.shotId === semantics.shot.id
+    ? { ...version, bestTake: version.id === target.id }
+    : version);
+  const nodes = Object.fromEntries(Object.entries(semantics.nodes).map(([nodeId, node]) => [
+    nodeId,
+    node && node.shotId === semantics.shot.id
+      ? { ...node, bestTake: node.generationId === generationId }
+      : node,
+  ])) as CanvasSemantics['nodes'];
+  return { ...semantics, nodes, versions };
 }

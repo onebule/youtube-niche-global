@@ -391,6 +391,128 @@
   box-shadow: 10px 12px 0 rgba(23, 33, 39, .13), 0 18px 40px rgba(40, 31, 23, .18);
 }
 
+.canvas-compare-panel {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  z-index: 35;
+  display: grid;
+  width: min(460px, calc(100vw - 36px));
+  max-height: min(66vh, 560px);
+  gap: 12px;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid #b8aea0;
+  border-radius: 16px;
+  background: #fffdf8;
+  box-shadow: 10px 12px 0 rgba(23, 33, 39, .13), 0 18px 40px rgba(40, 31, 23, .18);
+}
+
+.canvas-compare-list {
+  display: grid;
+  gap: 8px;
+}
+
+.canvas-compare-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e0d7cb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.canvas-compare-card.is-current {
+  border-color: #0b756f;
+  background: #edf8f5;
+}
+
+.canvas-compare-card-head,
+.canvas-result-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-compare-card-head b,
+.canvas-result-version > span {
+  color: #172127;
+  font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.canvas-compare-card-head strong,
+.canvas-result-version > b {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #ff5a47;
+  color: #172127;
+  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .04em;
+}
+
+.canvas-compare-card-head span,
+.canvas-result-version small {
+  margin-left: auto;
+  color: #81766a;
+  font-size: 10px;
+}
+
+.canvas-compare-card p {
+  margin: 0;
+  color: #4d4943;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.canvas-compare-card > small {
+  color: #81766a;
+  font-size: 10px;
+}
+
+.canvas-compare-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-compare-card-actions button,
+.canvas-best-take-button,
+.canvas-compare-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #c9c0b4;
+  border-radius: 7px;
+  background: #fffdf8;
+  color: #172127;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.canvas-compare-card-actions button.is-primary,
+.canvas-best-take-button {
+  border-color: #172127;
+  background: #172127;
+  color: #fff;
+}
+
+.canvas-compare-card-actions span {
+  color: #0b756f;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.canvas-best-take-button,
+.canvas-compare-button {
+  width: 100%;
+}
+
+.canvas-compare-button {
+  border-color: #0b756f;
+  background: #edf8f5;
+  color: #0b756f;
+}
+
 .canvas-history-head {
   display: flex;
   align-items: start;
@@ -2084,7 +2206,8 @@
     display: none;
   }
 
-  .canvas-history-panel {
+  .canvas-history-panel,
+  .canvas-compare-panel {
     top: 78px;
     right: 12px;
     width: min(430px, calc(100vw - 48px));
@@ -5536,4 +5659,66 @@
   .canvas-agent-action-button {
     transition: none;
   }
+}
+
+/* Version compare follows the active reference-led canvas palette. */
+.canvas-compare-panel {
+  border-color: var(--canvas-line-soft, #d9dce1);
+  background: var(--canvas-paper, #ffffff);
+  color: var(--canvas-line, #1f2328);
+}
+
+.canvas-compare-card {
+  border-color: var(--canvas-line-soft, #d9dce1);
+  background: var(--canvas-paper, #ffffff);
+}
+
+.canvas-compare-card.is-current {
+  border-color: var(--canvas-success, #16a36f);
+  background: var(--canvas-success-soft, #e7f7ef);
+}
+
+.canvas-compare-card-head b,
+.canvas-result-version > span,
+.canvas-compare-card p,
+.canvas-compare-card-actions button,
+.canvas-best-take-button,
+.canvas-compare-button {
+  color: var(--canvas-line, #1f2328);
+}
+
+.canvas-compare-card-head strong,
+.canvas-result-version > b {
+  background: var(--canvas-purple, #6b5cf0);
+  color: #ffffff;
+}
+
+.canvas-compare-card-head span,
+.canvas-result-version small,
+.canvas-compare-card > small {
+  color: var(--canvas-muted, #737980);
+}
+
+.canvas-compare-card-actions button,
+.canvas-best-take-button,
+.canvas-compare-button {
+  border-color: var(--canvas-line-soft, #d9dce1);
+  background: var(--canvas-paper, #ffffff);
+}
+
+.canvas-compare-card-actions button.is-primary,
+.canvas-best-take-button {
+  border-color: var(--canvas-line, #1f2328);
+  background: var(--canvas-line, #1f2328);
+  color: #ffffff;
+}
+
+.canvas-compare-card-actions span {
+  color: var(--canvas-success, #16a36f);
+}
+
+.canvas-compare-button {
+  border-color: var(--canvas-purple, #6b5cf0);
+  background: var(--canvas-purple-soft, #efedff);
+  color: var(--canvas-purple, #6b5cf0);
 }

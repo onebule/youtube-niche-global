@@ -24,12 +24,14 @@ import {
   type UploadedFrame,
 } from '@/src/lib/canvas-shot-workspace';
 import {
+  canvasVersionForGeneration,
   createCanvasSemantics,
   normalizeCanvasSemantics,
   patchCanvasNode,
   patchCanvasShot,
   recordCanvasGeneration,
   registerCanvasAsset,
+  selectCanvasBestTake,
   type CanvasAgentAction,
   type CanvasAssetRole,
   type CanvasNodeId,
@@ -281,6 +283,7 @@ export default function VideoCanvasStudio({
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [compareOpen, setCompareOpen] = useState(false);
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -337,6 +340,7 @@ export default function VideoCanvasStudio({
     setAppliedAgentActionIds([]);
     setSelectedNodeId(null);
     setHistoryOpen(false);
+    setCompareOpen(false);
     setNodePaletteOpen(false);
   };
 
@@ -372,6 +376,11 @@ export default function VideoCanvasStudio({
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
+  const currentVersion = useMemo(() => canvasVersionForGeneration(canvasSemantics, generation?.id), [canvasSemantics, generation?.id]);
+  const shotVersions = useMemo(() => canvasSemantics.versions
+    .filter(version => version.shotId === canvasSemantics.shot.id)
+    .sort((left, right) => left.number - right.number)
+    .map(version => ({ version, generation: history.find(item => item.id === version.generationId) || null })), [canvasSemantics, history]);
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
   const shotRailItems = useMemo(() => {
     const current = { shot, order: canvasSemantics.shot.order || shot, status: canvasSemantics.shot.status };
@@ -479,8 +488,27 @@ export default function VideoCanvasStudio({
   const toggleHistory = () => {
     const next = !historyOpen;
     setHistoryOpen(next);
+    if (next) setCompareOpen(false);
     if (next) setNodePaletteOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
+  };
+
+  const toggleCompare = () => {
+    const next = !compareOpen;
+    setCompareOpen(next);
+    if (next) setHistoryOpen(false);
+    if (next) setNodePaletteOpen(false);
+    if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
+  };
+
+  const markBestTake = (generationId: string) => {
+    const candidate = history.find(item => item.id === generationId);
+    if (candidate && candidate.status !== 'completed') {
+      notify(zh ? '只有已完成的版本可以设为最佳。' : 'Only completed versions can be selected as the Best Take.');
+      return;
+    }
+    setCanvasSemantics(previous => selectCanvasBestTake(previous, generationId));
+    notify(zh ? '已将该版本标记为最佳镜头。' : 'This version is now the Best Take.');
   };
 
   const restoreHistoryItem = (item: VideoGeneration) => {
@@ -494,6 +522,7 @@ export default function VideoCanvasStudio({
     setResolution(item.resolution);
     setVideoUrl('');
     setHistoryOpen(false);
+    setCompareOpen(false);
     notify(zh ? '已将历史任务载入当前画布。' : 'History task loaded into the current canvas.');
   };
 
@@ -524,15 +553,16 @@ export default function VideoCanvasStudio({
   }, [isCanvasFullscreen]);
 
   useEffect(() => {
-    if (!historyOpen && !nodePaletteOpen) return;
+    if (!historyOpen && !nodePaletteOpen && !compareOpen) return;
     const closePanels = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setHistoryOpen(false);
       setNodePaletteOpen(false);
+      setCompareOpen(false);
     };
     window.addEventListener('keydown', closePanels);
     return () => window.removeEventListener('keydown', closePanels);
-  }, [historyOpen, nodePaletteOpen]);
+  }, [compareOpen, historyOpen, nodePaletteOpen]);
 
   useEffect(() => {
     try {
@@ -868,7 +898,10 @@ export default function VideoCanvasStudio({
   const toggleNodePalette = () => {
     setNodePaletteOpen(current => {
       const next = !current;
-      if (next) setHistoryOpen(false);
+      if (next) {
+        setHistoryOpen(false);
+        setCompareOpen(false);
+      }
       return next;
     });
   };
@@ -944,19 +977,23 @@ export default function VideoCanvasStudio({
         height: 720,
       };
       const nextSemantics = createCanvasSemantics(nextShot);
-      nextSemantics.assets = [...canvasSemantics.assets, {
+      nextSemantics.assets = [...canvasSemantics.assets
+        .filter(asset => asset.role !== 'output')
+        .map(asset => ({ ...asset, shotId: nextSemantics.shot.id })), {
         assetId: generation.thumbnailAssetId,
         kind: 'image',
         role: 'start_frame',
         shotId: nextSemantics.shot.id,
         generationId: generation.id,
-        versionId: `generation-${generation.id}-v1`,
+        versionId: currentVersion?.id || `generation-${generation.id}-v1`,
         name: (zh ? '镜头 ' : 'Shot ') + String(shot) + (zh ? ' 结果帧' : ' result frame'),
         width: 1280,
         height: 720,
       }];
-      nextSemantics.generations = canvasSemantics.generations;
-      nextSemantics.versions = canvasSemantics.versions;
+      // A new shot starts with a clean generation branch; the previous
+      // thumbnail remains available as its START asset below.
+      nextSemantics.generations = [];
+      nextSemantics.versions = [];
       const nextSnapshot: ShotSnapshot = {
         shot: nextShot,
         nodes: { ...nodes },
@@ -1135,8 +1172,10 @@ export default function VideoCanvasStudio({
     nextSemantics.assets = canvasSemantics.assets
       .filter(asset => asset.role !== 'output')
       .map(asset => ({ ...asset, shotId: nextSemantics.shot.id }));
-    nextSemantics.generations = canvasSemantics.generations;
-    nextSemantics.versions = canvasSemantics.versions;
+    // Duplicating a shot copies its inputs, not its historical generations.
+    // This keeps Agent context and Best Take selection scoped to one shot.
+    nextSemantics.generations = [];
+    nextSemantics.versions = [];
     const primaryAssetId = referenceMode === 'omni' ? referenceFrames[0]?.assetId : startFrame?.assetId;
     const nextSnapshot: ShotSnapshot = duplicate ? {
       ...currentSnapshot,
@@ -1349,7 +1388,7 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className={'video-canvas-node task-node ' + (selectedNodeId === 'task' ? 'is-selected' : '')} data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-status={canvasSemantics.nodes.task?.status} data-selected={selectedNodeId === 'task' ? 'true' : undefined} onClick={() => setSelectedNodeId('task')} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
+          <article className={'video-canvas-node task-node ' + (selectedNodeId === 'task' ? 'is-selected' : '')} data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-version={canvasSemantics.nodes.task?.version || undefined} data-best-take={canvasSemantics.nodes.task?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.task?.status} data-selected={selectedNodeId === 'task' ? 'true' : undefined} onClick={() => setSelectedNodeId('task')} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
             <span className="node-port input" aria-hidden="true" />
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
@@ -1363,7 +1402,7 @@ export default function VideoCanvasStudio({
             <span className="node-port output" aria-hidden="true" />
           </article>
 
-          <article className={'video-canvas-node result-node ' + (selectedNodeId === 'result' ? 'is-selected' : '')} data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-status={canvasSemantics.nodes.result?.status} data-selected={selectedNodeId === 'result' ? 'true' : undefined} onClick={() => setSelectedNodeId('result')} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
+          <article className={'video-canvas-node result-node ' + (selectedNodeId === 'result' ? 'is-selected' : '')} data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-version={canvasSemantics.nodes.result?.version || undefined} data-best-take={canvasSemantics.nodes.result?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.result?.status} data-selected={selectedNodeId === 'result' ? 'true' : undefined} onClick={() => setSelectedNodeId('result')} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
             <span className="node-port input" aria-hidden="true" />
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('result')} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
@@ -1373,6 +1412,9 @@ export default function VideoCanvasStudio({
                 {videoUrl ? <video src={videoUrl} controls playsInline preload="metadata" /> : generation.status === 'completed' ? <div className="canvas-media-loading">{zh ? '正在读取私有视频…' : 'Loading private video…'}</div> : null}
                 {generation.status === 'failed' && <p className="canvas-failure">{generation.errorMessage || (zh ? '模型未完成本次生成。' : 'The model did not finish this generation.')}</p>}
                 <dl><div><dt>{zh ? '模型' : 'Model'}</dt><dd>{modelName(generation.model)}</dd></div><div><dt>{zh ? '规格' : 'Format'}</dt><dd>{generation.duration} · {generation.aspectRatio} · {generation.resolution}</dd></div></dl>
+                <div className="canvas-result-version"><span>{currentVersion ? `V${currentVersion.number}` : 'V1'}</span>{currentVersion?.bestTake && <b>{zh ? '最佳镜头' : 'BEST TAKE'}</b>}<small>{shotVersions.length > 1 ? (zh ? `${shotVersions.length} 个版本` : `${shotVersions.length} versions`) : (zh ? '首个版本' : 'First version')}</small></div>
+                {generation.status === 'completed' && !currentVersion?.bestTake && <button type="button" className="canvas-best-take-button" onClick={() => markBestTake(generation.id)}>{zh ? '设为最佳镜头' : 'Set as Best Take'}</button>}
+                {shotVersions.length > 1 && <button type="button" className="canvas-compare-button" onClick={toggleCompare}>{zh ? '对比当前镜头版本' : 'Compare shot versions'}</button>}
                 <div className="canvas-result-actions"><button type="button" disabled={!generation.videoAssetId} onClick={() => void download()}>{zh ? '下载' : 'Download'}</button><button type="button" disabled={!generation.thumbnailAssetId} onClick={() => void continueWithResult()}>{zh ? '设为下一镜头 START' : 'Use as next START'}</button></div>{generation.thumbnailAssetId && <small>{zh ? '下一镜头将使用结果缩略帧作为 START。' : 'The next shot will use the result thumbnail as START.'}</small>}
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
@@ -1403,6 +1445,26 @@ export default function VideoCanvasStudio({
         {historyLoading ? <p className="canvas-history-state">{zh ? '正在读取历史任务…' : 'Loading generation history…'}</p> : historyError ? <div className="canvas-history-error"><p>{historyError}</p><button type="button" onClick={() => void loadHistoryPage(false)}>{zh ? '重试' : 'Retry'}</button></div> : history.length ? <div className="canvas-history-list">{history.map(item => <button type="button" className={'canvas-history-row ' + (generation?.id === item.id ? 'is-current' : '')} key={item.id} onClick={() => restoreHistoryItem(item)}><span className="canvas-history-status" data-status={item.status} aria-hidden="true" /><span className="canvas-history-row-copy"><b>{item.prompt || (zh ? '未命名镜头' : 'Untitled shot')}</b><small>{modelName(item.model)} · {item.duration} · {formatHistoryTime(item.createdAt, zh)}</small></span><span className="canvas-history-row-meta"><strong>{statusLabel(item.status, zh)}</strong><small>{item.creditsCost ? item.creditsCost + ' cr' : (zh ? '主人无限' : 'Owner')}</small></span></button>)}</div> : <div className="canvas-history-empty"><span aria-hidden="true">✦</span><p>{zh ? '还没有生成任务。' : 'No generation tasks yet.'}</p><small>{zh ? '提交第一条镜头后，它会自动出现在这里。' : 'Your first submitted shot will appear here.'}</small></div>}
         {history.length > 0 && historyHasMore && <button type="button" className="canvas-history-more" disabled={historyLoadingMore} onClick={() => void loadHistoryPage(true)}>{historyLoadingMore ? (zh ? '正在加载…' : 'Loading…') : (zh ? '加载更多' : 'Load more')}</button>}
         <p className="canvas-history-footnote">{zh ? '点击任务可载入当前画布；不会重新提交模型。' : 'Select a task to load it here; no model request is submitted.'}</p>
+      </aside>}
+
+      {compareOpen && <aside id="canvas-compare-panel" className="canvas-compare-panel" role="region" aria-labelledby="canvas-compare-title" onKeyDown={event => { if (event.key === 'Escape') setCompareOpen(false); }}>
+        <div className="canvas-history-head">
+          <div><span>{zh ? '版本分支' : 'VERSION BRANCHES'}</span><b id="canvas-compare-title">{zh ? '对比当前镜头' : 'Compare this shot'}</b><small>{zh ? '同一镜头的生成结果与最佳镜头' : 'Generations and Best Take for the active shot'}</small></div>
+          <button type="button" className="canvas-history-close" aria-label={zh ? '关闭版本对比' : 'Close version comparison'} onClick={() => setCompareOpen(false)}>×</button>
+        </div>
+        <div className="canvas-compare-list">
+          {shotVersions.map(({ version, generation: item }) => <article className={'canvas-compare-card ' + (generation?.id === version.generationId ? 'is-current' : '')} key={version.id}>
+            <div className="canvas-compare-card-head"><b>V{version.number}</b>{version.bestTake && <strong>{zh ? '最佳镜头' : 'BEST TAKE'}</strong>}<span>{item ? statusLabel(item.status, zh) : (zh ? '历史任务' : 'History')}</span></div>
+            <p>{item?.prompt || (zh ? '历史任务详情将在载入后显示。' : 'Load this task to view its full prompt.')}</p>
+            <small>{item ? `${modelName(item.model)} · ${item.duration} · ${formatHistoryTime(item.createdAt, zh)}` : version.generationId}</small>
+            <div className="canvas-compare-card-actions">
+              {item && generation?.id !== item.id && <button type="button" onClick={() => restoreHistoryItem(item)}>{zh ? '载入结果' : 'Load result'}</button>}
+              {item?.status === 'completed' && !version.bestTake && <button type="button" className="is-primary" onClick={() => markBestTake(version.generationId)}>{zh ? '设为最佳' : 'Set best'}</button>}
+              {generation?.id === item?.id && <span>{zh ? '当前显示' : 'Currently shown'}</span>}
+            </div>
+          </article>)}
+        </div>
+        <p className="canvas-history-footnote">{zh ? '版本只改变当前镜头的选择状态，不会重新提交或重复扣费。' : 'Version selection never resubmits a task or charges credits again.'}</p>
       </aside>}
 
       <section className="video-canvas-composer" aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
