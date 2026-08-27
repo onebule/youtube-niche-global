@@ -77,6 +77,12 @@ type Viewport = Point & { scale: number };
 type NodeId = CanvasNodeId;
 type NodePositions = CanvasNodePositions;
 type ReferenceMode = CanvasReferenceMode;
+type PromptMentionCandidate = {
+  frame: UploadedFrame;
+  index: number;
+  token: string;
+  role: CanvasAssetRole;
+};
 type SavedCanvas = {
   version: 1 | 2 | 3 | 4 | 5;
   nodes: NodePositions;
@@ -452,6 +458,10 @@ export default function VideoCanvasStudio({
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [composerCollapsed, setComposerCollapsed] = useState(false);
   const [customLayoutMode, setCustomLayoutMode] = useState(false);
+  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
@@ -558,6 +568,34 @@ export default function VideoCanvasStudio({
     value,
     label: canvasReferenceRoleLabel(value, zh),
   })), [zh]);
+  const mentionCandidates = useMemo<PromptMentionCandidate[]>(() => {
+    const source = referenceMode === 'omni'
+      ? referenceFrames.map((frame, index) => ({ frame, index, role: referenceBindingForFrame(frame, index, activeReferenceBindings).role }))
+      : [
+        ...(startFrame ? [{ frame: startFrame, index: 0, role: 'start_frame' as const }] : []),
+        ...(endFrame ? [{ frame: endFrame, index: 1, role: 'end_frame' as const }] : []),
+      ];
+    return source.map(({ frame, index, role }) => {
+      const mentionIndex = frameReferenceIndex(frame, index);
+      return {
+        frame,
+        index,
+        token: `@${zh ? '图片' : 'image'}${mentionIndex}`,
+        role,
+      };
+    });
+  }, [activeReferenceBindings, endFrame, referenceFrames, referenceMode, startFrame, zh]);
+  const filteredMentionCandidates = useMemo(() => {
+    const query = mentionQuery.trim().toLocaleLowerCase(zh ? 'zh-CN' : 'en-US');
+    if (!mentionMenuOpen || mentionStart === null) return [];
+    return mentionCandidates.filter(candidate => {
+      if (!query) return true;
+      const role = canvasReferenceRoleLabel(candidate.role, zh).toLocaleLowerCase(zh ? 'zh-CN' : 'en-US');
+      return candidate.token.toLocaleLowerCase(zh ? 'zh-CN' : 'en-US').includes(query)
+        || candidate.frame.name.toLocaleLowerCase(zh ? 'zh-CN' : 'en-US').includes(query)
+        || role.includes(query);
+    }).slice(0, 9);
+  }, [mentionCandidates, mentionMenuOpen, mentionQuery, mentionStart, zh]);
   const recentCanvasEvents = useMemo(() => canvasSemantics.events
     .filter(event => event.shotId === canvasSemantics.shot.id)
     .slice(-5)
@@ -1262,16 +1300,14 @@ export default function VideoCanvasStudio({
     });
   };
 
-  const mentionReference = (index: number) => {
-    const frame = referenceFrames[index];
-    if (!frame) return;
+  const bindMentionToFrame = (frame: UploadedFrame, index: number, roleOverride?: CanvasAssetRole) => {
     const mentionIndex = frameReferenceIndex(frame, index);
     const mention = zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`;
     const current = referenceBindingForFrame(frame, index, activeReferenceBindings);
     setCanvasSemantics(previous => recordCanvasEvent(bindCanvasAssetReference(previous, {
       token: mention,
       assetId: frame.assetId,
-      role: current.role,
+      role: roleOverride || current.role,
       priority: current.priority,
       strength: current.strength,
       required: current.required,
@@ -1285,9 +1321,82 @@ export default function VideoCanvasStudio({
     }));
     setSelectedNodeId('source');
     setHighlightedAssetId(frame.assetId);
-    setPrompt(current => parseCanvasAssetMentions(current).some(item => item.mentionId === `image:${mentionIndex}`)
+    return mention;
+  };
+
+  const mentionReference = (index: number) => {
+    const frame = referenceFrames[index];
+    if (!frame) return;
+    const mention = bindMentionToFrame(frame, index);
+    const mentionId = `image:${frameReferenceIndex(frame, index)}`;
+    setPrompt(current => mentionId && parseCanvasAssetMentions(current).some(item => item.mentionId === mentionId)
       ? current
       : `${current.trim()} ${mention} `.trimStart());
+  };
+
+  const syncMentionMenu = (value: string, cursor: number) => {
+    const safeCursor = Math.max(0, Math.min(cursor, value.length));
+    const before = value.slice(0, safeCursor);
+    const at = before.lastIndexOf('@');
+    if (at < 0 || (at > 0 && !/[\s([{，。！？；：、“”‘’]/u.test(before[at - 1]))) {
+      setMentionMenuOpen(false);
+      setMentionStart(null);
+      return;
+    }
+    const query = before.slice(at + 1);
+    if (query.length > 18 || /\s/u.test(query)) {
+      setMentionMenuOpen(false);
+      setMentionStart(null);
+      return;
+    }
+    setMentionStart(at);
+    setMentionQuery(query);
+    setMentionActiveIndex(0);
+    setMentionMenuOpen(true);
+  };
+
+  const closeMentionMenu = () => {
+    setMentionMenuOpen(false);
+    setMentionStart(null);
+    setMentionQuery('');
+    setMentionActiveIndex(0);
+  };
+
+  const chooseMentionCandidate = (candidate: PromptMentionCandidate) => {
+    const textarea = promptRef.current;
+    const current = prompt;
+    const cursor = textarea?.selectionStart ?? current.length;
+    const start = mentionStart === null ? cursor : Math.min(mentionStart, cursor);
+    const mention = bindMentionToFrame(candidate.frame, candidate.index, candidate.role);
+    const nextPrompt = `${current.slice(0, start)}${mention} ${current.slice(cursor)}`.slice(0, 1200);
+    setPrompt(nextPrompt);
+    setAgentPlan(null);
+    closeMentionMenu();
+    requestAnimationFrame(() => {
+      const nextCursor = Math.min(nextPrompt.length, start + mention.length + 1);
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handlePromptKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (!mentionMenuOpen || filteredMentionCandidates.length === 0) {
+      if (event.key === 'Escape') closeMentionMenu();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setMentionActiveIndex(index => (index + 1) % filteredMentionCandidates.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setMentionActiveIndex(index => (index - 1 + filteredMentionCandidates.length) % filteredMentionCandidates.length);
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      chooseMentionCandidate(filteredMentionCandidates[mentionActiveIndex] || filteredMentionCandidates[0]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMentionMenu();
+    }
   };
 
   const updateReferenceRole = (index: number, nextRole: CanvasAssetRole) => {
@@ -2212,7 +2321,48 @@ export default function VideoCanvasStudio({
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
-              <textarea ref={promptRef} id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '写清人物、脚本、动作和镜头；用 @图片1 指定参考图…' : 'Describe the subject, script, motion, and camera; use @image1 for a reference…'} />
+              <div className="canvas-prompt-input-wrap">
+                <textarea
+                  ref={promptRef}
+                  id="canvas-motion-prompt"
+                  value={prompt}
+                  maxLength={1200}
+                  rows={2}
+                  aria-autocomplete="list"
+                  aria-controls={mentionMenuOpen && filteredMentionCandidates.length > 0 ? 'canvas-mention-menu' : undefined}
+                  aria-haspopup="listbox"
+                  aria-activedescendant={mentionMenuOpen && filteredMentionCandidates.length > 0 ? `canvas-mention-option-${mentionActiveIndex}` : undefined}
+                  onChange={event => { setPrompt(event.target.value); setAgentPlan(null); syncMentionMenu(event.target.value, event.target.selectionStart || event.target.value.length); }}
+                  onSelect={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
+                  onClick={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart || event.currentTarget.value.length)}
+                  onKeyDown={handlePromptKeyDown}
+                  onBlur={() => { window.setTimeout(() => { if (document.activeElement !== promptRef.current) closeMentionMenu(); }, 0); }}
+                  placeholder={zh ? '写清人物、脚本、动作和镜头；输入 @ 选择参考图…' : 'Describe the subject, script, motion, and camera; type @ to pick a reference…'}
+                />
+                {mentionMenuOpen && filteredMentionCandidates.length > 0 && <div id="canvas-mention-menu" className="canvas-mention-menu" role="listbox" aria-label={zh ? '选择素材引用' : 'Choose an asset reference'}>
+                  <div className="canvas-mention-menu-head"><span>{zh ? '插入素材引用' : 'INSERT ASSET REFERENCE'}</span><small>{zh ? '↑↓ 选择 · Enter 插入' : '↑↓ choose · Enter insert'}</small></div>
+                  <div className="canvas-mention-menu-list">
+                    {filteredMentionCandidates.map((candidate, index) => {
+                      const active = index === mentionActiveIndex;
+                      const roleLabel = canvasReferenceRoleLabel(candidate.role, zh);
+                      return <button
+                        type="button"
+                        role="option"
+                        id={`canvas-mention-option-${index}`}
+                        aria-selected={active}
+                        className={'canvas-mention-option ' + (active ? 'is-active' : '')}
+                        key={`${candidate.frame.assetId}-${candidate.token}`}
+                        onMouseDown={event => { event.preventDefault(); chooseMentionCandidate(candidate); }}
+                        onMouseEnter={() => setMentionActiveIndex(index)}
+                      >
+                        {candidate.frame.previewUrl ? <img src={candidate.frame.previewUrl} alt="" /> : <span className="canvas-mention-option-placeholder" aria-hidden="true">＋</span>}
+                        <span><b>{candidate.token}</b><small>{roleLabel} · {candidate.frame.name}</small></span>
+                        <em>{zh ? '绑定' : 'Bound'}</em>
+                      </button>;
+                    })}
+                  </div>
+                </div>}
+              </div>
               <span className="canvas-composer-count">{prompt.length}/1200</span>
               {assetMentionValidation.hasInvalid && <p className="canvas-asset-reference-warning" role="alert">{assetMentionValidation.unbound.length > 0
                 ? (zh ? `有 ${assetMentionValidation.unbound.length} 个 @图片引用尚未绑定，请点击对应参考图的引用按钮。` : `${assetMentionValidation.unbound.length} image mention${assetMentionValidation.unbound.length > 1 ? 's are' : ' is'} not bound. Click the matching reference chip to bind it.`)

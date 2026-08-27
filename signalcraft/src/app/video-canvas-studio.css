@@ -7220,3 +7220,138 @@
     transition: none;
   }
 }
+
+/* Mention picker: a quiet paper popover keeps @asset binding discoverable
+   without competing with the composer’s primary Generate action. */
+.canvas-prompt-input-wrap {
+  position: relative;
+}
+
+.canvas-mention-menu {
+  position: absolute;
+  z-index: 12;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  left: 10px;
+  overflow: hidden;
+  border: 1px solid #d9d1c7;
+  border-radius: 12px;
+  background: #fffefa;
+  box-shadow: 0 14px 30px rgba(56, 45, 37, .14), 5px 5px 0 rgba(31, 35, 40, .07);
+}
+
+.canvas-mention-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px 7px;
+  border-bottom: 1px solid #eee7de;
+  background: #fbf7f0;
+}
+
+.canvas-mention-menu-head span {
+  color: #766b61;
+  font: 900 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .1em;
+}
+
+.canvas-mention-menu-head small {
+  color: #8b8177;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.canvas-mention-menu-list {
+  display: grid;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 5px;
+  gap: 3px;
+}
+
+.canvas-mention-option {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #2d3033;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-mention-option:hover,
+.canvas-mention-option:focus-visible,
+.canvas-mention-option.is-active {
+  border-color: #bfe1d6;
+  background: #f0faf6;
+  outline: none;
+}
+
+.canvas-mention-option img,
+.canvas-mention-option-placeholder {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #ddd5cb;
+  border-radius: 7px;
+  background: #f3eee7;
+  color: #867a70;
+  font-size: 14px;
+  object-fit: cover;
+}
+
+.canvas-mention-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.canvas-mention-option b {
+  color: #075f5a;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.canvas-mention-option small {
+  overflow: hidden;
+  color: #7a7065;
+  font-size: 9px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-mention-option em {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #e8f5f0;
+  color: #147b56;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .canvas-mention-menu {
+    right: 5px;
+    bottom: calc(100% + 6px);
+    left: 5px;
+  }
+
+  .canvas-mention-menu-list {
+    max-height: 210px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-mention-option {
+    transition: none;
+  }
+}
