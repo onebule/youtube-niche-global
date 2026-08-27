@@ -6,6 +6,8 @@ import type { CanvasAgentAction, CanvasAgentContext } from './canvas-domain';
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
+export type VideoGenerationCancellation = 'confirmed' | 'requested' | 'unsupported' | 'failed' | 'not_applicable';
+
 const VIDEO_DURATION_LIMITS: Record<VideoModelId, { min: number; max: number }> = {
   auto: { min: 5, max: 15 },
   'seedance-2': { min: 5, max: 15 },
@@ -186,6 +188,17 @@ export async function createVideoGeneration(input: {
 export async function refreshVideoGeneration(generationId: string) {
   const payload = await request<{ generation: VideoGeneration }>(`status?generationId=${encodeURIComponent(generationId)}`);
   return payload.generation;
+}
+
+export async function cancelVideoGeneration(generationId: string) {
+  const payload = await request<{
+    generation: VideoGeneration;
+    providerCancellation: VideoGenerationCancellation;
+  }>('cancel', {
+    method: 'POST',
+    body: JSON.stringify({ generationId }),
+  });
+  return payload;
 }
 
 export async function loadVideoHistory(limit = 20, offset = 0) {

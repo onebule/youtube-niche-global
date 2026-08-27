@@ -5800,6 +5800,94 @@
   line-height: 1.4;
 }
 
+.canvas-cancel-button {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 9px 0 10px;
+  padding: 0 10px;
+  border: 1px solid #e0b1aa;
+  border-radius: 7px;
+  background: #fff6f3;
+  color: #a83b30;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.canvas-cancel-button:hover:not(:disabled),
+.canvas-cancel-button:focus-visible:not(:disabled) {
+  border-color: var(--canvas-danger, #e44a39);
+  background: var(--canvas-danger-soft, #fff0ed);
+  outline: none;
+}
+
+.canvas-cancel-button:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(228, 74, 57, .18);
+}
+
+.canvas-cancel-button:disabled {
+  border-color: var(--canvas-line-soft, #d9dce1);
+  background: var(--canvas-soft, #f4f5f6);
+  color: var(--canvas-muted, #737980);
+  cursor: wait;
+}
+
+.canvas-cancel-button span {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.canvas-composer-cancel {
+  display: inline-flex;
+  min-width: 126px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 13px;
+  border: 1px solid #e0b1aa;
+  border-radius: 9px;
+  background: #fff6f3;
+  color: #a83b30;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.canvas-composer-cancel:hover:not(:disabled),
+.canvas-composer-cancel:focus-visible:not(:disabled) {
+  border-color: var(--canvas-danger, #e44a39);
+  background: var(--canvas-danger-soft, #fff0ed);
+  outline: none;
+}
+
+.canvas-composer-cancel:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(228, 74, 57, .18);
+}
+
+.canvas-composer-cancel:disabled {
+  border-color: var(--canvas-line-soft, #d9dce1);
+  background: var(--canvas-soft, #f4f5f6);
+  color: var(--canvas-muted, #737980);
+  cursor: wait;
+}
+
+.canvas-composer-cancel span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.canvas-cancel-note {
+  display: block;
+  margin: -2px 0 9px;
+  color: var(--canvas-muted, #737980);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .canvas-compare-preview {
   display: grid;
   min-height: 150px;
