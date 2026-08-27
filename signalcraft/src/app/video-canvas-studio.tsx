@@ -10,6 +10,8 @@ import {
   cloneFrame,
   createCanvasAgentContext,
   limitShotSnapshots,
+  normalizeCustomEdges,
+  normalizeCustomNodes,
   removeShotSnapshot,
   reorderShotSnapshots,
   restoreSavedShot,
@@ -18,6 +20,9 @@ import {
   stripFrame,
   sortShotSnapshots,
   upsertShotSnapshot,
+  type CanvasCustomEdge,
+  type CanvasCustomNode,
+  type CanvasCustomNodeType,
   type CanvasReferenceMode,
   type PersistedFrame,
   type SavedShot,
@@ -102,6 +107,8 @@ type SavedCanvas = {
   activeShot?: number;
   shots?: SavedShot[];
   scriptOcr?: ScriptOcrDraft | null;
+  customNodes?: CanvasCustomNode[];
+  customEdges?: CanvasCustomEdge[];
 };
 
 type ScriptOcrState = {
@@ -147,6 +154,13 @@ const CONNECTIONS: Array<[NodeId, NodeId]> = [
   ['agent', 'task'],
   ['task', 'result'],
 ];
+const CUSTOM_NODE_SIZE = { width: 286, height: 190 };
+const CUSTOM_NODE_LABELS: Record<CanvasCustomNodeType, { zh: string; en: string; icon: string; hintZh: string; hintEn: string }> = {
+  text: { zh: '文字', en: 'Text', icon: 'T', hintZh: '补充脚本、动作或镜头说明', hintEn: 'Add script, motion, or shot notes' },
+  image: { zh: '图片', en: 'Image', icon: '▧', hintZh: '作为下一步视觉参考', hintEn: 'Use as the next visual reference' },
+  video: { zh: '视频', en: 'Video', icon: '▶', hintZh: '关联一个视频结果或参考', hintEn: 'Link a video result or reference' },
+  other: { zh: '其他', en: 'Other', icon: '✦', hintZh: '自定义步骤或素材说明', hintEn: 'A custom step or asset note' },
+};
 
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
 const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
@@ -464,6 +478,10 @@ export default function VideoCanvasStudio({
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
+  const [selectedCustomNodeId, setSelectedCustomNodeId] = useState<string | null>(null);
+  const [customNodes, setCustomNodes] = useState<CanvasCustomNode[]>([]);
+  const [customEdges, setCustomEdges] = useState<CanvasCustomEdge[]>([]);
+  const [nodePaletteParentId, setNodePaletteParentId] = useState<string | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
   const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
@@ -473,7 +491,8 @@ export default function VideoCanvasStudio({
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
-  const shotDragRef = useRef<{ clientX: number; clientY: number; origin: NodePositions } | null>(null);
+  const customDragRef = useRef<{ id: string; clientX: number; clientY: number; origin: Point } | null>(null);
+  const shotDragRef = useRef<{ clientX: number; clientY: number; origin: NodePositions; customOrigin: CanvasCustomNode[] } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
   // One UUID groups generations created in this canvas session. It is sent as
@@ -510,6 +529,8 @@ export default function VideoCanvasStudio({
     agentPlan,
     semantics: canvasSemantics,
     scriptOcr: scriptOcrDraftFromState(scriptOcr),
+    customNodes: customNodes.map(node => ({ ...node })),
+    customEdges: customEdges.map(edge => ({ ...edge })),
   });
 
   const applyShotSnapshot = (snapshot: ShotSnapshot) => {
@@ -532,13 +553,17 @@ export default function VideoCanvasStudio({
     setVideoUrl(snapshot.videoUrl);
     setAgentPlan(snapshot.agentPlan);
     setCanvasSemantics(snapshot.semantics);
+    setCustomNodes((snapshot.customNodes || []).map(node => ({ ...node })));
+    setCustomEdges((snapshot.customEdges || []).map(edge => ({ ...edge })));
     setShot(snapshot.shot);
     setAppliedAgentActionIds([]);
     setSelectedNodeId(null);
+    setSelectedCustomNodeId(null);
     setHighlightedAssetId(null);
     setHistoryOpen(false);
     setCompareOpen(false);
     setNodePaletteOpen(false);
+    setNodePaletteParentId(null);
     setTemplateOpen(false);
   };
 
@@ -1033,6 +1058,9 @@ export default function VideoCanvasStudio({
           setRestoredGenerationId(saved.generationId || null);
           if (saved.generationGroupId) generationGroupIdRef.current = saved.generationGroupId;
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
+          const restoredCustomNodes = normalizeCustomNodes(saved.customNodes);
+          setCustomNodes(restoredCustomNodes);
+          setCustomEdges(normalizeCustomEdges(saved.customEdges, restoredCustomNodes));
           const restoredScriptOcr = restoreScriptOcr(saved.scriptOcr);
           if (restoredScriptOcr) setScriptOcr({ assetId: restoredScriptOcr.assetId, status: 'ready', text: restoredScriptOcr.text, result: null, error: '' });
           if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(savedShot => restoreSavedShot(savedShot, restoreNodePositions)));
@@ -1065,6 +1093,8 @@ export default function VideoCanvasStudio({
       agentPlan,
       semantics: canvasSemantics,
       scriptOcr: scriptOcrDraftFromState(scriptOcr),
+      customNodes: customNodes.map(node => ({ ...node })),
+      customEdges: customEdges.map(edge => ({ ...edge })),
     };
     const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
@@ -1087,9 +1117,11 @@ export default function VideoCanvasStudio({
       activeShot: shot,
       shots: savedShots,
       scriptOcr: scriptOcrDraftFromState(scriptOcr),
+      customNodes: customNodes.map(node => ({ ...node })),
+      customEdges: customEdges.map(edge => ({ ...edge })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1605,32 +1637,112 @@ export default function VideoCanvasStudio({
       : (zh ? '先在镜头边界节点加入 START 或参考图，再开始 Animate。' : 'Add a START frame or reference image in the shot boundary node before animating.'));
   };
 
-  const closeNodePalette = () => setNodePaletteOpen(false);
+  const openNodePaletteFor = (parentId: string) => {
+    setNodePaletteParentId(parentId);
+    setNodePaletteOpen(true);
+    setHistoryOpen(false);
+    setCompareOpen(false);
+    setTemplateOpen(false);
+  };
+  const closeNodePalette = () => {
+    setNodePaletteOpen(false);
+    setNodePaletteParentId(null);
+  };
   const toggleNodePalette = () => {
     setNodePaletteOpen(current => {
       const next = !current;
       if (next) {
+        setNodePaletteParentId(null);
         setHistoryOpen(false);
         setCompareOpen(false);
         setTemplateOpen(false);
+      } else {
+        setNodePaletteParentId(null);
       }
       return next;
     });
   };
-  const handlePaletteImage = (file: File) => {
+  const handlePaletteImage = async (file: File) => {
+    if (nodePaletteParentId) {
+      const created = createCustomNode('image', nodePaletteParentId, file.name);
+      if (created) {
+        setUploading('reference');
+        try {
+          const uploaded = await uploadFrame(file);
+          setCustomNodes(current => current.map(node => node.id === created.id ? { ...node, assetId: uploaded.assetId, body: uploaded.name } : node));
+          rememberImageAsset(uploaded, 'reference');
+          if (uploaded.previewUrl.startsWith('blob:')) URL.revokeObjectURL(uploaded.previewUrl);
+          notify(zh ? '图片节点已绑定私有素材；主生成任务仍需你确认后提交。' : 'The image node is bound to a private asset; the main task still requires your confirmation.');
+        } catch (cause) {
+          setError(clientMessage(cause));
+        } finally {
+          setUploading(null);
+        }
+      }
+      closeNodePalette();
+      return;
+    }
     if (referenceMode === 'omni') void uploadReferences([file]);
     else void upload('start', file);
   };
+  const createCustomNode = (type: CanvasCustomNodeType, parentId: string, bodyOverride?: string) => {
+    if (customNodes.length >= 12) {
+      notify(zh ? '当前镜头最多添加 12 个自定义节点。' : 'This shot supports up to 12 custom nodes.');
+      return null;
+    }
+    const parentFixed = (Object.keys(nodes) as NodeId[]).includes(parentId as NodeId);
+    const parentPoint = parentFixed ? nodes[parentId as NodeId] : customNodes.find(node => node.id === parentId);
+    const parentWidth = parentFixed ? nodeSize[parentId as NodeId].width : CUSTOM_NODE_SIZE.width;
+    const parentX = parentPoint?.x ?? nodes.result.x;
+    const parentY = parentPoint?.y ?? nodes.result.y;
+    const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const labels = CUSTOM_NODE_LABELS[type];
+    const next: CanvasCustomNode = {
+      id,
+      type,
+      parentId,
+      x: clamp(parentX + parentWidth + 72, 18, STAGE_SIZE.width - CUSTOM_NODE_SIZE.width - 18),
+      y: clamp(parentY + (customNodes.length % 3) * 34, 18, STAGE_SIZE.height - CUSTOM_NODE_SIZE.height - 18),
+      title: labels.zh,
+      body: bodyOverride || labels.hintZh,
+      assetId: null,
+    };
+    setCustomNodes(current => [...current, next].slice(-12));
+    setCustomEdges(current => [...current, { id: `${parentId}-${id}`, from: parentId, to: id }].slice(-24));
+    setSelectedNodeId(null);
+    setSelectedCustomNodeId(id);
+    notify(zh ? `已添加${labels.zh}节点，并连接到当前步骤。` : `${labels.en} node added and connected to the current step.`);
+    return next;
+  };
   const addTextNode = () => {
+    if (nodePaletteParentId) {
+      createCustomNode('text', nodePaletteParentId);
+      closeNodePalette();
+      return;
+    }
     closeNodePalette();
     focusMotionPrompt();
   };
   const addVideoNode = () => {
+    if (nodePaletteParentId) {
+      createCustomNode('video', nodePaletteParentId);
+      closeNodePalette();
+      return;
+    }
     closeNodePalette();
     const readyModel = models.find(item => item.enabled && item.id !== 'auto');
     if (!selectedModel?.enabled && readyModel) selectModel(readyModel.id);
     focusMotionPrompt();
     notify(zh ? `视频生成节点已就绪：${modelName(readyModel?.id || model)}。请在下方补齐参数。` : `Video generation is ready with ${modelName(readyModel?.id || model)}. Complete the settings below.`);
+  };
+  const addOtherNode = () => {
+    if (nodePaletteParentId) {
+      createCustomNode('other', nodePaletteParentId);
+      closeNodePalette();
+      return;
+    }
+    closeNodePalette();
+    notify(zh ? '请从节点右侧的 + 添加一个自定义步骤。' : 'Use the + on a node to add a custom step.');
   };
   const addReferenceNode = () => {
     setReferenceMode('omni');
@@ -1645,6 +1757,8 @@ export default function VideoCanvasStudio({
         setHistoryOpen(false);
         setCompareOpen(false);
         setNodePaletteOpen(false);
+      } else {
+        setNodePaletteParentId(null);
       }
       return next;
     });
@@ -1780,6 +1894,57 @@ export default function VideoCanvasStudio({
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { id, clientX: event.clientX, clientY: event.clientY, origin: nodes[id] };
   };
+  const startCustomNodeDrag = (event: ReactPointerEvent<HTMLDivElement>, id: string) => {
+    event.stopPropagation();
+    setSelectedNodeId(null);
+    setSelectedCustomNodeId(id);
+    const node = customNodes.find(item => item.id === id);
+    if (!node) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    customDragRef.current = { id, clientX: event.clientX, clientY: event.clientY, origin: { x: node.x, y: node.y } };
+  };
+  const moveCustomNode = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = customDragRef.current;
+    if (!drag) return;
+    const dx = (event.clientX - drag.clientX) / viewport.scale;
+    const dy = (event.clientY - drag.clientY) / viewport.scale;
+    setCustomNodes(previous => previous.map(node => node.id === drag.id ? {
+      ...node,
+      x: clamp(drag.origin.x + dx, 18, STAGE_SIZE.width - CUSTOM_NODE_SIZE.width - 18),
+      y: clamp(drag.origin.y + dy, 18, STAGE_SIZE.height - CUSTOM_NODE_SIZE.height - 18),
+    } : node));
+  };
+  const endCustomNodeDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    customDragRef.current = null;
+  };
+  const moveCustomNodeWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>, id: string) => {
+    const direction = ({
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+    } as Record<string, Point>)[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const distance = event.shiftKey ? 48 : 16;
+    setSelectedCustomNodeId(id);
+    setCustomNodes(previous => previous.map(node => node.id === id ? {
+      ...node,
+      x: clamp(node.x + direction.x * distance, 18, STAGE_SIZE.width - CUSTOM_NODE_SIZE.width - 18),
+      y: clamp(node.y + direction.y * distance, 18, STAGE_SIZE.height - CUSTOM_NODE_SIZE.height - 18),
+    } : node));
+  };
+  const removeCustomNode = (id: string) => {
+    if (!window.confirm(zh ? '删除这个自定义节点？它的连接也会移除。' : 'Delete this custom node and its connections?')) return;
+    setCustomNodes(previous => previous.filter(node => node.id !== id));
+    setCustomEdges(previous => previous.filter(edge => edge.from !== id && edge.to !== id));
+    if (selectedCustomNodeId === id) setSelectedCustomNodeId(null);
+    notify(zh ? '自定义节点已移除，主生成链路未改变。' : 'Custom node removed; the main generation flow was unchanged.');
+  };
+  const updateCustomNodeBody = (id: string, body: string) => {
+    setCustomNodes(previous => previous.map(node => node.id === id ? { ...node, body: body.slice(0, 1200) } : node));
+  };
 
   const cancelGeneration = async () => {
     if (!generation || !generationInFlight || cancelling) return;
@@ -1836,7 +2001,7 @@ export default function VideoCanvasStudio({
   const startShotDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    shotDragRef.current = { clientX: event.clientX, clientY: event.clientY, origin: nodes };
+    shotDragRef.current = { clientX: event.clientX, clientY: event.clientY, origin: nodes, customOrigin: customNodes.map(node => ({ ...node })) };
   };
   const moveShot = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = shotDragRef.current;
@@ -1854,6 +2019,15 @@ export default function VideoCanvasStudio({
       });
       return CanvasCommandService.moveNodes(previous, next);
     });
+    setCustomNodes(previous => previous.map(node => {
+      const origin = drag.customOrigin.find(item => item.id === node.id);
+      if (!origin) return node;
+      return {
+        ...node,
+        x: clamp(origin.x + dx, 18, STAGE_SIZE.width - CUSTOM_NODE_SIZE.width - 18),
+        y: clamp(origin.y + dy, 18, STAGE_SIZE.height - CUSTOM_NODE_SIZE.height - 18),
+      };
+    }));
   };
   const endShotDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1864,6 +2038,7 @@ export default function VideoCanvasStudio({
     const target = event.target as HTMLElement;
     if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
     setSelectedNodeId(null);
+    setSelectedCustomNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
     panRef.current = { clientX: event.clientX, clientY: event.clientY, origin: { x: viewport.x, y: viewport.y } };
   };
@@ -1991,8 +2166,14 @@ export default function VideoCanvasStudio({
 
   const organizeCanvas = () => {
     setNodes(previous => CanvasCommandService.resetLayout(previous, INITIAL_NODES));
+    setCustomNodes(previous => previous.map((node, index) => ({
+      ...node,
+      x: clamp(1500 + (index % 2) * 300, 18, STAGE_SIZE.width - CUSTOM_NODE_SIZE.width - 18),
+      y: clamp(120 + Math.floor(index / 2) * 220, 18, STAGE_SIZE.height - CUSTOM_NODE_SIZE.height - 18),
+    })));
     setViewport(INITIAL_VIEWPORT);
     setSelectedNodeId(null);
+    setSelectedCustomNodeId(null);
     notify(zh ? '已按默认流程整理当前画布。' : 'The current canvas was organized into the default flow.');
     return true;
   };
@@ -2030,30 +2211,41 @@ export default function VideoCanvasStudio({
       : (zh ? '已退出自定义排列。' : 'Custom layout is off.'));
   };
 
-  const shotFrame = useMemo(() => {
-    const ids: NodeId[] = ['source', 'agent', 'task', 'result'];
-    const minX = Math.min(...ids.map(id => nodes[id].x));
-    const minY = Math.min(...ids.map(id => nodes[id].y));
-    const maxX = Math.max(...ids.map(id => nodes[id].x + nodeSize[id].width));
-    const maxY = Math.max(...ids.map(id => nodes[id].y + nodeSize[id].height));
-    return { x: minX - 32, y: minY - 64, width: maxX - minX + 64, height: maxY - minY + 96 };
-  }, [nodeSize, nodes]);
+  const graphNodes = useMemo(() => {
+    const map = new Map<string, { x: number; y: number; width: number; height: number }>();
+    (Object.keys(nodes) as NodeId[]).forEach(id => map.set(id, { ...nodes[id], ...nodeSize[id] }));
+    customNodes.forEach(node => map.set(node.id, { x: node.x, y: node.y, ...CUSTOM_NODE_SIZE }));
+    return map;
+  }, [customNodes, nodeSize, nodes]);
 
-  const edges = useMemo(() => CONNECTIONS.map(([from, to]) => {
-    const start = {
-      x: nodes[from].x + nodeSize[from].width,
-      y: nodes[from].y + nodeSize[from].height / 2,
-    };
-    const end = {
-      x: nodes[to].x,
-      y: nodes[to].y + nodeSize[to].height / 2,
-    };
+  const shotFrame = useMemo(() => {
+    const frameNodes = ['source', 'agent', 'task', 'result', ...customNodes.map(node => node.id)]
+      .map(id => graphNodes.get(id))
+      .filter((node): node is { x: number; y: number; width: number; height: number } => Boolean(node));
+    const minX = Math.min(...frameNodes.map(node => node.x));
+    const minY = Math.min(...frameNodes.map(node => node.y));
+    const maxX = Math.max(...frameNodes.map(node => node.x + node.width));
+    const maxY = Math.max(...frameNodes.map(node => node.y + node.height));
+    return { x: minX - 32, y: minY - 64, width: maxX - minX + 64, height: maxY - minY + 96 };
+  }, [customNodes, graphNodes]);
+
+  const edges = useMemo(() => [...CONNECTIONS.map(([from, to]) => ({ from, to, id: from + '-' + to })), ...customEdges.map(edge => ({ ...edge, id: `custom-${edge.id}` }))].flatMap(edge => {
+    const from = graphNodes.get(edge.from);
+    const to = graphNodes.get(edge.to);
+    if (!from || !to) return [];
+    const start = { x: from.x + from.width, y: from.y + from.height / 2 };
+    const end = { x: to.x, y: to.y + to.height / 2 };
     const curve = Math.max(90, Math.abs(end.x - start.x) * 0.45);
-    return {
-      id: from + '-' + to,
+    return [{
+      id: edge.id,
       d: 'M ' + start.x + ' ' + start.y + ' C ' + (start.x + curve) + ' ' + start.y + ', ' + (end.x - curve) + ' ' + end.y + ', ' + end.x + ' ' + end.y,
-    };
-  }), [nodeSize, nodes]);
+    }];
+  }), [customEdges, graphNodes]);
+  const paletteParentName = nodePaletteParentId
+    ? ((Object.keys(nodes) as NodeId[]).includes(nodePaletteParentId as NodeId)
+      ? canvasNodeName(nodePaletteParentId as NodeId, zh)
+      : CUSTOM_NODE_LABELS[customNodes.find(node => node.id === nodePaletteParentId)?.type || 'other'][zh ? 'zh' : 'en'])
+    : '';
 
   if (effectiveAccess === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
   if (effectiveAccess === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
@@ -2098,7 +2290,10 @@ export default function VideoCanvasStudio({
         onWheel={wheel}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) setSelectedNodeId(null);
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer')) {
+            setSelectedNodeId(null);
+            setSelectedCustomNodeId(null);
+          }
         }}
       >
         <div className="video-canvas-toolbar" aria-label={zh ? '画布缩放' : 'Canvas zoom'}>
@@ -2133,7 +2328,7 @@ export default function VideoCanvasStudio({
             {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? 'SHOT FLOW' : 'SHOT FLOW'}</span><b>{zh ? '素材 → Agent → 生成 → 结果' : 'Reference → Agent → Generate → Result'}</b></div>}
           </div>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">
-            {edges.map(edge => <g key={edge.id}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
+            {edges.map(edge => <g key={edge.id} className={edge.id.startsWith('custom-') ? 'custom-edge' : undefined}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
           <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-highlighted-asset={highlightedAssetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
@@ -2159,7 +2354,8 @@ export default function VideoCanvasStudio({
                 <small>{hasReferenceInput ? (zh ? '进入底部生成台，选择模型后提交。' : 'Open the composer, choose a model, then submit.') : (zh ? '需要至少 1 张参考图。' : 'At least one reference image is required.')}</small>
               </div>
             </div>
-            <span className="node-port output" aria-hidden="true" />
+              <span className="node-port output" aria-hidden="true" />
+              <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('source')} aria-label={zh ? '在镜头边界后添加下一步' : 'Add a next step after shot boundary'}>＋</button>
           </article>
 
           <article className={'video-canvas-node agent-node ' + (selectedNodeId === 'agent' ? 'is-selected' : '')} data-canvas-node="agent" data-canvas-role={canvasSemantics.nodes.agent?.role} data-shot-id={canvasSemantics.nodes.agent?.shotId} data-generation-id={canvasSemantics.nodes.agent?.generationId || undefined} data-status={canvasSemantics.nodes.agent?.status} data-selected={selectedNodeId === 'agent' ? 'true' : undefined} onClick={() => setSelectedNodeId('agent')} style={{ left: nodes.agent.x, top: nodes.agent.y, width: nodeSize.agent.width, minHeight: nodeSize.agent.height }}>
@@ -2195,6 +2391,7 @@ export default function VideoCanvasStudio({
               {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}
             </div>
             <span className="node-port output" aria-hidden="true" />
+            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('agent')} aria-label={zh ? '在 Agent 导演后添加下一步' : 'Add a next step after Agent director'}>＋</button>
           </article>
 
           <article className={'video-canvas-node task-node ' + (selectedNodeId === 'task' ? 'is-selected' : '')} data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-version={canvasSemantics.nodes.task?.version || undefined} data-best-take={canvasSemantics.nodes.task?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.task?.status} data-selected={selectedNodeId === 'task' ? 'true' : undefined} onClick={() => setSelectedNodeId('task')} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
@@ -2209,6 +2406,7 @@ export default function VideoCanvasStudio({
               <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
             </div>
             <span className="node-port output" aria-hidden="true" />
+            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('task')} aria-label={zh ? '在视频生成后添加下一步' : 'Add a next step after video generation'}>＋</button>
           </article>
 
           <article className={'video-canvas-node result-node ' + (selectedNodeId === 'result' ? 'is-selected' : '')} data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-version={canvasSemantics.nodes.result?.version || undefined} data-best-take={canvasSemantics.nodes.result?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.result?.status} data-selected={selectedNodeId === 'result' ? 'true' : undefined} onClick={() => setSelectedNodeId('result')} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
@@ -2235,20 +2433,35 @@ export default function VideoCanvasStudio({
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
             </div>
+            <button type="button" className="canvas-node-add-next result-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('result')} aria-label={zh ? '在视频结果后添加下一步' : 'Add a next step after video result'}>＋</button>
               </article>
+          {customNodes.map(node => {
+            const labels = CUSTOM_NODE_LABELS[node.type];
+            return <article key={node.id} className={'video-canvas-node canvas-custom-node custom-node-' + node.type + (selectedCustomNodeId === node.id ? ' is-selected' : '')} data-canvas-node={node.id} data-custom-node="true" data-custom-type={node.type} data-selected={selectedCustomNodeId === node.id ? 'true' : undefined} onClick={() => { setSelectedNodeId(null); setSelectedCustomNodeId(node.id); }} style={{ left: node.x, top: node.y, width: CUSTOM_NODE_SIZE.width, minHeight: CUSTOM_NODE_SIZE.height }}>
+              <span className="node-port input" aria-hidden="true" />
+              <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? `${labels.zh}节点。拖动，或使用方向键移动。` : `${labels.en} node. Drag it or use arrow keys to move it.`} onFocus={() => { setSelectedNodeId(null); setSelectedCustomNodeId(node.id); }} onKeyDown={event => moveCustomNodeWithKeyboard(event, node.id)} onPointerDown={event => startCustomNodeDrag(event, node.id)} onPointerMove={moveCustomNode} onPointerUp={endCustomNodeDrag} onPointerCancel={endCustomNodeDrag}><span aria-hidden="true">{labels.icon}</span><b>{zh ? labels.zh : labels.en}</b><i>⋮⋮</i></div>
+              <div className="canvas-custom-node-body">
+                <div className="canvas-custom-node-kicker">{zh ? '自定义下一步' : 'CUSTOM NEXT STEP'}</div>
+                {node.type === 'text' ? <textarea value={node.body} maxLength={1200} aria-label={zh ? '编辑文字节点' : 'Edit text node'} onChange={event => updateCustomNodeBody(node.id, event.target.value)} /> : <p>{node.body || (zh ? labels.hintZh : labels.hintEn)}</p>}
+                <small>{node.assetId ? (zh ? '已绑定素材，可继续作为参考。' : 'Asset bound; ready to use as a reference.') : (zh ? labels.hintZh : labels.hintEn)}</small>
+              </div>
+              <div className="canvas-custom-node-actions"><button type="button" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor(node.id)} aria-label={zh ? `在${labels.zh}后添加下一步` : `Add a next step after ${labels.en}`}>＋</button><button type="button" onPointerDown={event => event.stopPropagation()} onClick={() => removeCustomNode(node.id)} aria-label={zh ? `删除${labels.zh}节点` : `Delete ${labels.en} node`}>×</button></div>
+              <span className="node-port output" aria-hidden="true" />
+            </article>;
+          })}
             </div>
           </div>
 
       {nodePaletteOpen && <aside id="canvas-node-palette" className="canvas-node-palette" role="region" aria-labelledby="canvas-node-palette-title" onKeyDown={event => { if (event.key === 'Escape') closeNodePalette(); }}>
-        <div className="canvas-node-palette-head"><div><span>{zh ? '工作区工具' : 'WORKSPACE TOOLS'}</span><b id="canvas-node-palette-title">{zh ? '添加节点' : 'Add a node'}</b><small>{zh ? '把输入素材放进当前镜头。' : 'Bring an input into the current shot.'}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭添加节点面板' : 'Close add node panel'} onClick={closeNodePalette}>×</button></div>
+        <div className="canvas-node-palette-head"><div><span>{nodePaletteParentId ? (zh ? '连接下一步' : 'CONNECT NEXT STEP') : (zh ? '工作区工具' : 'WORKSPACE TOOLS')}</span><b id="canvas-node-palette-title">{nodePaletteParentId ? (zh ? `接到「${paletteParentName}」` : `Connect after ${paletteParentName}`) : (zh ? '添加节点' : 'Add a node')}</b><small>{nodePaletteParentId ? (zh ? '选择文字、图片、视频或其他；只添加画布步骤，不会自动提交生成。' : 'Choose text, image, video, or other. This only adds a canvas step; it never submits a task.') : (zh ? '把输入素材放进当前镜头。' : 'Bring an input into the current shot.')}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭添加节点面板' : 'Close add node panel'} onClick={closeNodePalette}>×</button></div>
         <div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
           <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
-          <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{zh ? '加入 START / 参考图' : 'Add START / reference'}</small></label>
+          <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{nodePaletteParentId ? (zh ? '添加图片步骤' : 'Add an image step') : (zh ? '加入 START / 参考图' : 'Add START / reference')}</small></label>
           <button type="button" className="canvas-node-palette-item" onClick={addVideoNode}><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><em className="canvas-node-palette-badge">{selectedModel?.enabled ? modelName(model) : (zh ? '选择模型' : 'Choose model')}</em><small>{zh ? '选择模型并写动作提示' : 'Choose a model and prompt'}</small></button>
-          <button type="button" className="canvas-node-palette-item is-disabled" disabled><span aria-hidden="true">▥</span><b>{zh ? '音频' : 'Audio'}</b><small>{zh ? '配音阶段开放' : 'Coming with audio'}</small></button>
+          <button type="button" className="canvas-node-palette-item" onClick={addOtherNode}><span aria-hidden="true">✦</span><b>{zh ? '其他' : 'Other'}</b><small>{zh ? '自定义步骤或素材说明' : 'Custom step or asset note'}</small></button>
         </div></div>
         <div className="canvas-node-palette-section"><span>{zh ? '素材' : 'ASSETS'}</span><div className="canvas-node-palette-list">
-          <label className="canvas-node-palette-row"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">↥</span><div><b>{zh ? '本地上传' : 'Local upload'}</b><small>{zh ? '从设备加入图片素材' : 'Add an image from this device'}</small></div></label>
+          <label className="canvas-node-palette-row"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">↥</span><div><b>{zh ? '本地上传' : 'Local upload'}</b><small>{zh ? '从设备加入图片素材' : 'Add an image from this device'}</small></div></label>
           <button type="button" className="canvas-node-palette-row" onClick={addReferenceNode}><span aria-hidden="true">@</span><div><b>{zh ? '引用参考' : 'Reference set'}</b><small>{zh ? '切换到最多 9 张全能参考' : 'Switch to up to 9 omni references'}</small></div></button>
         </div></div>
       </aside>}
