@@ -13,6 +13,7 @@ import {
   removeShotSnapshot,
   reorderShotSnapshots,
   restoreSavedShot,
+  restoreScriptOcr,
   serializeShotSnapshot,
   stripFrame,
   sortShotSnapshots,
@@ -20,6 +21,7 @@ import {
   type CanvasReferenceMode,
   type PersistedFrame,
   type SavedShot,
+  type ScriptOcrDraft,
   type ShotSnapshot,
   type UploadedFrame,
 } from '@/src/lib/canvas-shot-workspace';
@@ -93,6 +95,7 @@ type SavedCanvas = {
   semantics?: CanvasSemantics;
   activeShot?: number;
   shots?: SavedShot[];
+  scriptOcr?: ScriptOcrDraft | null;
 };
 
 type ScriptOcrState = {
@@ -102,6 +105,17 @@ type ScriptOcrState = {
   result: ScriptOcrResult | null;
   error: string;
 };
+
+function scriptOcrDraftFromState(state: ScriptOcrState): ScriptOcrDraft | null {
+  const text = state.text.replace(/\u0000/g, '').trim().slice(0, 12_000);
+  const assetId = state.assetId?.trim().slice(0, 240) || '';
+  if (!assetId || !text || state.status === 'processing') return null;
+  return {
+    assetId,
+    text,
+    extractedAt: state.result?.extractedAt || null,
+  };
+}
 
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
 const STAGE_SIZE = { width: 1900, height: 900 };
@@ -483,6 +497,7 @@ export default function VideoCanvasStudio({
     videoUrl,
     agentPlan,
     semantics: canvasSemantics,
+    scriptOcr: scriptOcrDraftFromState(scriptOcr),
   });
 
   const applyShotSnapshot = (snapshot: ShotSnapshot) => {
@@ -496,7 +511,9 @@ export default function VideoCanvasStudio({
     setEndFrame(cloneFrame(snapshot.endFrame));
     setReferenceMode(snapshot.referenceMode);
     setReferenceFrames(snapshot.referenceFrames.map(frame => ({ ...frame })));
-    setScriptOcr({ assetId: null, status: 'idle', text: '', result: null, error: '' });
+    setScriptOcr(snapshot.scriptOcr
+      ? { assetId: snapshot.scriptOcr.assetId, status: 'ready', text: snapshot.scriptOcr.text, result: null, error: '' }
+      : { assetId: null, status: 'idle', text: '', result: null, error: '' });
     setActiveGeneration(snapshot.generation);
     setCancelling(false);
     setRestoredGenerationId(snapshot.restoredGenerationId);
@@ -976,6 +993,8 @@ export default function VideoCanvasStudio({
           setRestoredGenerationId(saved.generationId || null);
           if (saved.generationGroupId) generationGroupIdRef.current = saved.generationGroupId;
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
+          const restoredScriptOcr = restoreScriptOcr(saved.scriptOcr);
+          if (restoredScriptOcr) setScriptOcr({ assetId: restoredScriptOcr.assetId, status: 'ready', text: restoredScriptOcr.text, result: null, error: '' });
           if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(savedShot => restoreSavedShot(savedShot, restoreNodePositions)));
         }
       }
@@ -1005,6 +1024,7 @@ export default function VideoCanvasStudio({
       videoUrl,
       agentPlan,
       semantics: canvasSemantics,
+      scriptOcr: scriptOcrDraftFromState(scriptOcr),
     };
     const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
@@ -1026,9 +1046,10 @@ export default function VideoCanvasStudio({
       semantics: canvasSemantics,
       activeShot: shot,
       shots: savedShots,
+      scriptOcr: scriptOcrDraftFromState(scriptOcr),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1231,6 +1252,7 @@ export default function VideoCanvasStudio({
     if (target) {
       retireAsset(target.assetId);
       if (highlightedAssetId === target.assetId) setHighlightedAssetId(null);
+      if (scriptOcr.assetId === target.assetId) setScriptOcr({ assetId: null, status: 'idle', text: '', result: null, error: '' });
     }
     setReferenceFrames(current => {
       if (target?.previewUrl.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl);
@@ -1597,6 +1619,7 @@ export default function VideoCanvasStudio({
         videoUrl: '',
         agentPlan: null,
         semantics: patchCanvasNode(nextSemantics, 'source', { role: 'reference', assetId: generation.thumbnailAssetId, status: 'draft' }),
+        scriptOcr: null,
       };
       setShotSnapshots(previous => upsertShotSnapshot(upsertShotSnapshot(previous, currentSnapshot), nextSnapshot));
       applyShotSnapshot(nextSnapshot);
@@ -1813,6 +1836,7 @@ export default function VideoCanvasStudio({
       videoUrl: '',
       agentPlan: null,
       semantics: nextSemantics,
+      scriptOcr: null,
     };
     if (duplicate) {
       nextSnapshot.semantics = patchCanvasNode(nextSemantics, 'source', {

@@ -6,6 +6,7 @@ export type CanvasAspectRatio = '9:16' | '16:9' | '1:1';
 export type CanvasReferenceMode = 'start-end' | 'omni';
 export type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number; referenceIndex?: number };
 export type PersistedFrame = Omit<UploadedFrame, 'previewUrl'>;
+export type ScriptOcrDraft = { assetId: string; text: string; extractedAt?: string | null };
 
 export type ShotSnapshot = {
   shot: number;
@@ -24,6 +25,7 @@ export type ShotSnapshot = {
   videoUrl: string;
   agentPlan: VideoGenerationPlan | null;
   semantics: CanvasSemantics;
+  scriptOcr: ScriptOcrDraft | null;
 };
 
 export type SavedShot = {
@@ -40,6 +42,7 @@ export type SavedShot = {
   referenceFrames?: PersistedFrame[];
   generationId: string | null;
   semantics?: CanvasSemantics;
+  scriptOcr?: ScriptOcrDraft | null;
 };
 
 /**
@@ -109,7 +112,17 @@ export function restoreSavedShot(saved: SavedShot, restoreNodes: (value: unknown
     videoUrl: '',
     agentPlan: null,
     semantics: normalizeCanvasSemantics(saved.semantics, shot),
+    scriptOcr: restoreScriptOcr(saved.scriptOcr),
   };
+}
+
+export function restoreScriptOcr(value: ScriptOcrDraft | null | undefined): ScriptOcrDraft | null {
+  if (!value || typeof value !== 'object') return null;
+  const assetId = String(value.assetId || '').trim().slice(0, 240);
+  const text = String(value.text || '').replace(/\u0000/g, '').slice(0, 12_000).trim();
+  if (!assetId || !text) return null;
+  const extractedAt = value.extractedAt ? String(value.extractedAt).slice(0, 80) : null;
+  return { assetId, text, extractedAt };
 }
 
 export function upsertShotSnapshot(snapshots: ShotSnapshot[], snapshot: ShotSnapshot) {
@@ -172,5 +185,6 @@ export function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
     referenceFrames: snapshot.referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
     generationId: snapshot.generation?.id || snapshot.restoredGenerationId,
     semantics: snapshot.semantics,
+    scriptOcr: snapshot.scriptOcr,
   };
 }
