@@ -8,9 +8,13 @@ import type { UiLocale } from '@/src/lib/ui-language';
 import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
   cloneFrame,
+  limitShotSnapshots,
+  removeShotSnapshot,
+  reorderShotSnapshots,
   restoreSavedShot,
   serializeShotSnapshot,
   stripFrame,
+  sortShotSnapshots,
   upsertShotSnapshot,
   type CanvasReferenceMode,
   type PersistedFrame,
@@ -350,8 +354,21 @@ export default function VideoCanvasStudio({
   const generationId = generation?.id;
   const generationStatus = generation?.status;
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
-  const shotNumbers = useMemo(() => Array.from(new Set([...shotSnapshots.map(snapshot => snapshot.shot), shot])).sort((left, right) => left - right), [shot, shotSnapshots]);
+  const shotRailItems = useMemo(() => {
+    const current = { shot, order: canvasSemantics.shot.order || shot, status: canvasSemantics.shot.status };
+    const byNumber = new Map(shotSnapshots.map(snapshot => [snapshot.shot, {
+      shot: snapshot.shot,
+      order: snapshot.semantics.shot.order || snapshot.shot,
+      status: snapshot.semantics.shot.status,
+    }]));
+    byNumber.set(shot, current);
+    return Array.from(byNumber.values()).sort((left, right) => left.order - right.order || left.shot - right.shot);
+  }, [canvasSemantics.shot.order, canvasSemantics.shot.status, shot, shotSnapshots]);
   const nextShotNumber = () => Math.max(shot, ...shotSnapshots.map(snapshot => snapshot.shot), 0) + 1;
+
+  const currentShotRailIndex = shotRailItems.findIndex(item => item.shot === shot);
+  const canMoveCurrentShotUp = currentShotRailIndex > 0;
+  const canMoveCurrentShotDown = currentShotRailIndex >= 0 && currentShotRailIndex < shotRailItems.length - 1;
 
   const switchShot = (targetShot: number) => {
     if (targetShot === shot) return;
@@ -359,6 +376,41 @@ export default function VideoCanvasStudio({
     if (!target) return;
     setShotSnapshots(previous => upsertShotSnapshot(previous, captureCurrentShot()));
     applyShotSnapshot(target);
+  };
+
+  const reorderCurrentShot = (direction: 'up' | 'down') => {
+    if ((direction === 'up' && !canMoveCurrentShotUp) || (direction === 'down' && !canMoveCurrentShotDown)) return;
+    const currentSnapshot = captureCurrentShot();
+    const reordered = reorderShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, direction);
+    const active = reordered.find(snapshot => snapshot.shot === shot);
+    if (!active) return;
+    setShotSnapshots(reordered);
+    setCanvasSemantics(active.semantics);
+    notify(direction === 'up'
+      ? (zh ? `镜头 ${String(shot).padStart(2, '0')} 已前移。` : `Shot ${String(shot).padStart(2, '0')} moved earlier.`)
+      : (zh ? `镜头 ${String(shot).padStart(2, '0')} 已后移。` : `Shot ${String(shot).padStart(2, '0')} moved later.`));
+  };
+
+  const deleteCurrentShot = () => {
+    if (shotActionsDisabled) return;
+    const currentSnapshot = captureCurrentShot();
+    const allSnapshots = upsertShotSnapshot(shotSnapshots, currentSnapshot);
+    if (allSnapshots.length <= 1) {
+      notify(zh ? '至少保留一个镜头。' : 'Keep at least one shot in the canvas.');
+      return;
+    }
+    const confirmation = zh
+      ? `删除镜头 ${String(shot).padStart(2, '0')}？生成历史仍会保留，但这个镜头会从当前画布移除。`
+      : `Delete shot ${String(shot).padStart(2, '0')}? Generation history stays available, but this shot will be removed from the canvas.`;
+    if (typeof window !== 'undefined' && !window.confirm(confirmation)) return;
+    const ordered = sortShotSnapshots(allSnapshots);
+    const index = ordered.findIndex(snapshot => snapshot.shot === shot);
+    const fallback = ordered[index > 0 ? index - 1 : 1];
+    const remaining = removeShotSnapshot(ordered, shot);
+    if (!fallback) return;
+    setShotSnapshots(remaining);
+    applyShotSnapshot(fallback);
+    notify(zh ? `已删除镜头 ${String(shot).padStart(2, '0')}。` : `Shot ${String(shot).padStart(2, '0')} deleted.`);
   };
 
   const rememberGeneration = useCallback((next: VideoGeneration) => {
@@ -517,8 +569,7 @@ export default function VideoCanvasStudio({
       agentPlan,
       semantics: canvasSemantics,
     };
-    const savedShots = upsertShotSnapshot(shotSnapshots, currentSnapshot)
-      .slice(-24)
+    const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
     const saved: SavedCanvas = {
       version: 5,
@@ -1156,9 +1207,9 @@ export default function VideoCanvasStudio({
         <div className="video-canvas-caption-center">
           <div className="canvas-shot-rail" aria-label={zh ? '镜头列表' : 'Shot list'}>
             <small>SHOTS</small>
-            {shotNumbers.map(index => {
-              const status = index === shot ? canvasSemantics.shot.status : shotSnapshotsByNumber.get(index)?.semantics.shot.status || 'draft';
-              return <button key={index} type="button" className={'canvas-shot-rail-item ' + (index === shot ? 'is-current' : '')} aria-current={index === shot ? 'step' : undefined} onClick={() => switchShot(index)}><b>{String(index).padStart(2, '0')}</b><i className={status} aria-hidden="true" /></button>;
+            {shotRailItems.map(item => {
+              const index = item.shot;
+              return <button key={index} type="button" className={'canvas-shot-rail-item ' + (index === shot ? 'is-current' : '')} aria-current={index === shot ? 'step' : undefined} aria-label={zh ? `切换到镜头 ${String(index).padStart(2, '0')}` : `Switch to shot ${String(index).padStart(2, '0')}`} onClick={() => switchShot(index)}><b>{String(index).padStart(2, '0')}</b><i className={item.status} aria-hidden="true" /></button>;
             })}
           </div>
           <p>{zh ? '拖动空白区域移动画布，滚轮缩放。' : 'Drag the background to pan, use the wheel to zoom.'}</p>
@@ -1201,6 +1252,9 @@ export default function VideoCanvasStudio({
               <div className="canvas-shot-container-actions">
                 <button type="button" className="canvas-shot-container-action" disabled={shotActionsDisabled} title={shotActionsDisabled ? (zh ? '当前任务完成后可继续创建镜头' : 'Finish the current task before creating another shot') : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(true)}>{zh ? '复制' : 'Duplicate'}</button>
                 <button type="button" className="canvas-shot-container-action" disabled={shotActionsDisabled} title={shotActionsDisabled ? (zh ? '当前任务完成后可继续创建镜头' : 'Finish the current task before creating another shot') : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(false)}>{zh ? '+ 新镜头' : '+ New shot'}</button>
+                <button type="button" className="canvas-shot-container-action canvas-shot-order-action" disabled={!canMoveCurrentShotUp} title={canMoveCurrentShotUp ? (zh ? '镜头前移' : 'Move shot earlier') : (zh ? '已经是第一个镜头' : 'Already the first shot')} aria-label={zh ? '镜头前移' : 'Move shot earlier'} onPointerDown={event => event.stopPropagation()} onClick={() => reorderCurrentShot('up')}>↑</button>
+                <button type="button" className="canvas-shot-container-action canvas-shot-order-action" disabled={!canMoveCurrentShotDown} title={canMoveCurrentShotDown ? (zh ? '镜头后移' : 'Move shot later') : (zh ? '已经是最后一个镜头' : 'Already the last shot')} aria-label={zh ? '镜头后移' : 'Move shot later'} onPointerDown={event => event.stopPropagation()} onClick={() => reorderCurrentShot('down')}>↓</button>
+                <button type="button" className="canvas-shot-container-action canvas-shot-delete-action" disabled={shotActionsDisabled || shotRailItems.length <= 1} title={shotRailItems.length <= 1 ? (zh ? '至少保留一个镜头' : 'Keep at least one shot') : (zh ? '从画布删除当前镜头' : 'Remove this shot from the canvas')} aria-label={zh ? '删除当前镜头' : 'Delete current shot'} onPointerDown={event => event.stopPropagation()} onClick={deleteCurrentShot}>{zh ? '删除' : 'Delete'}</button>
                 <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
               </div>
             </div>

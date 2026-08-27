@@ -5280,6 +5280,33 @@
   color: var(--canvas-danger) !important;
 }
 
+.canvas-shot-container-actions .canvas-shot-order-action {
+  width: 28px;
+  padding: 0;
+  border-color: var(--canvas-line-soft) !important;
+  background: var(--canvas-paper) !important;
+  color: var(--canvas-line) !important;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.canvas-shot-container-actions .canvas-shot-order-action:hover,
+.canvas-shot-container-actions .canvas-shot-order-action:focus-visible {
+  border-color: var(--canvas-danger) !important;
+  background: var(--canvas-danger-soft) !important;
+  color: var(--canvas-danger) !important;
+}
+
+.canvas-shot-container-actions .canvas-shot-delete-action {
+  color: var(--canvas-danger) !important;
+}
+
+.canvas-shot-container-actions .canvas-shot-delete-action:hover,
+.canvas-shot-container-actions .canvas-shot-delete-action:focus-visible {
+  border-color: #f0b7b0 !important;
+  background: var(--canvas-danger-soft) !important;
+}
+
 .canvas-shot-container-actions > button:disabled {
   cursor: not-allowed;
   opacity: .45;

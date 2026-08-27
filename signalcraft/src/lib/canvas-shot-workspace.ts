@@ -79,8 +79,48 @@ export function restoreSavedShot(saved: SavedShot, restoreNodes: (value: unknown
 }
 
 export function upsertShotSnapshot(snapshots: ShotSnapshot[], snapshot: ShotSnapshot) {
-  return [...snapshots.filter(item => item.shot !== snapshot.shot), snapshot]
-    .sort((left, right) => left.shot - right.shot);
+  return sortShotSnapshots([...snapshots.filter(item => item.shot !== snapshot.shot), snapshot]);
+}
+
+/**
+ * Keeps the visual rail order separate from a Shot's stable numeric identity.
+ * Older snapshots have no explicit ordering beyond their original number, so
+ * the semantic order field is a safe backwards-compatible fallback.
+ */
+export function sortShotSnapshots(snapshots: ShotSnapshot[]) {
+  return [...snapshots].sort((left, right) => {
+    const orderDelta = (left.semantics.shot.order || left.shot) - (right.semantics.shot.order || right.shot);
+    return orderDelta || left.shot - right.shot;
+  });
+}
+
+export function removeShotSnapshot(snapshots: ShotSnapshot[], shot: number) {
+  return sortShotSnapshots(snapshots.filter(snapshot => snapshot.shot !== shot));
+}
+
+export function reorderShotSnapshots(snapshots: ShotSnapshot[], shot: number, direction: 'up' | 'down') {
+  const ordered = sortShotSnapshots(snapshots);
+  const index = ordered.findIndex(snapshot => snapshot.shot === shot);
+  const neighborIndex = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || neighborIndex < 0 || neighborIndex >= ordered.length) return ordered;
+  const current = ordered[index];
+  const neighbor = ordered[neighborIndex];
+  const currentOrder = current.semantics.shot.order || current.shot;
+  const neighborOrder = neighbor.semantics.shot.order || neighbor.shot;
+  return sortShotSnapshots(ordered.map(snapshot => {
+    if (snapshot.shot === current.shot) return { ...snapshot, semantics: { ...snapshot.semantics, shot: { ...snapshot.semantics.shot, order: neighborOrder } } };
+    if (snapshot.shot === neighbor.shot) return { ...snapshot, semantics: { ...snapshot.semantics, shot: { ...snapshot.semantics.shot, order: currentOrder } } };
+    return snapshot;
+  }));
+}
+
+/** Keep the active Shot when local history reaches its storage cap. */
+export function limitShotSnapshots(snapshots: ShotSnapshot[], activeShot: number, limit = 24) {
+  const ordered = sortShotSnapshots(snapshots);
+  if (ordered.length <= limit) return ordered;
+  const active = ordered.find(snapshot => snapshot.shot === activeShot);
+  const rest = ordered.filter(snapshot => snapshot.shot !== activeShot).slice(0, Math.max(0, limit - 1));
+  return sortShotSnapshots(active ? [...rest, active] : rest);
 }
 
 export function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
