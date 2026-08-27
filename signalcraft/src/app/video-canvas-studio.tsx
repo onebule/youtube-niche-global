@@ -43,6 +43,7 @@ import {
   type CanvasNodeId,
   type CanvasSemantics,
 } from '@/src/lib/canvas-domain';
+import { CANVAS_TEMPLATES, type CanvasTemplate } from '@/src/lib/canvas-templates';
 import {
   createVideoGeneration,
   cancelVideoGeneration,
@@ -118,6 +119,9 @@ const CONNECTIONS: Array<[NodeId, NodeId]> = [
 ];
 
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
+  ? (resolution === '2K' ? '2K' : '768P')
+  : ['480p', '720p', '1080p'].includes(resolution) ? resolution : '720p';
 const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGeneration) => {
   if (!previous || previous.id !== next.id) return next;
   return {
@@ -366,6 +370,7 @@ export default function VideoCanvasStudio({
   const [clockNow, setClockNow] = useState(0);
   const [planning, setPlanning] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<VideoGeneration[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -451,6 +456,7 @@ export default function VideoCanvasStudio({
     setHistoryOpen(false);
     setCompareOpen(false);
     setNodePaletteOpen(false);
+    setTemplateOpen(false);
   };
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
@@ -702,6 +708,7 @@ export default function VideoCanvasStudio({
     setHistoryOpen(next);
     if (next) setCompareOpen(false);
     if (next) setNodePaletteOpen(false);
+    if (next) setTemplateOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
 
@@ -710,6 +717,7 @@ export default function VideoCanvasStudio({
     setCompareOpen(next);
     if (next) setHistoryOpen(false);
     if (next) setNodePaletteOpen(false);
+    if (next) setTemplateOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
 
@@ -867,16 +875,17 @@ export default function VideoCanvasStudio({
   }, [isCanvasFullscreen]);
 
   useEffect(() => {
-    if (!historyOpen && !nodePaletteOpen && !compareOpen) return;
+    if (!historyOpen && !nodePaletteOpen && !compareOpen && !templateOpen) return;
     const closePanels = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setHistoryOpen(false);
       setNodePaletteOpen(false);
       setCompareOpen(false);
+      setTemplateOpen(false);
     };
     window.addEventListener('keydown', closePanels);
     return () => window.removeEventListener('keydown', closePanels);
-  }, [compareOpen, historyOpen, nodePaletteOpen]);
+  }, [compareOpen, historyOpen, nodePaletteOpen, templateOpen]);
 
   useEffect(() => {
     try {
@@ -1299,6 +1308,7 @@ export default function VideoCanvasStudio({
       if (next) {
         setHistoryOpen(false);
         setCompareOpen(false);
+        setTemplateOpen(false);
       }
       return next;
     });
@@ -1322,6 +1332,32 @@ export default function VideoCanvasStudio({
     setReferenceMode('omni');
     closeNodePalette();
     notify(zh ? '已切换到全能参考，可在画布左侧加入最多 9 张图片。' : 'Omni reference is ready. Add up to 9 images from the left node.');
+  };
+  const toggleTemplatePicker = () => {
+    setTemplateOpen(current => {
+      const next = !current;
+      if (next) {
+        setPreferencesOpen(false);
+        setHistoryOpen(false);
+        setCompareOpen(false);
+        setNodePaletteOpen(false);
+      }
+      return next;
+    });
+  };
+  const applyCanvasTemplate = (template: CanvasTemplate) => {
+    const nextResolution = compatibleTemplateResolution(model, template.resolution);
+    setPrompt(zh ? template.promptZh : template.promptEn);
+    setReferenceMode(template.referenceMode);
+    setDuration(normalizeVideoDuration(model, template.duration));
+    setAspectRatio(template.aspectRatio);
+    setResolution(nextResolution);
+    setAgentPlan(null);
+    patchSemanticNode('prompt', { status: 'draft' });
+    setTemplateOpen(false);
+    notify(zh
+      ? `已应用“${template.labelZh}”模板，保留当前 ${modelName(model)}；请检查参考图和参数后再生成。`
+      : `“${template.labelEn}” applied. ${modelName(model)} stays selected; review references and settings before generating.`);
   };
 
   const generate = async () => {
@@ -1844,7 +1880,7 @@ export default function VideoCanvasStudio({
             <span className="node-port input" aria-hidden="true" />
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
-              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => setPreferencesOpen(true)}>{zh ? '设置' : 'Set'}</button></div>
+              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '等待提交' : 'Ready to submit')}</div>
@@ -1958,13 +1994,30 @@ export default function VideoCanvasStudio({
                 : (zh ? '提示词里有已失效的素材引用，请重新加入或重新绑定。' : 'A referenced asset is no longer available. Add it again or rebind the mention.')}</p>}
             </div>
             <div className="canvas-composer-controls">
+              <div className="canvas-template-wrap">
+                <button type="button" className={'canvas-template-trigger ' + (templateOpen ? 'is-open' : '')} aria-expanded={templateOpen} aria-controls="canvas-template-panel" onClick={toggleTemplatePicker}>
+                  <span className="canvas-template-trigger-icon" aria-hidden="true">✦</span>
+                  <span className="canvas-template-trigger-copy"><b>{zh ? '商业模板' : 'Shot templates'}</b><small>{zh ? 'Prompt + 参数预设' : 'Prompt + settings presets'}</small></span>
+                  <span className="canvas-template-trigger-arrow" aria-hidden="true">{templateOpen ? '⌃' : '⌄'}</span>
+                </button>
+                {templateOpen && <div id="canvas-template-panel" className="canvas-template-panel" role="dialog" aria-labelledby="canvas-template-title">
+                  <div className="canvas-template-head"><div><span>{zh ? '可复用起点' : 'REUSABLE STARTING POINTS'}</span><b id="canvas-template-title">{zh ? '选择一个镜头模板' : 'Choose a shot template'}</b></div><button type="button" className="canvas-template-close" aria-label={zh ? '关闭模板' : 'Close templates'} onClick={() => setTemplateOpen(false)}>×</button></div>
+                  <p className="canvas-template-note">{zh ? '模板只填入草稿，不会提交任务；当前锁定的模型会保留。' : 'Templates only update the draft. No task is submitted and the locked model stays selected.'}</p>
+                  <div className="canvas-template-list">
+                    {CANVAS_TEMPLATES.map(template => <button type="button" className="canvas-template-card" key={template.id} onClick={() => applyCanvasTemplate(template)}>
+                      <span className="canvas-template-card-copy"><b>{zh ? template.labelZh : template.labelEn}</b><small>{zh ? template.descriptionZh : template.descriptionEn}</small><em>{(zh ? template.tagsZh : template.tagsEn).join(' · ')}</em></span>
+                      <span className="canvas-template-card-meta"><strong>{zh ? '推荐' : 'Best with'} {modelName(template.recommendedModel)}</strong><small>{template.duration} · {template.aspectRatio} · {template.resolution}</small></span>
+                    </button>)}
+                  </div>
+                </div>}
+              </div>
               <div className="canvas-preferences-wrap">
                 <button
                   type="button"
                   className={'canvas-preferences-trigger ' + (preferencesOpen ? 'is-open' : '')}
                   aria-expanded={preferencesOpen}
                   aria-controls="canvas-preferences-panel"
-                  onClick={() => setPreferencesOpen(current => !current)}
+                  onClick={() => setPreferencesOpen(current => { const next = !current; if (next) setTemplateOpen(false); return next; })}
                 >
                   <span className="canvas-preferences-trigger-icon" aria-hidden="true">☷</span>
                   <span className="canvas-preferences-trigger-copy">

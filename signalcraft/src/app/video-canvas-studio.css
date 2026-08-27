@@ -6300,3 +6300,225 @@
   cursor: not-allowed;
   opacity: .55;
 }
+
+.canvas-template-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.canvas-template-trigger {
+  display: inline-flex;
+  min-width: 144px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d2c6b8;
+  border-radius: 9px;
+  background: #fffdf8;
+  color: #263038;
+  text-align: left;
+}
+
+.canvas-template-trigger:hover,
+.canvas-template-trigger:focus-visible,
+.canvas-template-trigger.is-open {
+  border-color: #c83b2d;
+  background: #fff3ef;
+}
+
+.canvas-template-trigger:focus-visible,
+.canvas-template-close:focus-visible,
+.canvas-template-card:focus-visible {
+  outline: 2px solid #c83b2d;
+  outline-offset: 2px;
+}
+
+.canvas-template-trigger-icon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  place-items: center;
+  border-radius: 7px;
+  background: #f2e7d9;
+  color: #c83b2d;
+  font-size: 13px;
+}
+
+.canvas-template-trigger-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.canvas-template-trigger-copy b {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-template-trigger-copy small,
+.canvas-template-trigger-arrow {
+  color: #7b7168;
+  font-size: 9px;
+}
+
+.canvas-template-trigger-arrow {
+  margin-left: auto;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.canvas-template-panel {
+  position: absolute;
+  z-index: 35;
+  bottom: calc(100% + 11px);
+  left: 0;
+  width: min(540px, calc(100vw - 36px));
+  max-height: min(520px, calc(100vh - 130px));
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #c9beb1;
+  border-radius: 14px;
+  background: #fffdf8;
+  box-shadow: 0 24px 48px rgba(40, 31, 23, .2);
+}
+
+.canvas-template-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.canvas-template-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvas-template-head span {
+  color: #c83b2d;
+  font: 800 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .13em;
+}
+
+.canvas-template-head b {
+  color: #202a2f;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 21px;
+}
+
+.canvas-template-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #d9cec1;
+  border-radius: 7px;
+  background: transparent;
+  color: #6e645b;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.canvas-template-close:hover {
+  border-color: #c83b2d;
+  color: #c83b2d;
+}
+
+.canvas-template-note {
+  margin: 9px 0 12px;
+  padding: 9px 10px;
+  border-left: 3px solid #30675b;
+  background: #edf4f1;
+  color: #52655f;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.canvas-template-list {
+  display: grid;
+  gap: 8px;
+}
+
+.canvas-template-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #e0d6cb;
+  border-radius: 9px;
+  background: #fbf7f1;
+  color: #283138;
+  text-align: left;
+}
+
+.canvas-template-card:hover {
+  border-color: #c83b2d;
+  background: #fff3ef;
+}
+
+.canvas-template-card-copy,
+.canvas-template-card-meta {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 4px;
+}
+
+.canvas-template-card-copy b {
+  font-size: 12px;
+}
+
+.canvas-template-card-copy small {
+  color: #71675e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.canvas-template-card-copy em {
+  color: #8b5d31;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.canvas-template-card-meta {
+  min-width: 130px;
+  justify-items: end;
+  text-align: right;
+}
+
+.canvas-template-card-meta strong {
+  color: #30675b;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.canvas-template-card-meta small {
+  color: #7b7168;
+  font: 700 9px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .canvas-template-panel {
+    position: fixed;
+    right: 12px;
+    bottom: 88px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 112px);
+  }
+
+  .canvas-template-card {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-template-card-meta {
+    min-width: 0;
+    justify-items: start;
+    text-align: left;
+  }
+}
