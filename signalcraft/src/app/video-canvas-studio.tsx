@@ -278,6 +278,7 @@ export default function VideoCanvasStudio({
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
   const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !uploading);
+  const shotActionsDisabled = submitting || Boolean(uploading) || generation?.status === 'queued' || generation?.status === 'processing';
   const agentPlanBlockedReason = !prompt.trim()
     ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
     : '';
@@ -1078,8 +1079,8 @@ export default function VideoCanvasStudio({
               <div><b>{zh ? '当前镜头' : 'Current shot'}</b><small>{canvasSemantics.shot.title}</small></div>
               <span className={'canvas-shot-container-status ' + canvasSemantics.shot.status}><i />{canvasSemantics.shot.status === 'generating' ? (zh ? '生成中' : 'Generating') : canvasSemantics.shot.status === 'completed' ? (zh ? '已完成' : 'Completed') : canvasSemantics.shot.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft')}</span>
               <div className="canvas-shot-container-actions">
-                <button type="button" className="canvas-shot-container-action" onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(true)}>{zh ? '复制' : 'Duplicate'}</button>
-                <button type="button" className="canvas-shot-container-action" onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(false)}>{zh ? '+ 新镜头' : '+ New shot'}</button>
+                <button type="button" className="canvas-shot-container-action" disabled={shotActionsDisabled} title={shotActionsDisabled ? (zh ? '当前任务完成后可继续创建镜头' : 'Finish the current task before creating another shot') : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(true)}>{zh ? '复制' : 'Duplicate'}</button>
+                <button type="button" className="canvas-shot-container-action" disabled={shotActionsDisabled} title={shotActionsDisabled ? (zh ? '当前任务完成后可继续创建镜头' : 'Finish the current task before creating another shot') : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(false)}>{zh ? '+ 新镜头' : '+ New shot'}</button>
                 <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
               </div>
             </div>

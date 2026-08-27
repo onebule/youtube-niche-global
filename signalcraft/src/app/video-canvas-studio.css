@@ -5280,6 +5280,16 @@
   color: var(--canvas-danger) !important;
 }
 
+.canvas-shot-container-actions > button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.canvas-shot-container-actions > button:disabled:hover {
+  border-color: var(--canvas-line-soft);
+  color: var(--canvas-muted);
+}
+
 .canvas-shot-container-flow {
   display: flex;
   align-items: center;
