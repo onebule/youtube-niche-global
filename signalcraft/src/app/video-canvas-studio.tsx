@@ -942,6 +942,15 @@ export default function VideoCanvasStudio({
     void planWithAgent();
   };
 
+  const animateCurrentReference = () => {
+    setSelectedNodeId('source');
+    setPreferencesOpen(false);
+    focusMotionPrompt();
+    notify(hasReferenceInput
+      ? (zh ? '已把当前参考素材带入图生视频流程，请补充 Motion Prompt。' : 'The current reference is ready for image-to-video. Add a Motion Prompt.')
+      : (zh ? '先在镜头边界节点加入 START 或参考图，再开始 Animate。' : 'Add a START frame or reference image in the shot boundary node before animating.'));
+  };
+
   const closeNodePalette = () => setNodePaletteOpen(false);
   const toggleNodePalette = () => {
     setNodePaletteOpen(current => {
@@ -1419,6 +1428,10 @@ export default function VideoCanvasStudio({
                 </div>
                 <small>{zh ? '点击 @图片编号，把素材引用插入提示词。' : 'Use an @image label to reference a source in the prompt.'}</small>
               </div>}
+              <div className="canvas-source-actions">
+                <button type="button" className="canvas-source-animate-button" disabled={shotActionsDisabled} data-canvas-action="animate" onClick={animateCurrentReference}>{zh ? 'Animate 当前素材' : 'Animate current reference'}<span aria-hidden="true">→</span></button>
+                <small>{hasReferenceInput ? (zh ? '进入底部生成台，选择模型后提交。' : 'Open the composer, choose a model, then submit.') : (zh ? '需要至少 1 张参考图。' : 'At least one reference image is required.')}</small>
+              </div>
             </div>
             <span className="node-port output" aria-hidden="true" />
           </article>
