@@ -7,6 +7,18 @@ import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
+  cloneFrame,
+  restoreSavedShot,
+  serializeShotSnapshot,
+  stripFrame,
+  upsertShotSnapshot,
+  type CanvasReferenceMode,
+  type PersistedFrame,
+  type SavedShot,
+  type ShotSnapshot,
+  type UploadedFrame,
+} from '@/src/lib/canvas-shot-workspace';
+import {
   createCanvasSemantics,
   normalizeCanvasSemantics,
   patchCanvasNode,
@@ -39,42 +51,7 @@ type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
 type NodeId = CanvasNodeId;
 type NodePositions = CanvasNodePositions;
-type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
-type ReferenceMode = 'start-end' | 'omni';
-type PersistedFrame = Omit<UploadedFrame, 'previewUrl'>;
-type ShotSnapshot = {
-  shot: number;
-  nodes: NodePositions;
-  prompt: string;
-  model: VideoModelId;
-  duration: string;
-  aspectRatio: '9:16' | '16:9' | '1:1';
-  resolution: string;
-  startFrame: UploadedFrame | null;
-  endFrame: UploadedFrame | null;
-  referenceMode: ReferenceMode;
-  referenceFrames: UploadedFrame[];
-  generation: VideoGeneration | null;
-  restoredGenerationId: string | null;
-  videoUrl: string;
-  agentPlan: VideoGenerationPlan | null;
-  semantics: CanvasSemantics;
-};
-type SavedShot = {
-  shot: number;
-  nodes: NodePositions;
-  prompt: string;
-  model: VideoModelId;
-  duration: string;
-  aspectRatio: '9:16' | '16:9' | '1:1';
-  resolution: string;
-  startFrame: PersistedFrame | null;
-  endFrame: PersistedFrame | null;
-  referenceMode?: ReferenceMode;
-  referenceFrames?: PersistedFrame[];
-  generationId: string | null;
-  semantics?: CanvasSemantics;
-};
+type ReferenceMode = CanvasReferenceMode;
 type SavedCanvas = {
   version: 1 | 2 | 3 | 4 | 5;
   nodes: NodePositions;
@@ -160,65 +137,6 @@ function restoreNodePositions(value: unknown): NodePositions {
     }
   });
   return next;
-}
-
-function cloneFrame(frame: UploadedFrame | null): UploadedFrame | null {
-  return frame ? { ...frame } : null;
-}
-
-function stripFrame(frame: UploadedFrame | null): PersistedFrame | null {
-  if (!frame) return null;
-  return { assetId: frame.assetId, name: frame.name, width: frame.width, height: frame.height };
-}
-
-function restoreFrame(frame: PersistedFrame | null | undefined): UploadedFrame | null {
-  return frame ? { ...frame, previewUrl: '' } : null;
-}
-
-function restoreSavedShot(saved: SavedShot): ShotSnapshot {
-  const shot = Number.isInteger(saved.shot) && saved.shot > 0 ? saved.shot : 1;
-  const model = saved.model || 'seedance-2';
-  return {
-    shot,
-    nodes: restoreNodePositions(saved.nodes),
-    prompt: saved.prompt || '',
-    model,
-    duration: normalizeVideoDuration(model, saved.duration || '5s'),
-    aspectRatio: saved.aspectRatio || '9:16',
-    resolution: saved.resolution || '720p',
-    startFrame: restoreFrame(saved.startFrame),
-    endFrame: restoreFrame(saved.endFrame),
-    referenceMode: saved.referenceMode || 'start-end',
-    referenceFrames: (saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })),
-    generation: null,
-    restoredGenerationId: saved.generationId || null,
-    videoUrl: '',
-    agentPlan: null,
-    semantics: normalizeCanvasSemantics(saved.semantics, shot),
-  };
-}
-
-function upsertShotSnapshot(snapshots: ShotSnapshot[], snapshot: ShotSnapshot) {
-  return [...snapshots.filter(item => item.shot !== snapshot.shot), snapshot]
-    .sort((left, right) => left.shot - right.shot);
-}
-
-function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
-  return {
-    shot: snapshot.shot,
-    nodes: snapshot.nodes,
-    prompt: snapshot.prompt,
-    model: snapshot.model,
-    duration: snapshot.duration,
-    aspectRatio: snapshot.aspectRatio,
-    resolution: snapshot.resolution,
-    startFrame: stripFrame(snapshot.startFrame),
-    endFrame: stripFrame(snapshot.endFrame),
-    referenceMode: snapshot.referenceMode,
-    referenceFrames: snapshot.referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
-    generationId: snapshot.generation?.id || snapshot.restoredGenerationId,
-    semantics: snapshot.semantics,
-  };
 }
 
 function imageDimensions(file: File) {
@@ -569,7 +487,7 @@ export default function VideoCanvasStudio({
           setReferenceFrames((saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })));
           setRestoredGenerationId(saved.generationId || null);
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
-          if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(restoreSavedShot));
+          if (Array.isArray(saved.shots)) setShotSnapshots(saved.shots.slice(0, 24).map(savedShot => restoreSavedShot(savedShot, restoreNodePositions)));
         }
       }
     } catch {
