@@ -5920,3 +5920,61 @@
     max-height: 190px;
   }
 }
+
+/* Time-first task feedback: the provider percentage remains a quiet visual
+   signal, while the copy tells the user when to expect a result. */
+.canvas-status {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.canvas-status > b {
+  flex: 0 0 auto;
+  padding-top: 1px;
+}
+
+.canvas-status-time {
+  display: grid;
+  min-width: 0;
+  margin-left: auto;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.canvas-status-time strong {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-status-time small {
+  color: var(--canvas-muted, #737980);
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.canvas-status[data-time-mode='stopped'] .canvas-status-time strong {
+  color: var(--canvas-danger, #dd5048);
+}
+
+.canvas-progress[data-mode='indeterminate'] i {
+  width: 34%;
+  background: linear-gradient(90deg, transparent, var(--canvas-purple, #6b5cf0), transparent);
+  animation: canvas-progress-sweep 1.7s ease-in-out infinite;
+}
+
+@keyframes canvas-progress-sweep {
+  from { transform: translateX(-115%); }
+  to { transform: translateX(315%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-progress[data-mode='indeterminate'] i {
+    animation: none;
+    width: 48%;
+    transform: none;
+  }
+}

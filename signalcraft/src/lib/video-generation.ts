@@ -8,6 +8,104 @@ export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type VideoGenerationCancellation = 'confirmed' | 'requested' | 'unsupported' | 'failed' | 'not_applicable';
 
+type VideoGenerationTimeProfile = { minSeconds: number; maxSeconds: number };
+
+const VIDEO_GENERATION_TIME_PROFILES: Record<VideoModelId, VideoGenerationTimeProfile> = {
+  auto: { minSeconds: 60, maxSeconds: 240 },
+  'seedance-2': { minSeconds: 60, maxSeconds: 240 },
+  'seedance-2-5': { minSeconds: 90, maxSeconds: 300 },
+  'minimax-h3': { minSeconds: 60, maxSeconds: 180 },
+};
+
+export type VideoGenerationTimeEstimate = {
+  minSeconds: number;
+  maxSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number | null;
+  actualSeconds: number | null;
+};
+
+function parseDurationSeconds(value: string) {
+  const seconds = Number.parseInt(String(value || '').replace(/\D/g, ''), 10);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
+}
+
+function roundToFive(value: number) {
+  return Math.max(5, Math.round(value / 5) * 5);
+}
+
+/**
+ * Returns a deliberately broad client-side estimate because APIMart does not
+ * expose a stable ETA for every provider. A real startedAt/progress pair can
+ * tighten the remaining-time estimate without changing the API contract.
+ */
+export function estimateVideoGenerationTime(input: {
+  model: VideoModelId;
+  duration: string;
+  referenceCount?: number;
+  resolution?: string;
+  status: GenerationStatus;
+  progress?: number;
+  startedAt?: string | null;
+  createdAt?: string | null;
+  completedAt?: string | null;
+  now?: number;
+}): VideoGenerationTimeEstimate {
+  const profile = VIDEO_GENERATION_TIME_PROFILES[input.model] || VIDEO_GENERATION_TIME_PROFILES.auto;
+  const durationSeconds = parseDurationSeconds(input.duration);
+  const referenceCount = Math.max(1, Number(input.referenceCount) || 1);
+  const durationFactor = 1 + Math.max(0, durationSeconds - 5) * 0.035;
+  const referenceFactor = 1 + Math.max(0, referenceCount - 1) * 0.025;
+  const resolutionFactor = input.resolution === '2K' || input.resolution === '1080p' ? 1.12 : 1;
+  const complexityFactor = Math.min(1.8, durationFactor * referenceFactor * resolutionFactor);
+  const minSeconds = roundToFive(profile.minSeconds * complexityFactor);
+  const maxSeconds = Math.max(minSeconds + 15, roundToFive(profile.maxSeconds * complexityFactor));
+  const now = Number.isFinite(input.now) ? Number(input.now) : Date.now();
+  const startedAt = input.startedAt ? Date.parse(input.startedAt) : Number.NaN;
+  const createdAt = input.createdAt ? Date.parse(input.createdAt) : Number.NaN;
+  const completedAt = input.completedAt ? Date.parse(input.completedAt) : Number.NaN;
+  const elapsedStart = Number.isFinite(startedAt) ? startedAt : createdAt;
+  const elapsedSeconds = Number.isFinite(elapsedStart) && now >= elapsedStart
+    ? Math.max(0, Math.floor((now - elapsedStart) / 1000))
+    : 0;
+  const actualSeconds = input.status === 'completed' && Number.isFinite(elapsedStart) && Number.isFinite(completedAt) && completedAt >= elapsedStart
+    ? Math.max(0, Math.floor((completedAt - elapsedStart) / 1000))
+    : null;
+
+  if (input.status !== 'queued' && input.status !== 'processing') {
+    return { minSeconds, maxSeconds, elapsedSeconds, remainingSeconds: null, actualSeconds };
+  }
+
+  const progress = Math.max(0, Math.min(99, Number(input.progress) || 0));
+  const progressTotal = progress >= 8 && elapsedSeconds >= 8 ? elapsedSeconds / (progress / 100) : 0;
+  const expectedTotal = progressTotal > 0
+    ? Math.max(minSeconds, Math.min(maxSeconds, progressTotal))
+    : (minSeconds + maxSeconds) / 2;
+  const remainingSeconds = input.status === 'processing' && Number.isFinite(startedAt)
+    ? Math.max(5, Math.ceil(expectedTotal - elapsedSeconds))
+    : null;
+
+  return { minSeconds, maxSeconds, elapsedSeconds, remainingSeconds, actualSeconds };
+}
+
+export function formatVideoGenerationTime(seconds: number, zh: boolean) {
+  const value = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(value / 60);
+  const remainder = value % 60;
+  if (zh) {
+    if (minutes > 0 && remainder > 0) return `${minutes}分${remainder}秒`;
+    if (minutes > 0) return `${minutes}分钟`;
+    return `${remainder}秒`;
+  }
+  if (minutes > 0 && remainder > 0) return `${minutes}m ${remainder}s`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${remainder}s`;
+}
+
+export function formatVideoGenerationTimeRange(minSeconds: number, maxSeconds: number, zh: boolean) {
+  return `${formatVideoGenerationTime(minSeconds, zh)}–${formatVideoGenerationTime(maxSeconds, zh)}`;
+}
+
 const VIDEO_DURATION_LIMITS: Record<VideoModelId, { min: number; max: number }> = {
   auto: { min: 5, max: 15 },
   'seedance-2': { min: 5, max: 15 },

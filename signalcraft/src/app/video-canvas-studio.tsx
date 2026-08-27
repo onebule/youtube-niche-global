@@ -41,6 +41,9 @@ import {
   createVideoGeneration,
   cancelVideoGeneration,
   estimateVideoCredits,
+  estimateVideoGenerationTime,
+  formatVideoGenerationTime,
+  formatVideoGenerationTimeRange,
   loadVideoHistory,
   loadVideoAssetUrl,
   loadVideoModels,
@@ -280,6 +283,7 @@ export default function VideoCanvasStudio({
   const [videoUrl, setVideoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [clockNow, setClockNow] = useState(0);
   const [planning, setPlanning] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -386,6 +390,59 @@ export default function VideoCanvasStudio({
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
+  const generationTimeEstimate = useMemo(() => {
+    if (!generation) return null;
+    return estimateVideoGenerationTime({
+      model: generation.model,
+      duration: generation.duration,
+      referenceCount: referenceMode === 'omni' ? referenceFrames.length : 1 + (endFrame ? 1 : 0),
+      resolution: generation.resolution,
+      status: generation.status,
+      progress: generation.progress,
+      startedAt: generation.startedAt,
+      createdAt: generation.createdAt,
+      completedAt: generation.completedAt,
+      now: clockNow || undefined,
+    });
+  }, [clockNow, endFrame, generation, referenceFrames.length, referenceMode]);
+  const generationTimeCopy = useMemo(() => {
+    if (!generation || !generationTimeEstimate) return null;
+    const range = formatVideoGenerationTimeRange(generationTimeEstimate.minSeconds, generationTimeEstimate.maxSeconds, zh);
+    if (generation.status === 'queued') {
+      return {
+        primary: zh ? `预计总耗时约 ${range}` : `Estimated total ${range}`,
+        secondary: zh ? '排队后会自动更新' : 'Updates once rendering starts',
+        mode: 'range',
+      };
+    }
+    if (generation.status === 'processing') {
+      return {
+        primary: generationTimeEstimate.remainingSeconds !== null
+          ? (zh ? `预计还需约 ${formatVideoGenerationTime(generationTimeEstimate.remainingSeconds, zh)}` : `About ${formatVideoGenerationTime(generationTimeEstimate.remainingSeconds, zh)} left`)
+          : (zh ? `预计总耗时约 ${range}` : `Estimated total ${range}`),
+        secondary: generationTimeEstimate.elapsedSeconds > 0
+          ? (zh ? `已耗时 ${formatVideoGenerationTime(generationTimeEstimate.elapsedSeconds, zh)}` : `${formatVideoGenerationTime(generationTimeEstimate.elapsedSeconds, zh)} elapsed`)
+          : (zh ? '开始后会更新' : 'Updates once rendering starts'),
+        mode: 'remaining',
+      };
+    }
+    if (generation.status === 'completed') {
+      return {
+        primary: generationTimeEstimate.actualSeconds !== null
+          ? (zh ? `实际用时 ${formatVideoGenerationTime(generationTimeEstimate.actualSeconds, zh)}` : `Completed in ${formatVideoGenerationTime(generationTimeEstimate.actualSeconds, zh)}`)
+          : (zh ? '生成已完成' : 'Generation complete'),
+        secondary: '',
+        mode: 'complete',
+      };
+    }
+    return {
+      primary: generation.errorCode === 'VIDEO_GENERATION_CANCELLED'
+        ? (zh ? '可修改后重试' : 'Edit and retry')
+        : (zh ? '可再次生成' : 'Ready to retry'),
+      secondary: '',
+      mode: 'stopped',
+    };
+  }, [generation, generationTimeEstimate, zh]);
   const currentVersion = useMemo(() => canvasVersionForGeneration(canvasSemantics, generation?.id), [canvasSemantics, generation?.id]);
   const shotVersions = useMemo(() => canvasSemantics.versions
     .filter(version => version.shotId === canvasSemantics.shot.id)
@@ -777,6 +834,14 @@ export default function VideoCanvasStudio({
       if (timer) window.clearTimeout(timer);
     };
   }, [generationId, generationStatus, rememberGeneration]);
+
+  useEffect(() => {
+    if (!generationInFlight) return;
+    const updateClock = () => setClockNow(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 5000);
+    return () => window.clearInterval(timer);
+  }, [generationInFlight]);
 
   useEffect(() => {
     if (generation?.status !== 'completed' || !generation.videoAssetId) return;
@@ -1496,8 +1561,11 @@ export default function VideoCanvasStudio({
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('result')} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
-                <div className={'canvas-status ' + generation.status}><b>{statusLabel(generation.status, zh, generation.errorCode)}</b><span>{generation.progress}%</span></div>
-                {['queued', 'processing'].includes(generation.status) && <div className="canvas-progress"><i style={{ width: Math.max(4, progress) + '%' }} /></div>}
+                <div className={'canvas-status ' + generation.status} data-time-mode={generationTimeCopy?.mode || undefined}>
+                  <b>{statusLabel(generation.status, zh, generation.errorCode)}</b>
+                  {generationTimeCopy && <span className="canvas-status-time"><strong>{generationTimeCopy.primary}</strong>{generationTimeCopy.secondary && <small>{generationTimeCopy.secondary}</small>}</span>}
+                </div>
+                {['queued', 'processing'].includes(generation.status) && <div className="canvas-progress" data-mode={progress > 0 ? 'synced' : 'indeterminate'} aria-hidden="true"><i style={progress > 0 ? { width: Math.max(8, progress) + '%' } : undefined} /></div>}
                 {generationInFlight && <button type="button" className="canvas-cancel-button" disabled={cancelling} onClick={() => void cancelGeneration()}>{cancelling ? (zh ? '正在停止…' : 'Stopping…') : (zh ? '停止生成' : 'Stop generation')}<span aria-hidden="true">×</span></button>}
                 {videoUrl ? <video src={videoUrl} controls playsInline preload="metadata" /> : generation.status === 'completed' ? <div className="canvas-media-loading">{zh ? '正在读取私有视频…' : 'Loading private video…'}</div> : null}
                 {generation.status === 'failed' && <p className="canvas-failure">{generation.errorMessage || (zh ? '模型未完成本次生成。' : 'The model did not finish this generation.')}</p>}
