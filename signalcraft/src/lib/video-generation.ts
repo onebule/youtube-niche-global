@@ -1,7 +1,7 @@
 'use client';
 
 import { authHeaders } from './auth';
-import type { CanvasAgentAction, CanvasAgentContext } from './canvas-domain';
+import type { CanvasAgentAction, CanvasAgentContext, CanvasAssetReference } from './canvas-domain';
 
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
@@ -271,6 +271,7 @@ export function buildGenerationSpecV2(input: {
   endImageAssetId?: string | null;
   referenceMode?: 'start-end' | 'omni';
   referenceImageAssetIds?: string[];
+  referenceBindings?: CanvasAssetReference[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
@@ -278,15 +279,21 @@ export function buildGenerationSpecV2(input: {
   const referenceIds = input.referenceMode === 'omni'
     ? Array.from(new Set(input.referenceImageAssetIds || []))
     : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
-  const references = referenceIds.filter(Boolean).map((assetId, index) => ({
-    assetId,
-    role: input.referenceMode === 'omni' && index > 0 ? 'reference' as const : index === 0 ? 'start_frame' as const : 'end_frame' as const,
-    priority: index === 0 ? 100 : Math.max(10, 90 - index * 10),
-    strength: index === 0 || input.referenceMode === 'start-end' ? 'strong' as const : 'weak' as const,
-    required: index === 0,
-    shotId,
-    constraints: [],
-  }));
+  const references = referenceIds.filter(Boolean).map((assetId, index) => {
+    const binding = input.referenceBindings?.find(item => item.assetId === assetId && (!shotId || item.shotId === shotId));
+    const bindingRole = binding?.role && ['character', 'start_frame', 'end_frame', 'motion', 'style', 'scene', 'prop', 'script', 'storyboard', 'reference'].includes(binding.role)
+      ? binding.role as GenerationSpecReferenceRole
+      : null;
+    return {
+      assetId,
+      role: bindingRole || (input.referenceMode === 'omni' && index > 0 ? 'reference' as const : index === 0 ? 'start_frame' as const : 'end_frame' as const),
+      priority: binding ? Math.max(0, Math.min(100, binding.priority)) : index === 0 ? 100 : Math.max(10, 90 - index * 10),
+      strength: binding?.strength || (index === 0 || input.referenceMode === 'start-end' ? 'strong' as const : 'weak' as const),
+      required: binding?.required ?? index === 0,
+      shotId: binding?.shotId || shotId,
+      constraints: binding?.constraints?.slice(0, 12) || [],
+    };
+  });
   const mode = input.model === 'auto' ? 'auto' : 'locked';
   const resolvedModel = input.model === 'auto' ? null : input.model;
   return {
@@ -371,14 +378,19 @@ export async function createVideoGeneration(input: {
   endImageAssetId?: string | null;
   referenceMode?: 'start-end' | 'omni';
   referenceImageAssetIds?: string[];
+  referenceBindings?: CanvasAssetReference[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
+  shotId?: string | null;
+  shotOrder?: number | null;
 }) {
   const idempotencyKey = globalThis.crypto?.randomUUID?.() || `video-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const generationSpec = buildGenerationSpecV2(input, {
     requestId: idempotencyKey,
     idempotencyKey,
+    shotId: input.shotId,
+    shotOrder: input.shotOrder,
     userConfirmed: true,
   });
   const payload = await request<{ generation: VideoGeneration }>('generate', {

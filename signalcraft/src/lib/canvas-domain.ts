@@ -7,8 +7,9 @@ import type { GenerationStatus, VideoGeneration, VideoModelId } from './video-ge
  */
 export type CanvasNodeId = 'source' | 'prompt' | 'model' | 'agent' | 'task' | 'result';
 export type CanvasNodeRole = 'generic' | 'reference' | 'agent' | 'generation' | 'video_result';
-export type CanvasAssetKind = 'image' | 'video';
-export type CanvasAssetRole = 'generic' | 'start_frame' | 'end_frame' | 'reference' | 'output';
+export type CanvasAssetKind = 'image' | 'video' | 'script' | 'character' | 'style' | 'scene' | 'prop' | 'storyboard';
+export type CanvasAssetRole = 'generic' | 'start_frame' | 'end_frame' | 'reference' | 'output' | 'character' | 'motion' | 'style' | 'scene' | 'prop' | 'script' | 'storyboard';
+export type CanvasAssetReferenceStatus = 'valid' | 'invalid';
 export type CanvasNodeStatus = 'draft' | GenerationStatus;
 export type CanvasShotStatus = 'draft' | 'generating' | 'completed' | 'failed';
 export type CanvasEdgeType = 'INPUT' | 'REFERENCE' | 'CONTINUITY' | 'VARIATION' | 'GENERATION' | 'SHOT_FLOW';
@@ -36,6 +37,36 @@ export type CanvasAssetSemantic = {
   name?: string;
   width?: number;
   height?: number;
+  available?: boolean;
+};
+
+export type CanvasAssetReference = {
+  mentionId: string;
+  token: string;
+  assetId: string;
+  role: CanvasAssetRole;
+  priority: number;
+  strength: 'strong' | 'weak';
+  required: boolean;
+  shotId: string;
+  constraints: string[];
+  status: CanvasAssetReferenceStatus;
+};
+
+export type CanvasAssetMention = {
+  mentionId: string;
+  token: string;
+  index: number;
+  start: number;
+  end: number;
+};
+
+export type CanvasAssetMentionValidation = {
+  mentions: CanvasAssetMention[];
+  bindings: CanvasAssetReference[];
+  invalid: CanvasAssetMention[];
+  unbound: CanvasAssetMention[];
+  hasInvalid: boolean;
 };
 
 export type CanvasGenerationSemantic = {
@@ -81,6 +112,7 @@ export type CanvasSemantics = {
   nodes: Partial<Record<CanvasNodeId, CanvasNodeSemantic>>;
   edges: CanvasEdgeSemantic[];
   assets: CanvasAssetSemantic[];
+  references: CanvasAssetReference[];
   generations: CanvasGenerationSemantic[];
   versions: CanvasVersionSemantic[];
 };
@@ -97,6 +129,7 @@ export type CanvasAgentContext = {
   nodes: CanvasSemantics['nodes'];
   nodePositions: Record<CanvasNodeId, { x: number; y: number }>;
   assets: CanvasSemantics['assets'];
+  references: CanvasSemantics['references'];
   generations: CanvasSemantics['generations'];
   versions: CanvasSemantics['versions'];
   input: {
@@ -122,8 +155,8 @@ export type CanvasAgentAction = {
 
 const NODE_IDS: CanvasNodeId[] = ['source', 'prompt', 'model', 'agent', 'task', 'result'];
 const NODE_ROLES: CanvasNodeRole[] = ['generic', 'reference', 'agent', 'generation', 'video_result'];
-const ASSET_KINDS: CanvasAssetKind[] = ['image', 'video'];
-const ASSET_ROLES: CanvasAssetRole[] = ['generic', 'start_frame', 'end_frame', 'reference', 'output'];
+const ASSET_KINDS: CanvasAssetKind[] = ['image', 'video', 'script', 'character', 'style', 'scene', 'prop', 'storyboard'];
+const ASSET_ROLES: CanvasAssetRole[] = ['generic', 'start_frame', 'end_frame', 'reference', 'output', 'character', 'motion', 'style', 'scene', 'prop', 'script', 'storyboard'];
 const NODE_STATUSES: CanvasNodeStatus[] = ['draft', 'queued', 'processing', 'completed', 'failed'];
 const SHOT_STATUSES: CanvasShotStatus[] = ['draft', 'generating', 'completed', 'failed'];
 const EDGE_TYPES: CanvasEdgeType[] = ['INPUT', 'REFERENCE', 'CONTINUITY', 'VARIATION', 'GENERATION', 'SHOT_FLOW'];
@@ -178,6 +211,7 @@ export function createCanvasSemantics(shotIndex = 1): CanvasSemantics {
     },
     edges,
     assets: [],
+    references: [],
     generations: [],
     versions: [],
   };
@@ -215,7 +249,133 @@ function normalizeAsset(value: unknown, shotId: string): CanvasAssetSemantic | n
     name: nullableText(candidate.name) || undefined,
     width: candidate.width === undefined ? undefined : integer(candidate.width, 0, 0, 100000),
     height: candidate.height === undefined ? undefined : integer(candidate.height, 0, 0, 100000),
+    available: candidate.available !== false,
   };
+}
+
+function normalizeReference(value: unknown, shotId: string, assets: CanvasAssetSemantic[]): CanvasAssetReference | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<CanvasAssetReference>;
+  const assetId = text(candidate.assetId, '', 240);
+  const token = text(candidate.token, '', 80).replace(/\s+/g, '');
+  const mentionId = text(candidate.mentionId, '', 80);
+  if (!assetId || !token || !mentionId) return null;
+  const asset = assets.find(item => item.assetId === assetId && item.shotId === (candidate.shotId || shotId));
+  return {
+    mentionId,
+    token,
+    assetId,
+    role: oneOf(candidate.role, ASSET_ROLES, 'reference'),
+    priority: integer(candidate.priority, 50, 0, 100),
+    strength: candidate.strength === 'strong' ? 'strong' : 'weak',
+    required: Boolean(candidate.required),
+    shotId: text(candidate.shotId, shotId, 120),
+    constraints: Array.isArray(candidate.constraints) ? candidate.constraints.map(item => text(item, '', 160)).filter(Boolean).slice(0, 12) : [],
+    status: asset && asset.available !== false ? 'valid' : 'invalid',
+  };
+}
+
+/** Converts the two supported UI aliases into one stable mention identity. */
+export function normalizeCanvasMentionToken(value: unknown) {
+  const token = text(value, '', 80).replace(/\s+/g, '');
+  const match = token.match(/^@(图片|image)([1-9])(?!\d)$/iu);
+  return match ? `image:${match[2]}` : null;
+}
+
+/** Parses mentions without trusting their display label as an asset identity. */
+export function parseCanvasAssetMentions(prompt: string): CanvasAssetMention[] {
+  const mentions: CanvasAssetMention[] = [];
+  const source = String(prompt || '');
+  const pattern = /@(图片|image)\s*([1-9])(?!\d)/giu;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const index = Number(match[2]);
+    if (!Number.isInteger(index) || index < 1) continue;
+    mentions.push({
+      mentionId: `image:${index}`,
+      token: match[0].replace(/\s+/g, ''),
+      index,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+  return mentions;
+}
+
+export type CanvasAssetReferenceInput = {
+  token: string;
+  assetId: string;
+  role?: CanvasAssetRole;
+  priority?: number;
+  strength?: 'strong' | 'weak';
+  required?: boolean;
+  shotId?: string | null;
+  constraints?: string[];
+};
+
+/** Binds a visible mention to an asset while preserving an invalid binding. */
+export function bindCanvasAssetReference(semantics: CanvasSemantics, input: CanvasAssetReferenceInput): CanvasSemantics {
+  const mentionId = normalizeCanvasMentionToken(input.token);
+  const assetId = text(input.assetId, '', 240);
+  if (!mentionId || !assetId) return semantics;
+  const shotId = text(input.shotId, semantics.shot.id, 120);
+  const asset = semantics.assets.find(item => item.assetId === assetId && item.shotId === shotId);
+  const reference: CanvasAssetReference = {
+    mentionId,
+    token: text(input.token, `@图片${mentionId.split(':')[1]}`, 80).replace(/\s+/g, ''),
+    assetId,
+    role: oneOf(input.role, ASSET_ROLES, 'reference'),
+    priority: integer(input.priority, 50, 0, 100),
+    strength: input.strength === 'strong' ? 'strong' : 'weak',
+    required: Boolean(input.required),
+    shotId,
+    constraints: Array.isArray(input.constraints) ? input.constraints.map(item => text(item, '', 160)).filter(Boolean).slice(0, 12) : [],
+    status: asset && asset.available !== false ? 'valid' : 'invalid',
+  };
+  return {
+    ...semantics,
+    references: [...semantics.references.filter(item => !(item.mentionId === mentionId && item.shotId === shotId)), reference].slice(-MAX_SEMANTIC_ROWS),
+  };
+}
+
+/** Marks the asset unavailable without deleting history or its old binding. */
+export function markCanvasAssetUnavailable(semantics: CanvasSemantics, assetId: string): CanvasSemantics {
+  const normalizedId = text(assetId, '', 240);
+  if (!normalizedId) return semantics;
+  return {
+    ...semantics,
+    assets: semantics.assets.map(asset => asset.assetId === normalizedId ? { ...asset, available: false } : asset),
+    references: semantics.references.map(reference => reference.assetId === normalizedId ? { ...reference, status: 'invalid' } : reference),
+  };
+}
+
+/** Recomputes validity after a persisted snapshot or a replacement upload. */
+export function refreshCanvasAssetReferences(semantics: CanvasSemantics): CanvasSemantics {
+  return {
+    ...semantics,
+    references: semantics.references.map(reference => {
+      const asset = semantics.assets.find(item => item.assetId === reference.assetId && item.shotId === reference.shotId);
+      return { ...reference, status: asset && asset.available !== false ? 'valid' : 'invalid' };
+    }),
+  };
+}
+
+/** Returns the exact mentions that cannot be safely submitted for this Shot. */
+export function validateCanvasAssetMentions(semantics: CanvasSemantics, prompt: string, shotId = semantics.shot.id): CanvasAssetMentionValidation {
+  const mentions = parseCanvasAssetMentions(prompt);
+  const bindings = mentions.flatMap(mention => semantics.references.filter(reference => reference.mentionId === mention.mentionId && reference.shotId === shotId));
+  const invalid: CanvasAssetMention[] = [];
+  const unbound: CanvasAssetMention[] = [];
+  mentions.forEach(mention => {
+    const binding = semantics.references.find(reference => reference.mentionId === mention.mentionId && reference.shotId === shotId);
+    if (!binding) {
+      unbound.push(mention);
+      return;
+    }
+    const asset = semantics.assets.find(item => item.assetId === binding.assetId && item.shotId === shotId);
+    if (binding.status === 'invalid' || !asset || asset.available === false) invalid.push(mention);
+  });
+  return { mentions, bindings, invalid, unbound, hasInvalid: invalid.length > 0 || unbound.length > 0 };
 }
 
 function normalizeGeneration(value: unknown, shotId: string): CanvasGenerationSemantic | null {
@@ -273,6 +433,12 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
     const id = text(edge.id, `${edge.from}-${edge.to}`, 120);
     return [{ id, from: edge.from as CanvasNodeId, to: edge.to as CanvasNodeId, type: oneOf(edge.type, EDGE_TYPES, 'GENERATION') }];
   }) : fallback.edges;
+  const assets = Array.isArray(candidate.assets)
+    ? candidate.assets.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeAsset(item, shotId)).filter((item): item is CanvasAssetSemantic => Boolean(item))
+    : [];
+  const references = Array.isArray(candidate.references)
+    ? candidate.references.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeReference(item, shotId, assets)).filter((item): item is CanvasAssetReference => Boolean(item))
+    : [];
   return {
     version: 1,
     shot: {
@@ -285,7 +451,8 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
     },
     nodes,
     edges,
-    assets: Array.isArray(candidate.assets) ? candidate.assets.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeAsset(item, shotId)).filter((item): item is CanvasAssetSemantic => Boolean(item)) : [],
+    assets,
+    references,
     generations: Array.isArray(candidate.generations) ? candidate.generations.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeGeneration(item, shotId)).filter((item): item is CanvasGenerationSemantic => Boolean(item)) : [],
     versions: Array.isArray(candidate.versions) ? candidate.versions.slice(0, MAX_SEMANTIC_ROWS).map(item => normalizeVersion(item, shotId)).filter((item): item is CanvasVersionSemantic => Boolean(item)) : [],
   };
@@ -305,10 +472,11 @@ export function registerCanvasAsset(semantics: CanvasSemantics, asset: CanvasAss
     ...asset,
     assetId: text(asset.assetId, '', 240),
     shotId: text(asset.shotId, semantics.shot.id, 120),
+    available: asset.available !== false,
   };
   if (!normalized.assetId) return semantics;
   const assets = [...semantics.assets.filter(item => item.assetId !== normalized.assetId), normalized].slice(-MAX_SEMANTIC_ROWS);
-  return { ...semantics, assets };
+  return refreshCanvasAssetReferences({ ...semantics, assets });
 }
 
 /** Records a generation as a version and mirrors its lifecycle onto nodes. */

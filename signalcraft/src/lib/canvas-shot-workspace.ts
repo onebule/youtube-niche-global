@@ -4,7 +4,7 @@ import { normalizeVideoDuration, type VideoGeneration, type VideoGenerationPlan,
 
 export type CanvasAspectRatio = '9:16' | '16:9' | '1:1';
 export type CanvasReferenceMode = 'start-end' | 'omni';
-export type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number };
+export type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number; referenceIndex?: number };
 export type PersistedFrame = Omit<UploadedFrame, 'previewUrl'>;
 
 export type ShotSnapshot = {
@@ -54,7 +54,7 @@ export function cloneFrame(frame: UploadedFrame | null): UploadedFrame | null {
 
 export function stripFrame(frame: UploadedFrame | null): PersistedFrame | null {
   if (!frame) return null;
-  return { assetId: frame.assetId, name: frame.name, width: frame.width, height: frame.height };
+  return { assetId: frame.assetId, name: frame.name, width: frame.width, height: frame.height, ...(frame.referenceIndex ? { referenceIndex: frame.referenceIndex } : {}) };
 }
 
 export function restoreFrame(frame: PersistedFrame | null | undefined): UploadedFrame | null {
@@ -71,6 +71,7 @@ export function createCanvasAgentContext(snapshot: ShotSnapshot, selectedNodeId:
     nodes: snapshot.semantics.nodes,
     nodePositions: snapshot.nodes,
     assets: snapshot.semantics.assets.slice(-24),
+    references: snapshot.semantics.references.slice(-24),
     generations: snapshot.semantics.generations.slice(-24),
     versions: snapshot.semantics.versions.slice(-24),
     input: {

@@ -25,13 +25,17 @@ import {
 } from '@/src/lib/canvas-shot-workspace';
 import {
   canvasVersionForGeneration,
+  bindCanvasAssetReference,
   createCanvasSemantics,
+  markCanvasAssetUnavailable,
   normalizeCanvasSemantics,
+  parseCanvasAssetMentions,
   patchCanvasNode,
   patchCanvasShot,
   recordCanvasGeneration,
   registerCanvasAsset,
   selectCanvasBestTake,
+  validateCanvasAssetMentions,
   type CanvasAgentAction,
   type CanvasAssetRole,
   type CanvasNodeId,
@@ -154,6 +158,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function frameReferenceIndex(frame: UploadedFrame, fallbackIndex: number) {
+  return Number.isInteger(frame.referenceIndex) && frame.referenceIndex! >= 1 && frame.referenceIndex! <= 9
+    ? frame.referenceIndex!
+    : fallbackIndex + 1;
+}
+
 function restoreNodePositions(value: unknown): NodePositions {
   const candidate = value && typeof value === 'object' ? value as Partial<Record<NodeId, Partial<Point>>> : {};
   const next = { ...INITIAL_NODES };
@@ -234,6 +244,7 @@ function OmniReferenceChip({
   removeLabel,
   onMention,
   onRemove,
+  highlighted,
 }: {
   frame: UploadedFrame;
   mentionLabel: string;
@@ -241,8 +252,9 @@ function OmniReferenceChip({
   removeLabel: string;
   onMention: () => void;
   onRemove: () => void;
+  highlighted?: boolean;
 }) {
-  return <div className="canvas-omni-reference">
+  return <div className={'canvas-omni-reference ' + (highlighted ? 'is-highlighted' : '')} data-highlighted={highlighted ? 'true' : undefined}>
     {frame.previewUrl ? <img src={frame.previewUrl} alt={frame.name} /> : <div className="canvas-media-loading">{loadingLabel}</div>}
     <button type="button" className="canvas-reference-mention" onClick={onMention}>{mentionLabel}</button>
     <button type="button" className="canvas-reference-remove" onClick={onRemove} aria-label={removeLabel}>×</button>
@@ -300,6 +312,7 @@ export default function VideoCanvasStudio({
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null);
+  const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
   const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
   const [appliedAgentActionIds, setAppliedAgentActionIds] = useState<string[]>([]);
@@ -352,6 +365,7 @@ export default function VideoCanvasStudio({
     setShot(snapshot.shot);
     setAppliedAgentActionIds([]);
     setSelectedNodeId(null);
+    setHighlightedAssetId(null);
     setHistoryOpen(false);
     setCompareOpen(false);
     setNodePaletteOpen(false);
@@ -371,9 +385,10 @@ export default function VideoCanvasStudio({
   const hasAccount = Boolean(account);
   const effectiveAccess = account ? access : 'signed-out';
   const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
+  const assetMentionValidation = useMemo(() => validateCanvasAssetMentions(canvasSemantics, prompt), [canvasSemantics, prompt]);
   const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
-  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !cancelling && !uploading && !generationInFlight);
+  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && !assetMentionValidation.hasInvalid && referenceModeSupported && prompt.trim() && selectedModel?.enabled && !submitting && !cancelling && !uploading && !generationInFlight);
   const shotActionsDisabled = submitting || cancelling || Boolean(uploading) || generationInFlight;
   const agentPlanBlockedReason = !prompt.trim()
     ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
@@ -383,6 +398,8 @@ export default function VideoCanvasStudio({
     if (uploading) return zh ? '参考图正在上传' : 'A reference image is uploading';
     if (!hasReferenceInput) return zh ? '先加入至少 1 张参考图' : 'Add at least one reference image';
     if (!prompt.trim()) return zh ? '填写 Motion Prompt 后即可生成' : 'Add a Motion Prompt to generate';
+    if (assetMentionValidation.unbound.length) return zh ? `有 ${assetMentionValidation.unbound.length} 个素材引用尚未绑定` : `${assetMentionValidation.unbound.length} asset mention${assetMentionValidation.unbound.length > 1 ? 's are' : ' is'} not bound`;
+    if (assetMentionValidation.invalid.length) return zh ? `有 ${assetMentionValidation.invalid.length} 个素材引用已失效，请重新绑定` : `${assetMentionValidation.invalid.length} asset mention${assetMentionValidation.invalid.length > 1 ? 's are' : ' is'} invalid; rebind it before generating`;
     if (!referenceModeSupported) return zh ? '当前模型不支持这个参考模式' : 'This model does not support the selected reference mode';
     if (!selectedModel?.enabled) return zh ? '选择一个已就绪的模型' : 'Choose a model that is ready';
     return '';
@@ -883,10 +900,12 @@ export default function VideoCanvasStudio({
     try {
       const next = await uploadFrame(file);
       if (slot === 'start') {
+        if (startFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, startFrame.assetId));
         setStartFrame(next);
         rememberImageAsset(next, 'start_frame');
         patchSemanticNode('source', { role: 'reference', assetId: next.assetId, status: 'draft' });
       } else {
+        if (endFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, endFrame.assetId));
         setEndFrame(next);
         rememberImageAsset(next, 'end_frame');
         patchSemanticNode('source', { role: 'reference', assetId: next.assetId, status: 'draft' });
@@ -913,10 +932,19 @@ export default function VideoCanvasStudio({
       const uploaded = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
       const failed = settled.find(result => result.status === 'rejected');
       if (uploaded.length) {
-        setReferenceFrames(current => [...current, ...uploaded].slice(0, 9));
-        uploaded.forEach(frame => rememberImageAsset(frame, 'reference'));
-        patchSemanticNode('source', { role: 'reference', assetId: uploaded[0].assetId, status: 'draft' });
-        notify(zh ? `已加入 ${uploaded.length} 张全能参考图片。` : `${uploaded.length} omni reference images added.`);
+        const usedIndexes = new Set(referenceFrames.map((frame, index) => frameReferenceIndex(frame, index)));
+        let nextIndex = 1;
+        const indexed = uploaded.map(frame => {
+          while (usedIndexes.has(nextIndex) && nextIndex <= 9) nextIndex += 1;
+          const next = { ...frame, referenceIndex: nextIndex };
+          usedIndexes.add(nextIndex);
+          nextIndex += 1;
+          return next;
+        });
+        setReferenceFrames(current => [...current, ...indexed].slice(0, 9));
+        indexed.forEach(frame => rememberImageAsset(frame, 'reference'));
+        patchSemanticNode('source', { role: 'reference', assetId: indexed[0].assetId, status: 'draft' });
+        notify(zh ? `已加入 ${indexed.length} 张全能参考图片。` : `${indexed.length} omni reference images added.`);
       }
       if (failed?.status === 'rejected') setError(clientMessage(failed.reason));
       if (files.length > capacity) setError(zh ? `已达到 9 张上限，未加入其余 ${files.length - capacity} 张。` : `The 9-image limit was reached; ${files.length - capacity} files were skipped.`);
@@ -926,16 +954,35 @@ export default function VideoCanvasStudio({
   };
 
   const removeReference = (index: number) => {
+    const target = referenceFrames[index];
+    if (target) {
+      setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, target.assetId));
+      if (highlightedAssetId === target.assetId) setHighlightedAssetId(null);
+    }
     setReferenceFrames(current => {
-      const target = current[index];
       if (target?.previewUrl.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl);
       return current.filter((_, itemIndex) => itemIndex !== index);
     });
   };
 
   const mentionReference = (index: number) => {
-    const mention = zh ? `@图片${index + 1}` : `@image${index + 1}`;
-    setPrompt(current => current.includes(mention) ? current : `${current.trim()} ${mention} `.trimStart());
+    const frame = referenceFrames[index];
+    if (!frame) return;
+    const mentionIndex = frameReferenceIndex(frame, index);
+    const mention = zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`;
+    setCanvasSemantics(previous => bindCanvasAssetReference(previous, {
+      token: mention,
+      assetId: frame.assetId,
+      role: index === 0 ? 'start_frame' : 'reference',
+      priority: Math.max(10, 100 - index * 10),
+      strength: index === 0 ? 'strong' : 'weak',
+      required: index === 0,
+    }));
+    setSelectedNodeId('source');
+    setHighlightedAssetId(frame.assetId);
+    setPrompt(current => parseCanvasAssetMentions(current).some(item => item.mentionId === `image:${mentionIndex}`)
+      ? current
+      : `${current.trim()} ${mention} `.trimStart());
   };
 
   const changeReferenceMode = (next: ReferenceMode) => {
@@ -1077,9 +1124,12 @@ export default function VideoCanvasStudio({
         endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
         referenceMode,
         referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
+        referenceBindings: canvasSemantics.references,
         duration,
         aspectRatio,
         resolution,
+        shotId: canvasSemantics.shot.id,
+        shotOrder: canvasSemantics.shot.order,
       });
       setGeneration(next);
       rememberGeneration(next);
@@ -1507,16 +1557,16 @@ export default function VideoCanvasStudio({
             {edges.map(edge => <g key={edge.id}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
-          <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
+          <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-highlighted-asset={highlightedAssetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'start-end' ? <>
-                <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
-                <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => { setEndFrame(null); if (!startFrame) patchSemanticNode('source', { assetId: null }); }} />
+                <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { if (startFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, startFrame.assetId)); setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
+                <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => { if (endFrame) setCanvasSemantics(previous => markCanvasAssetUnavailable(previous, endFrame.assetId)); setEndFrame(null); if (!startFrame) patchSemanticNode('source', { assetId: null }); }} />
               </> : <div className="canvas-omni-node">
                 <div className="canvas-omni-node-head"><b>{zh ? '全能参考' : 'Omni reference'}</b><span>{referenceFrames.length}/9</span></div>
                 <div className="canvas-omni-grid">
-                  {referenceFrames.map((frame, index) => <OmniReferenceChip key={frame.assetId} frame={frame} mentionLabel={zh ? `@图片${index + 1}` : `@image${index + 1}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${index + 1}` : `Remove image ${index + 1}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />)}
+                  {referenceFrames.map((frame, index) => { const mentionIndex = frameReferenceIndex(frame, index); return <OmniReferenceChip key={frame.assetId} frame={frame} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />; })}
                   {referenceFrames.length < 9 && <label className="canvas-omni-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span>＋</span><b>{uploading === 'reference' ? (zh ? '上传中' : 'Uploading') : (zh ? '加入图片' : 'Add images')}</b></label>}
                 </div>
                 <small>{zh ? '点击 @图片编号，把素材引用插入提示词。' : 'Use an @image label to reference a source in the prompt.'}</small>
@@ -1644,7 +1694,7 @@ export default function VideoCanvasStudio({
               <b>END</b><small>{endFrame ? (zh ? '更换' : 'Replace') : (zh ? '可选' : 'Optional')}</small>
             </label>
             </> : <>
-              {referenceFrames.map((frame, index) => <OmniReferenceChip key={frame.assetId} frame={frame} mentionLabel={zh ? `@图片${index + 1}` : `@image${index + 1}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${index + 1}` : `Remove image ${index + 1}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />)}
+              {referenceFrames.map((frame, index) => { const mentionIndex = frameReferenceIndex(frame, index); return <OmniReferenceChip key={frame.assetId} frame={frame} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />; })}
               {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
             </>}
           </div>
@@ -1654,6 +1704,9 @@ export default function VideoCanvasStudio({
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
               <textarea ref={promptRef} id="canvas-motion-prompt" value={prompt} maxLength={1200} rows={2} onChange={event => { setPrompt(event.target.value); setAgentPlan(null); }} placeholder={zh ? '描述主体动作、镜头运动、节奏与光线变化…' : 'Describe subject motion, camera movement, pacing, and light…'} />
               <span className="canvas-composer-count">{prompt.length}/1200</span>
+              {assetMentionValidation.hasInvalid && <p className="canvas-asset-reference-warning" role="alert">{assetMentionValidation.unbound.length > 0
+                ? (zh ? `有 ${assetMentionValidation.unbound.length} 个 @图片引用尚未绑定，请点击对应参考图的引用按钮。` : `${assetMentionValidation.unbound.length} image mention${assetMentionValidation.unbound.length > 1 ? 's are' : ' is'} not bound. Click the matching reference chip to bind it.`)
+                : (zh ? '提示词里有已失效的素材引用，请重新加入或重新绑定。' : 'A referenced asset is no longer available. Add it again or rebind the mention.')}</p>}
             </div>
             <div className="canvas-composer-controls">
               <div className="canvas-preferences-wrap">
