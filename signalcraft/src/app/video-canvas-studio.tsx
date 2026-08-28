@@ -498,6 +498,7 @@ export default function VideoCanvasStudio({
   const [selectedCustomNodeId, setSelectedCustomNodeId] = useState<string | null>(null);
   const [customNodes, setCustomNodes] = useState<CanvasCustomNode[]>([]);
   const [customEdges, setCustomEdges] = useState<CanvasCustomEdge[]>([]);
+  const [customNodePreviewUrls, setCustomNodePreviewUrls] = useState<Record<string, string>>({});
   const [nodePaletteParentId, setNodePaletteParentId] = useState<string | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -510,6 +511,7 @@ export default function VideoCanvasStudio({
   const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const customDragRef = useRef<{ id: string; clientX: number; clientY: number; origin: Point } | null>(null);
+  const customNodePreviewUrlsRef = useRef<Record<string, string>>({});
   const shotDragRef = useRef<{ clientX: number; clientY: number; origin: NodePositions; customOrigin: CanvasCustomNode[] } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
@@ -1233,6 +1235,30 @@ export default function VideoCanvasStudio({
   }, [effectiveAccess, endFrame, generation, referenceFrames, rememberGeneration, restoredGenerationId, setActiveGeneration, startFrame]);
 
   useEffect(() => {
+    if (effectiveAccess !== 'ready') return;
+    const pending = customNodes.filter(node => node.type === 'image' && node.assetId && !customNodePreviewUrls[node.id]);
+    if (!pending.length) return;
+    let cancelled = false;
+    Promise.allSettled(pending.map(async node => [node.id, await loadVideoAssetUrl(node.assetId!)] as const)).then(results => {
+      if (cancelled) return;
+      const resolved = results.reduce<Record<string, string>>((next, result) => {
+        if (result.status === 'fulfilled' && result.value[1]) next[result.value[0]] = result.value[1];
+        return next;
+      }, {});
+      if (Object.keys(resolved).length) {
+        setCustomNodePreviewUrls(current => {
+          const next = { ...current };
+          Object.entries(resolved).forEach(([id, url]) => {
+            if (!next[id]) next[id] = url;
+          });
+          return next;
+        });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [customNodePreviewUrls, customNodes, effectiveAccess]);
+
+  useEffect(() => {
     if (!generationId || !generationStatus || !['queued', 'processing'].includes(generationStatus)) return;
     let cancelled = false;
     let timer: number | undefined;
@@ -1283,6 +1309,21 @@ export default function VideoCanvasStudio({
   useEffect(() => {
     referenceFramesRef.current = referenceFrames;
   }, [referenceFrames]);
+
+  useEffect(() => {
+    const activeIds = new Set(customNodes.map(node => node.id));
+    const previous = customNodePreviewUrlsRef.current;
+    Object.entries(previous).forEach(([id, url]) => {
+      if (!activeIds.has(id) && url.startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+    customNodePreviewUrlsRef.current = customNodePreviewUrls;
+  }, [customNodePreviewUrls, customNodes]);
+
+  useEffect(() => () => {
+    Object.values(customNodePreviewUrlsRef.current).forEach(url => {
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+  }, []);
 
   useEffect(() => () => {
     referenceFramesRef.current.forEach(frame => {
@@ -1722,8 +1763,8 @@ export default function VideoCanvasStudio({
         try {
           const uploaded = await uploadFrame(file);
           setCustomNodes(current => current.map(node => node.id === created.id ? { ...node, assetId: uploaded.assetId, body: uploaded.name } : node));
+          setCustomNodePreviewUrls(current => ({ ...current, [created.id]: uploaded.previewUrl }));
           rememberImageAsset(uploaded, 'reference');
-          if (uploaded.previewUrl.startsWith('blob:')) URL.revokeObjectURL(uploaded.previewUrl);
           notify(zh ? '图片节点已绑定私有素材；主生成任务仍需你确认后提交。' : 'The image node is bound to a private asset; the main task still requires your confirmation.');
         } catch (cause) {
           setError(clientMessage(cause));
@@ -1992,6 +2033,13 @@ export default function VideoCanvasStudio({
     if (!window.confirm(zh ? '删除这个自定义节点？它的连接也会移除。' : 'Delete this custom node and its connections?')) return;
     setCustomNodes(previous => previous.filter(node => node.id !== id));
     setCustomEdges(previous => previous.filter(edge => edge.from !== id && edge.to !== id));
+    setCustomNodePreviewUrls(previous => {
+      const next = { ...previous };
+      const url = next[id];
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+      delete next[id];
+      return next;
+    });
     if (selectedCustomNodeId === id) setSelectedCustomNodeId(null);
     notify(zh ? '自定义节点已移除，主生成链路未改变。' : 'Custom node removed; the main generation flow was unchanged.');
   };
@@ -2555,6 +2603,7 @@ export default function VideoCanvasStudio({
               <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? `${labels.zh}节点。拖动，或使用方向键移动。` : `${labels.en} node. Drag it or use arrow keys to move it.`} onFocus={() => { setSelectedNodeId(null); setSelectedCustomNodeId(node.id); }} onKeyDown={event => moveCustomNodeWithKeyboard(event, node.id)} onPointerDown={event => startCustomNodeDrag(event, node.id)} onPointerMove={moveCustomNode} onPointerUp={endCustomNodeDrag} onPointerCancel={endCustomNodeDrag}><span aria-hidden="true">{labels.icon}</span><b>{zh ? labels.zh : labels.en}</b><i>⋮⋮</i></div>
               <div className="canvas-custom-node-body">
                 <div className="canvas-custom-node-kicker">{zh ? '自定义下一步' : 'CUSTOM NEXT STEP'}</div>
+                {node.type === 'image' && customNodePreviewUrls[node.id] && <div className="canvas-custom-node-media"><img src={customNodePreviewUrls[node.id]} alt={node.body || (zh ? '图片参考' : 'Image reference')} loading="lazy" decoding="async" /></div>}
                 {node.type === 'text' ? <textarea value={node.body} maxLength={1200} aria-label={zh ? '编辑文字节点' : 'Edit text node'} onChange={event => updateCustomNodeBody(node.id, event.target.value)} /> : <p>{node.body || (zh ? labels.hintZh : labels.hintEn)}</p>}
                 <small>{node.assetId ? (zh ? '已绑定素材，可继续作为参考。' : 'Asset bound; ready to use as a reference.') : (zh ? labels.hintZh : labels.hintEn)}</small>
               </div>

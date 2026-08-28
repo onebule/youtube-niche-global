@@ -7947,6 +7947,22 @@
   background: #fffdf8;
 }
 
+.canvas-custom-node-media {
+  width: 100%;
+  height: 82px;
+  overflow: hidden;
+  border: 1px solid #d4cabe;
+  border-radius: 8px;
+  background: #f2f3f5;
+}
+
+.canvas-custom-node-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .canvas-custom-node-kicker {
   color: #6f7779;
   font: 800 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
