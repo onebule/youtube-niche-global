@@ -1730,6 +1730,67 @@
   padding: 0 4px;
 }
 
+.canvas-composer-prompt-head-actions {
+  display: inline-flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.canvas-prompt-add-reference {
+  position: relative;
+  display: inline-flex;
+  min-height: 28px;
+  gap: 5px;
+  align-items: center;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid #d4cabe;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #0b756f;
+  font: 850 9px/1 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.canvas-prompt-add-reference:hover,
+.canvas-prompt-add-reference:focus-within {
+  border-color: #0b756f;
+  background: #edf8f5;
+  box-shadow: 0 0 0 3px rgba(11, 117, 111, .1);
+}
+
+.canvas-prompt-add-reference > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 5px;
+  background: #e5f5f1;
+  color: #0b756f;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.canvas-prompt-add-reference b {
+  font: inherit;
+  text-transform: none;
+}
+
+.canvas-prompt-add-reference input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.canvas-prompt-add-reference input:focus-visible + span {
+  outline: 2px solid rgba(11, 117, 111, .35);
+  outline-offset: 2px;
+}
+
 .canvas-composer-prompt-head label {
   color: #172127;
   font: 900 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

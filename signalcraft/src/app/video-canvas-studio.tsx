@@ -509,6 +509,7 @@ export default function VideoCanvasStudio({
   const canvasShellRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
+  const promptReferenceInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
   const customDragRef = useRef<{ id: string; clientX: number; clientY: number; origin: Point } | null>(null);
   const customNodePreviewUrlsRef = useRef<Record<string, string>>({});
@@ -1405,6 +1406,13 @@ export default function VideoCanvasStudio({
     } finally {
       setUploading(null);
     }
+  };
+
+  const addPromptReferences = (files: File[]) => {
+    if (!files.length) return;
+    setAgentPlan(null);
+    setReferenceMode('omni');
+    void uploadReferences(files);
   };
 
   const removeReference = (index: number) => {
@@ -2431,9 +2439,9 @@ export default function VideoCanvasStudio({
     };
   }, [viewport.scale, viewport.x, viewport.y, viewportSize.height, viewportSize.width]);
 
-  const selectedCanvasImageNode = useMemo(() => selectedCustomNodeId
+  const selectedCanvasImageNode = selectedCustomNodeId
     ? customNodes.find(node => node.id === selectedCustomNodeId && node.type === 'image') || null
-    : null, [customNodes, selectedCustomNodeId]);
+    : null;
   const selectedImageToolbarPosition = useMemo(() => {
     if (!selectedCanvasImageNode) return null;
     const toolbarWidth = 352;
@@ -2788,7 +2796,7 @@ export default function VideoCanvasStudio({
 
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
-              <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
+              <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><div className="canvas-composer-prompt-head-actions"><label className="canvas-prompt-add-reference" title={zh ? '添加参考素材' : 'Add reference assets'}><input ref={promptReferenceInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading) || referenceFrames.length >= 9} onChange={event => { addPromptReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考素材' : 'References'}</b></label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div></div>
               <div className="canvas-prompt-input-wrap">
                 {promptMentionChips.length > 0 && <div className="canvas-prompt-mention-strip" aria-label={zh ? 'Prompt 中已引用的素材' : 'Assets referenced in the prompt'}>
                   <span className="canvas-prompt-mention-strip-label">{zh ? '已引用' : 'REFERENCES'}</span>
