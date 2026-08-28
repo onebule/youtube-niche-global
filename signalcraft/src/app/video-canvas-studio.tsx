@@ -491,6 +491,7 @@ export default function VideoCanvasStudio({
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [compareOpen, setCompareOpen] = useState(false);
+  const [compareModels, setCompareModels] = useState<Array<Exclude<VideoModelId, 'auto'>>>([]);
   const [comparePreviewUrls, setComparePreviewUrls] = useState<Record<string, string>>({});
   const [comparePreviewLoading, setComparePreviewLoading] = useState(false);
   const [comparePreviewError, setComparePreviewError] = useState('');
@@ -718,6 +719,15 @@ export default function VideoCanvasStudio({
   }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, effectiveModel, endFrame, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
   const canGenerate = Boolean(effectiveAccess === 'ready' && effectiveModel && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
+  const compareModelIsEligible = (candidate: Exclude<VideoModelId, 'auto'>) => {
+    const definition = routingRegistry.find(item => item.id === candidate);
+    if (!definition || definition.adapterStatus !== 'ready') return false;
+    if (referenceMode === 'omni' && !definition.capabilities.omniReference) return false;
+    if (!definition.resolutions.includes(resolution)) return false;
+    const seconds = Number.parseInt(duration, 10);
+    return seconds >= definition.duration.minSeconds && seconds <= definition.duration.maxSeconds;
+  };
+  const canCompare = Boolean(canGenerate && compareModels.length >= 2 && compareModels.length <= 3 && compareModels.every(compareModelIsEligible));
   const shotActionsDisabled = submitting || cancelling || Boolean(uploading) || generationInFlight;
   const agentPlanBlockedReason = !prompt.trim()
     ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
@@ -982,6 +992,16 @@ export default function VideoCanvasStudio({
     }
     setCanvasSemantics(previous => selectCanvasBestTake(previous, generationId));
     notify(zh ? '已将该版本标记为最佳镜头。' : 'This version is now the Best Take.');
+  };
+
+  const selectGenerationAsCurrent = async (item: VideoGeneration) => {
+    if (item.status !== 'completed') {
+      notify(zh ? '只有已完成的候选结果可以采用。' : 'Only completed candidates can be selected.');
+      return;
+    }
+    setCanvasSemantics(previous => selectCanvasBestTake(previous, item.id));
+    await restoreHistoryItem(item);
+    notify(zh ? '已采用该候选结果，原有版本仍保留。' : 'This candidate is now active; the other versions remain available.');
   };
 
   const restoreHistoryItem = async (item: VideoGeneration) => {
@@ -1930,6 +1950,31 @@ export default function VideoCanvasStudio({
       : `“${template.labelEn}” applied. ${modelName(model)} stays selected; review references and settings before generating.`);
   };
 
+  const submitGenerationForModel = async (selectedModelId: Exclude<VideoModelId, 'auto'>, primaryFrame: UploadedFrame) => {
+    if (selectedModelId === 'minimax-h3') {
+      if (referenceMode === 'omni') referenceFrames.forEach((frame, index) => assertMiniMaxFrame(frame, `${zh ? '参考图' : 'Reference image'} ${index + 1}`));
+      else {
+        assertMiniMaxFrame(primaryFrame, 'START');
+        if (endFrame) assertMiniMaxFrame(endFrame, 'END');
+      }
+    }
+    return createVideoGeneration({
+      model: selectedModelId,
+      prompt: prompt.trim(),
+      startImageAssetId: primaryFrame.assetId,
+      endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
+      referenceMode,
+      referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
+      referenceBindings: canvasSemantics.references,
+      duration,
+      aspectRatio,
+      resolution,
+      generationGroupId: generationGroupIdRef.current || (generationGroupIdRef.current = globalThis.crypto?.randomUUID?.() || uuidV4Fallback()),
+      shotId: canvasSemantics.shot.id,
+      shotOrder: canvasSemantics.shot.order,
+    });
+  };
+
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     if (!canGenerate || !primaryFrame || !effectiveModel) return;
@@ -1937,34 +1982,38 @@ export default function VideoCanvasStudio({
     setError('');
     setVideoUrl('');
     try {
-      if (effectiveModel === 'minimax-h3') {
-        if (referenceMode === 'omni') referenceFrames.forEach((frame, index) => assertMiniMaxFrame(frame, `${zh ? '参考图' : 'Reference image'} ${index + 1}`));
-        else if (startFrame) {
-          assertMiniMaxFrame(startFrame, 'START');
-          if (endFrame) assertMiniMaxFrame(endFrame, 'END');
-        }
-      }
-      const next = await createVideoGeneration({
-        model: effectiveModel,
-        prompt: prompt.trim(),
-        startImageAssetId: primaryFrame.assetId,
-        endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
-        referenceMode,
-        referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
-        referenceBindings: canvasSemantics.references,
-        duration,
-        aspectRatio,
-        resolution,
-        generationGroupId: generationGroupIdRef.current || (generationGroupIdRef.current = globalThis.crypto?.randomUUID?.() || uuidV4Fallback()),
-        shotId: canvasSemantics.shot.id,
-        shotOrder: canvasSemantics.shot.order,
-      });
+      const next = await submitGenerationForModel(effectiveModel, primaryFrame);
       const activeNext = setActiveGeneration(next);
       if (activeNext) {
         rememberGeneration(activeNext);
         setRestoredGenerationId(activeNext.id);
       }
       notify(zh ? '镜头任务已创建，画布会自动同步进度。' : 'Shot created. The canvas will sync progress automatically.');
+    } catch (cause) {
+      setError(clientMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const compareGenerate = async () => {
+    const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
+    const selected = [...new Set(compareModels)].slice(0, 3);
+    if (!canCompare || !primaryFrame || selected.length < 2) return;
+    setSubmitting(true);
+    setError('');
+    setVideoUrl('');
+    try {
+      for (const selectedModelId of selected) {
+        const next = await submitGenerationForModel(selectedModelId, primaryFrame);
+        const activeNext = setActiveGeneration(next);
+        if (activeNext) {
+          rememberGeneration(activeNext);
+          setRestoredGenerationId(activeNext.id);
+        }
+      }
+      setCompareOpen(true);
+      notify(zh ? `已为当前镜头提交 ${selected.length} 个模型版本，结果会保留在对比面板。` : `Submitted ${selected.length} model versions for this shot. Results stay in the compare panel.`);
     } catch (cause) {
       setError(clientMessage(cause));
     } finally {
@@ -2785,7 +2834,7 @@ export default function VideoCanvasStudio({
             <p>{item?.prompt || (zh ? '历史任务详情将在载入后显示。' : 'Load this task to view its full prompt.')}</p>
             <small>{item ? `${modelName(item.model)} · ${item.duration} · ${formatHistoryTime(item.createdAt, zh)}` : version.generationId}</small>
             <div className="canvas-compare-card-actions">
-              {item && generation?.id !== item.id && <button type="button" onClick={() => void restoreHistoryItem(item)}>{zh ? '载入结果' : 'Load result'}</button>}
+              {item && generation?.id !== item.id && <button type="button" onClick={() => void selectGenerationAsCurrent(item)}>{zh ? '采用此结果' : 'Use this result'}</button>}
               {item?.status === 'completed' && !version.bestTake && <button type="button" className="is-primary" onClick={() => markBestTake(version.generationId)}>{zh ? '设为最佳' : 'Set best'}</button>}
               {generation?.id === item?.id && <span>{zh ? '当前显示' : 'Currently shown'}</span>}
             </div>
@@ -2945,6 +2994,11 @@ export default function VideoCanvasStudio({
                   {model === 'auto' && <div className="canvas-router-summary"><strong>{zh ? '本镜头推荐' : 'Recommended for this shot'}：{routingResult.recommendedModel ? modelName(routingResult.recommendedModel) : '—'}</strong><p>{routingResult.reason.slice(0, 3).join(' · ')}</p><div>{routingResult.alternatives.slice(0, 3).map(item => <span key={item.modelId}>{modelName(item.modelId as VideoModelId)} {item.score}</span>)}</div></div>}
                   <div className="canvas-preferences-grid">
                     <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型模式' : 'Model mode'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto">Auto · {zh ? '智能推荐' : 'Smart routing'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+                    <fieldset className="canvas-preference-field canvas-preference-compare-field"><legend>{zh ? 'Compare Models · 最多 3 个' : 'Compare models · up to 3'}</legend><div className="canvas-compare-model-options">{models.filter(item => item.id !== 'auto').map(item => {
+                      const candidate = item.id as Exclude<VideoModelId, 'auto'>;
+                      const eligible = compareModelIsEligible(candidate);
+                      return <label key={item.id} title={!eligible ? (zh ? '当前参考模式、分辨率或时长不兼容' : 'Reference mode, resolution, or duration is incompatible') : undefined}><input type="checkbox" checked={compareModels.includes(candidate)} disabled={!item.enabled || !eligible} onChange={() => setCompareModels(current => current.includes(candidate) ? current.filter(value => value !== candidate) : current.length < 3 ? [...current, candidate] : current)} /><span>{modelName(candidate)}</span></label>;
+                    })}</div><small>{zh ? '使用完全相同的 Prompt、START/END、参考素材和规格；不会覆盖原结果。' : 'Uses the same prompt, START/END, references, and settings; existing results stay intact.'}</small></fieldset>
                     <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '参考模式' : 'Reference mode'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
                     <fieldset className="canvas-preference-field canvas-preference-ratio-field"><legend>{zh ? '画幅' : 'Aspect ratio'}</legend><div className="canvas-preference-ratios">{ASPECT_RATIO_OPTIONS.map(option => {
                       const disabled = model === 'minimax-h3' && referenceMode !== 'omni';
@@ -2958,7 +3012,7 @@ export default function VideoCanvasStudio({
               </div>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>
               <button type="button" className="canvas-agent-inline-button" disabled={planning} title={agentPlanBlockedReason || undefined} onClick={handleAgentAction}>{planning ? (zh ? '规划中…' : 'Planning…') : prompt.trim() ? (zh ? 'Agent 规划' : 'Agent plan') : (zh ? '填写 Prompt' : 'Add Prompt')}</button>
-              {generationInFlight ? <button type="button" className="canvas-composer-cancel" disabled={cancelling} onClick={() => void cancelGeneration()}>{cancelling ? (zh ? '正在停止…' : 'Stopping…') : (zh ? '停止生成' : 'Stop generation')}<span aria-hidden="true">×</span></button> : <button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button>}
+              {generationInFlight ? <button type="button" className="canvas-composer-cancel" disabled={cancelling} onClick={() => void cancelGeneration()}>{cancelling ? (zh ? '正在停止…' : 'Stopping…') : (zh ? '停止生成' : 'Stop generation')}<span aria-hidden="true">×</span></button> : <>{compareModels.length >= 2 && <button type="button" className="canvas-compare-submit" disabled={!canCompare} title={!canCompare ? (zh ? '选择 2–3 个已就绪且兼容当前规格的模型' : 'Choose 2–3 ready models compatible with the current settings') : undefined} onClick={() => void compareGenerate()}>{submitting ? (zh ? '对比提交中…' : 'Submitting compare…') : (zh ? `对比生成 ${compareModels.length}` : `Compare ${compareModels.length}`)}</button>}<button type="button" className="canvas-composer-generate" disabled={!canGenerate} title={generationBlockedReason || undefined} onClick={() => void generate()}>{submitting ? <><span className="canvas-submit-spinner" aria-hidden="true" />{zh ? '提交中' : 'Submitting'}</> : <>{zh ? '生成视频' : 'Generate video'}<span aria-hidden="true">→</span></>}</button></>}
             </div>
             <div className={'canvas-preflight-review ' + (preflight.ok ? 'is-ready' : 'has-errors')} role="status" aria-live="polite">
               <div className="canvas-preflight-review-head"><span>{zh ? '提交前检查' : 'PREFLIGHT REVIEW'}</span><b>{preflight.ok ? (zh ? '可以提交' : 'Ready to submit') : (zh ? `${preflight.errors.length} 项需要处理` : `${preflight.errors.length} item${preflight.errors.length > 1 ? 's need' : ' needs'} attention`)}</b></div>
