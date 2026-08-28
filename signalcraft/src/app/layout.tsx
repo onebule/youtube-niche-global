@@ -29,10 +29,8 @@ export const metadata: Metadata = {
   authors: [{ name: 'SignalCraft' }],
   creator: 'SignalCraft',
   publisher: 'SignalCraft',
-  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
-    url: '/',
     siteName: 'SignalCraft',
     title: 'SignalCraft · YouTube 内容情报',
     description: '发现真实趋势、分析频道并沉淀下一条值得制作的内容。',
