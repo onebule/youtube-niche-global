@@ -6,6 +6,8 @@ import { getSession } from '@/src/lib/auth';
 export type UpgradePlan = {
   name: 'Pro' | 'Team';
   price: string;
+  currency: 'CNY' | 'USD';
+  cycle: 'month' | 'quarter' | 'year';
   description: string;
 };
 
@@ -27,7 +29,8 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
 
-  const purchaseRequest = `我想开通 SignalCraft ${plan.name}（${plan.price}）。\n购买账号邮箱：${account?.email || '未登录，请在回复中填写购买账号邮箱'}。\n请告知付款方式和可开通周期。`;
+  const currencyName = plan.currency === 'USD' ? '美元 USD' : '人民币 CNY';
+  const purchaseRequest = `我想开通 SignalCraft ${plan.name}（${plan.price}，${currencyName}）。\n购买账号邮箱：${account?.email || '未登录，请在回复中填写购买账号邮箱'}。\n请确认付款方式和开通周期；美元金额为页面参考价，以管理员最终确认金额为准。`;
 
   const copyRequest = async () => {
     try {
@@ -59,7 +62,7 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
             <b>{plan.name}</b>
             <strong>{plan.price}</strong>
           </div>
-          <p className="upgrade-plan-copy">{plan.description}</p>
+          <p className="upgrade-plan-copy">{plan.description} · {plan.currency === 'USD' ? '美元参考价' : '人民币报价'}</p>
           <ol className="upgrade-steps">
             <li><b>01</b><span>用微信扫描右侧二维码，添加管理员。</span></li>
             <li><b>02</b><span>发送下方已复制的套餐与购买账号信息。</span></li>
@@ -70,8 +73,8 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
             <b>{account?.email || '未登录 · 请在微信中提供注册后要使用的邮箱。'}</b>
           </div>
           <button className="upgrade-copy" type="button" onClick={copyRequest}>{copied ? '已复制开通信息' : '复制开通信息'}</button>
-          {copyError && <p className="upgrade-copy-error">无法访问剪贴板，请在微信里说明：{plan.name} · {plan.price}，并提供购买账号邮箱。</p>}
-          <p className="upgrade-boundary">这是人工开通流程：不会在本页自动扣款，也不会收集你的支付信息。</p>
+          {copyError && <p className="upgrade-copy-error">无法访问剪贴板，请在微信里说明：{plan.name} · {plan.price} · {currencyName}，并提供购买账号邮箱。</p>}
+          <p className="upgrade-boundary">这是人工开通流程：不会在本页自动扣款，也不会收集你的支付信息。美元金额仅用于报价参考，实际付款方式由管理员确认。</p>
         </div>
 
         <figure className="upgrade-qr">
