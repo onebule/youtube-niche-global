@@ -57,7 +57,7 @@ export type ShotAnalysis = {
   duration: number;
   resolution: string;
   aspectRatio: string;
-  referenceMode: 'start-end' | 'omni';
+  referenceMode: 'start-end' | 'omni' | 'text';
   priority: ModelRoutingStrategy;
 };
 
@@ -65,7 +65,7 @@ export type ModelSelectionMode = 'AUTO' | 'MANUAL';
 export type GenerationAttemptStatus = 'queued' | 'processing' | 'completed' | 'failed';
 export type GenerationInputSnapshot = {
   prompt: string;
-  startImageAssetId: string;
+  startImageAssetId: string | null;
   endImageAssetId: string | null;
   duration: string;
   aspectRatio: string;
@@ -178,6 +178,13 @@ export const VIDEO_MODEL_REGISTRY: VideoModelDefinition[] = [
     limitations: ['Provider adapter 尚未接入，不会伪造 API 调用'], duration: { minSeconds: 4, maxSeconds: 8 }, resolutions: ['720p', '1080p'], aspectRatios: ['9:16', '16:9'],
     pricing: { perSecond: null, resolutionMultipliers: RESOLUTION_MULTIPLIERS, note: 'Provider adapter 待接入' }, speed: 76, reliability: 80, qualityFloor: 70,
   },
+  {
+    id: 'veo-3.1-lite', label: 'Veo 3.1 Lite', provider: 'veo', adapterStatus: 'ready',
+    capabilities: { textToVideo: true, imageToVideo: false, startFrame: false, endFrame: false, referenceImages: false, referenceVideo: false, audio: true, omniReference: false },
+    strengths: { character: 68, characterConsistency: 60, motion: 78, expression: 66, camera: 80, physics: 76, realism: 82, reference: 0, audio: 76 },
+    limitations: ['仅支持纯文本生视频', '固定 8 秒；不接收 START、END 或参考图片'], duration: { minSeconds: 8, maxSeconds: 8 }, resolutions: ['720p', '1080p', '4K'], aspectRatios: ['9:16', '16:9'],
+    pricing: { perSecond: null, resolutionMultipliers: RESOLUTION_MULTIPLIERS, note: '由服务端积分配置提供' }, speed: 86, reliability: 76, qualityFloor: 58,
+  },
 ];
 
 export function registryWithApiModels(apiModels: VideoModel[]) {
@@ -232,6 +239,8 @@ function qualityScore(model: VideoModelDefinition, analysis: ShotAnalysis) {
 
 function rejectionReason(model: VideoModelDefinition, analysis: ShotAnalysis) {
   if (model.adapterStatus !== 'ready') return model.adapterStatus === 'planned' ? 'Provider adapter 待接入' : '服务端模型未就绪';
+  if (analysis.referenceMode === 'text' && model.id !== 'veo-3.1-lite') return '当前镜头是纯文本生视频，模型不支持该模式';
+  if (analysis.referenceMode !== 'text' && model.id === 'veo-3.1-lite') return 'Veo 3.1 Lite 不支持参考图片';
   if (analysis.referenceMode === 'omni' && !model.capabilities.omniReference) return '不支持 Omni 多图参考';
   if (analysis.startFrame && !model.capabilities.imageToVideo) return '不支持图生视频';
   if (analysis.startFrame && !model.capabilities.startFrame) return '不支持 START 首帧';
@@ -262,6 +271,7 @@ function reasons(model: VideoModelDefinition, analysis: ShotAnalysis, strategy: 
   if (analysis.endFrame && model.capabilities.endFrame) output.push('支持 START/END 首尾帧');
   if (analysis.referenceMode === 'omni' && model.capabilities.omniReference) output.push('支持多图参考');
   if (analysis.audioRequired && model.capabilities.audio) output.push('满足音频需求');
+  if (analysis.referenceMode === 'text' && model.capabilities.textToVideo) output.push('适合纯文本生视频');
   if (strategy === 'COST' && model.pricing.perSecond !== null) output.push('当前配置下成本优先');
   if (strategy === 'QUALITY' && model.strengths.realism >= 85) output.push('质量与真实感优先');
   if (!output.length) output.push(`综合适配 ${score} 分`);

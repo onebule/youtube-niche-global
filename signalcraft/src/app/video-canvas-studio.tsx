@@ -170,11 +170,13 @@ const CUSTOM_NODE_LABELS: Record<CanvasCustomNodeType, { zh: string; en: string;
 };
 
 const SCRIPT_OCR_MODEL_LABEL = 'GPT-5.6 Luna';
-const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : model === 'kling-3' ? 'Kling 3.0' : 'Auto';
+const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : model === 'kling-3' ? 'Kling 3.0' : model === 'veo-3.1-lite' ? 'Veo 3.1 Lite' : 'Auto';
 const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
   ? (resolution === '2K' ? '2K' : '768P')
   : model === 'kling-3'
     ? (['720p', '1080p', '4K'].includes(resolution) ? resolution : '720p')
+    : model === 'veo-3.1-lite'
+      ? (['720p', '1080p', '4K'].includes(resolution) ? resolution : '720p')
     : ['480p', '720p', '1080p'].includes(resolution) ? resolution : '720p';
 const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGeneration) => {
   if (!previous || previous.id !== next.id) return next;
@@ -634,7 +636,7 @@ export default function VideoCanvasStudio({
   const selectedModel = useMemo(() => models.find(item => item.id === effectiveModel) || null, [effectiveModel, models]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
   const settingsModel = effectiveModel || 'seedance-2';
-  const resolutionOptions = settingsModel === 'minimax-h3' ? ['768P', '2K'] : settingsModel === 'kling-3' ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
+  const resolutionOptions = settingsModel === 'minimax-h3' ? ['768P', '2K'] : ['kling-3', 'veo-3.1-lite'].includes(settingsModel) ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
   const nodeSize = useMemo<Record<NodeId, { width: number; height: number }>>(() => ({
     ...NODE_SIZE,
     source: {
@@ -646,7 +648,7 @@ export default function VideoCanvasStudio({
   // briefly actionable composer while the account-loading effect settles.
   const hasAccount = Boolean(account);
   const effectiveAccess = account ? access : 'signed-out';
-  const hasReferenceInput = referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame);
+  const hasReferenceInput = referenceMode === 'text' || (referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame));
   const assetMentionValidation = useMemo(() => validateCanvasAssetMentions(canvasSemantics, prompt), [canvasSemantics, prompt]);
   const activeReferenceBindings = useMemo(() => canvasSemantics.references
     .filter(reference => reference.shotId === canvasSemantics.shot.id)
@@ -701,7 +703,11 @@ export default function VideoCanvasStudio({
     .filter(event => event.shotId === canvasSemantics.shot.id)
     .slice(-5)
     .reverse(), [canvasSemantics.events, canvasSemantics.shot.id]);
-  const referenceModeSupported = effectiveModel !== null && (referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(effectiveModel));
+  const effectiveDefinition = effectiveModel ? routingRegistry.find(item => item.id === effectiveModel) : null;
+  const referenceModeSupported = Boolean(effectiveDefinition && (referenceMode === 'text'
+    ? effectiveDefinition.capabilities.textToVideo
+    : effectiveDefinition.capabilities.imageToVideo && effectiveDefinition.capabilities.startFrame
+      && (referenceMode !== 'omni' || effectiveDefinition.capabilities.omniReference)));
   const preflight = useMemo(() => preflightVideoGeneration({
     language: zh ? 'zh' : 'en',
     model: effectiveModel || 'auto',
@@ -722,6 +728,8 @@ export default function VideoCanvasStudio({
   const compareModelIsEligible = (candidate: Exclude<VideoModelId, 'auto'>) => {
     const definition = routingRegistry.find(item => item.id === candidate);
     if (!definition || definition.adapterStatus !== 'ready') return false;
+    if (referenceMode === 'text' && !definition.capabilities.textToVideo) return false;
+    if (referenceMode !== 'text' && (!definition.capabilities.imageToVideo || !definition.capabilities.startFrame)) return false;
     if (referenceMode === 'omni' && !definition.capabilities.omniReference) return false;
     if (!definition.resolutions.includes(resolution)) return false;
     const seconds = Number.parseInt(duration, 10);
@@ -752,7 +760,7 @@ export default function VideoCanvasStudio({
     return estimateVideoGenerationTime({
       model: generation.model,
       duration: generation.duration,
-      referenceCount: referenceMode === 'omni' ? referenceFrames.length : 1 + (endFrame ? 1 : 0),
+      referenceCount: referenceMode === 'text' ? 0 : referenceMode === 'omni' ? referenceFrames.length : 1 + (endFrame ? 1 : 0),
       resolution: generation.resolution,
       status: generation.status,
       progress: generation.progress,
@@ -1670,19 +1678,36 @@ export default function VideoCanvasStudio({
   };
 
   const changeReferenceMode = (next: ReferenceMode) => {
+    if (next === 'text' && model !== 'veo-3.1-lite' && model !== 'auto') {
+      notify(zh ? '纯文本生视频当前仅支持 Veo 3.1 Lite。' : 'Text-to-video is currently supported only by Veo 3.1 Lite.');
+      return;
+    }
     setReferenceMode(next);
     if (next === 'omni' && model === 'kling-3') notify(zh ? 'Kling 3.0 仅支持 START/END 首尾帧；请切换到 H3 或 Seedance 使用多图参考。' : 'Kling 3.0 supports START/END only. Switch to H3 or Seedance for Omni references.');
     if (next === 'omni' && model !== 'minimax-h3' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
+    if (next === 'text') {
+      setDuration('8s');
+      if (aspectRatio === '1:1') setAspectRatio('16:9');
+      if (!['720p', '1080p', '4K'].includes(resolution)) setResolution('720p');
+    }
   };
 
   const selectModel = (next: VideoModelId) => {
     // MiniMax H3 supports both FL2VA (start/end) and Ref2VA (multi-reference)
     // inputs. Keep the model selectable in either reference mode.
     setModel(next);
-    patchSemanticNode('task', { model: next, provider: next === 'minimax-h3' ? 'minimax' : next === 'auto' ? null : next === 'kling-3' ? 'kling' : 'seedance' });
+    patchSemanticNode('task', { model: next, provider: next === 'minimax-h3' ? 'minimax' : next === 'auto' ? null : next === 'kling-3' ? 'kling' : next === 'veo-3.1-lite' ? 'veo' : 'seedance' });
     setDuration(current => normalizeVideoDuration(next, current));
     if (next === 'minimax-h3') setResolution('768P');
     if (next === 'kling-3' && !['720p', '1080p', '4K'].includes(resolution)) setResolution('720p');
+    if (next === 'veo-3.1-lite') {
+      setReferenceMode('text');
+      setDuration('8s');
+      if (aspectRatio === '1:1') setAspectRatio('16:9');
+      if (!['720p', '1080p', '4K'].includes(resolution)) setResolution('720p');
+    } else if (next !== 'auto' && referenceMode === 'text') {
+      setReferenceMode('start-end');
+    }
     if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
   };
 
@@ -1712,7 +1737,7 @@ export default function VideoCanvasStudio({
         prompt: prompt.trim(),
         preferredModel: model,
         referenceMode,
-        referenceCount: referenceMode === 'omni' ? referenceFrames.length : (startFrame ? 1 : 0) + (endFrame ? 1 : 0),
+        referenceCount: referenceMode === 'text' ? 0 : referenceMode === 'omni' ? referenceFrames.length : (startFrame ? 1 : 0) + (endFrame ? 1 : 0),
         referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
         duration,
         aspectRatio,
@@ -1950,18 +1975,23 @@ export default function VideoCanvasStudio({
       : `“${template.labelEn}” applied. ${modelName(model)} stays selected; review references and settings before generating.`);
   };
 
-  const submitGenerationForModel = async (selectedModelId: Exclude<VideoModelId, 'auto'>, primaryFrame: UploadedFrame) => {
+  const submitGenerationForModel = async (selectedModelId: Exclude<VideoModelId, 'auto'>, primaryFrame: UploadedFrame | null) => {
+    if (selectedModelId === 'veo-3.1-lite') {
+      if (referenceMode !== 'text') throw new Error(zh ? 'Veo 3.1 Lite 只支持纯文本生视频。' : 'Veo 3.1 Lite only supports text-to-video.');
+    } else if (!primaryFrame) {
+      throw new Error(zh ? '当前模型需要 START 图片。' : 'This model needs a START image.');
+    }
     if (selectedModelId === 'minimax-h3') {
       if (referenceMode === 'omni') referenceFrames.forEach((frame, index) => assertMiniMaxFrame(frame, `${zh ? '参考图' : 'Reference image'} ${index + 1}`));
       else {
-        assertMiniMaxFrame(primaryFrame, 'START');
+        assertMiniMaxFrame(primaryFrame as UploadedFrame, 'START');
         if (endFrame) assertMiniMaxFrame(endFrame, 'END');
       }
     }
     return createVideoGeneration({
       model: selectedModelId,
       prompt: prompt.trim(),
-      startImageAssetId: primaryFrame.assetId,
+      startImageAssetId: referenceMode === 'text' ? null : primaryFrame?.assetId || null,
       endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
       referenceMode,
       referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
@@ -1977,7 +2007,7 @@ export default function VideoCanvasStudio({
 
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
-    if (!canGenerate || !primaryFrame || !effectiveModel) return;
+    if (!canGenerate || !effectiveModel || (referenceMode !== 'text' && !primaryFrame)) return;
     setSubmitting(true);
     setError('');
     setVideoUrl('');
@@ -1999,7 +2029,7 @@ export default function VideoCanvasStudio({
   const compareGenerate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     const selected = [...new Set(compareModels)].slice(0, 3);
-    if (!canCompare || !primaryFrame || selected.length < 2) return;
+    if (!canCompare || (referenceMode !== 'text' && !primaryFrame) || selected.length < 2) return;
     setSubmitting(true);
     setError('');
     setVideoUrl('');
@@ -2677,7 +2707,7 @@ export default function VideoCanvasStudio({
           <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-highlighted-asset={highlightedAssetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => setSelectedNodeId('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
-              {referenceMode === 'start-end' ? <>
+              {referenceMode === 'text' ? <div className="canvas-text-source-node"><span aria-hidden="true">Aa</span><b>{zh ? '纯文本镜头' : 'Text-only shot'}</b><small>{zh ? 'Veo 3.1 Lite 不使用参考图片' : 'Veo 3.1 Lite does not use reference images'}</small></div> : referenceMode === 'start-end' ? <>
                 <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { retireAsset(startFrame?.assetId); setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
                 <UploadControl label="END" zh={zh} optional value={endFrame} busy={uploading === 'end'} onSelect={file => void upload('end', file)} onRemove={() => { retireAsset(endFrame?.assetId); setEndFrame(null); if (!startFrame) patchSemanticNode('source', { assetId: null }); }} />
               </> : <div className="canvas-omni-node">
@@ -2741,9 +2771,9 @@ export default function VideoCanvasStudio({
             <span className="node-port input" aria-hidden="true" />
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
-              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setMinimapOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
+              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'text' ? (zh ? '纯文本生视频 · 固定 8 秒' : 'Text-to-video · fixed 8s') : referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setMinimapOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
-              <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
+              <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'text' ? (zh ? '纯文本输入' : 'Text input') : referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '等待提交' : 'Ready to submit')}</div>
               {!generation && <strong className={'canvas-task-next ' + (canGenerate ? 'ready' : '')}>{canGenerate ? (zh ? '参数已齐，可以生成' : 'Ready to generate') : generationBlockedReason}</strong>}
               <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
@@ -2853,8 +2883,8 @@ export default function VideoCanvasStudio({
           </div>
           {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前设备。' : 'Drag nodes on the canvas to arrange your workflow. Positions save on this device.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
           {!composerCollapsed && <>
-          <div id={!composerCollapsed ? 'canvas-composer-content' : undefined} className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
-            {referenceMode === 'start-end' ? <>
+          <div id={!composerCollapsed ? 'canvas-composer-content' : undefined} className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '') + (referenceMode === 'text' ? ' is-text' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
+            {referenceMode === 'text' ? <div className="canvas-text-mode-note"><span aria-hidden="true">Aa</span><div><b>{zh ? 'Veo 3.1 Lite 纯文本模式' : 'Veo 3.1 Lite text mode'}</b><small>{zh ? '只提交 Prompt；START、END 和参考图不会上传或发送给模型。' : 'Only the Prompt is submitted; START, END, and reference images are not uploaded or sent to the model.'}</small></div></div> : referenceMode === 'start-end' ? <>
             <label className={'canvas-reference-chip ' + (startFrame ? 'has-media' : '')}>
               <input type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void upload('start', file); event.currentTarget.value = ''; }} />
               {startFrame?.previewUrl ? <img src={startFrame.previewUrl} alt="" /> : <span aria-hidden="true">＋</span>}
@@ -2877,7 +2907,7 @@ export default function VideoCanvasStudio({
 
           <div className="canvas-composer-main">
             <div className="canvas-composer-prompt">
-              <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><div className="canvas-composer-prompt-head-actions"><label className="canvas-prompt-add-reference" title={zh ? '添加参考素材' : 'Add reference assets'}><input ref={promptReferenceInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading) || referenceFrames.length >= 9} onChange={event => { addPromptReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考素材' : 'References'}</b></label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div></div>
+              <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><div className="canvas-composer-prompt-head-actions">{referenceMode !== 'text' && <label className="canvas-prompt-add-reference" title={zh ? '添加参考素材' : 'Add reference assets'}><input ref={promptReferenceInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading) || referenceFrames.length >= 9} onChange={event => { addPromptReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考素材' : 'References'}</b></label>}<small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div></div>
               <div className="canvas-prompt-input-wrap">
                 {promptMentionChips.length > 0 && <div className="canvas-prompt-mention-strip" aria-label={zh ? 'Prompt 中已引用的素材' : 'Assets referenced in the prompt'}>
                   <span className="canvas-prompt-mention-strip-label">{zh ? '已引用' : 'REFERENCES'}</span>
@@ -2908,7 +2938,7 @@ export default function VideoCanvasStudio({
                   onClick={event => syncMentionMenu(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
                   onKeyDown={handlePromptKeyDown}
                   onBlur={() => { window.setTimeout(() => { if (document.activeElement !== promptRef.current) closeMentionMenu(); }, 0); }}
-                  placeholder={zh ? '写清人物、脚本、动作和镜头；输入 @ 选择参考图…' : 'Describe the subject, script, motion, and camera; type @ to pick a reference…'}
+                  placeholder={referenceMode === 'text' ? (zh ? '描述主体、动作、镜头、节奏和声音；Veo 3.1 Lite 将只使用这段文字…' : 'Describe the subject, motion, camera, pacing, and sound; Veo 3.1 Lite will use only this text…') : (zh ? '写清人物、脚本、动作和镜头；输入 @ 选择参考图…' : 'Describe the subject, script, motion, and camera; type @ to pick a reference…')}
                 />
                 {mentionMenuOpen && filteredMentionCandidates.length > 0 && <div id="canvas-mention-menu" className="canvas-mention-menu" role="listbox" aria-label={zh ? '选择素材引用' : 'Choose an asset reference'}>
                   <div className="canvas-mention-menu-head"><span>{zh ? '插入素材引用' : 'INSERT ASSET REFERENCE'}</span><small>{zh ? '↑↓ 选择 · Enter 插入' : '↑↓ choose · Enter insert'}</small></div>
@@ -2978,7 +3008,7 @@ export default function VideoCanvasStudio({
                   <span className="canvas-preferences-trigger-icon" aria-hidden="true">☷</span>
                   <span className="canvas-preferences-trigger-copy">
                     <b>{zh ? '生成偏好' : 'Preferences'}</b>
-                    <small>{modelName(model)} · {referenceMode === 'omni' ? (zh ? '全能参考' : 'Omni') : (zh ? '首尾帧' : 'Start / end')} · {aspectRatio}</small>
+                    <small>{modelName(model)} · {referenceMode === 'text' ? (zh ? '纯文本' : 'Text-only') : referenceMode === 'omni' ? (zh ? '全能参考' : 'Omni') : (zh ? '首尾帧' : 'Start / end')} · {aspectRatio}</small>
                   </span>
                   <span className="canvas-preferences-trigger-arrow" aria-hidden="true">{preferencesOpen ? '⌃' : '⌄'}</span>
                 </button>
@@ -2999,9 +3029,9 @@ export default function VideoCanvasStudio({
                       const eligible = compareModelIsEligible(candidate);
                       return <label key={item.id} title={!eligible ? (zh ? '当前参考模式、分辨率或时长不兼容' : 'Reference mode, resolution, or duration is incompatible') : undefined}><input type="checkbox" checked={compareModels.includes(candidate)} disabled={!item.enabled || !eligible} onChange={() => setCompareModels(current => current.includes(candidate) ? current.filter(value => value !== candidate) : current.length < 3 ? [...current, candidate] : current)} /><span>{modelName(candidate)}</span></label>;
                     })}</div><small>{zh ? '使用完全相同的 Prompt、START/END、参考素材和规格；不会覆盖原结果。' : 'Uses the same prompt, START/END, references, and settings; existing results stay intact.'}</small></fieldset>
-                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '参考模式' : 'Reference mode'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '参考模式' : 'Reference mode'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option>{(model === 'veo-3.1-lite' || model === 'auto') && <option value="text">{zh ? '纯文本 · Veo Lite' : 'Text-only · Veo Lite'}</option>}</select></label>
                     <fieldset className="canvas-preference-field canvas-preference-ratio-field"><legend>{zh ? '画幅' : 'Aspect ratio'}</legend><div className="canvas-preference-ratios">{ASPECT_RATIO_OPTIONS.map(option => {
-                      const disabled = model === 'minimax-h3' && referenceMode !== 'omni';
+                      const disabled = (model === 'minimax-h3' && referenceMode !== 'omni') || ((model === 'veo-3.1-lite' || referenceMode === 'text') && option.value === '1:1');
                       return <button key={option.value} type="button" className={'canvas-ratio-option ' + (aspectRatio === option.value ? 'is-selected ' : '') + option.className} aria-pressed={aspectRatio === option.value} disabled={disabled} onClick={() => setAspectRatio(option.value)}><span className="canvas-ratio-icon" aria-hidden="true" /><b>{option.label}</b></button>;
                     })}</div></fieldset>
                     <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{resolutionOptions.map(value => <option key={value}>{value}</option>)}</select></label>
@@ -3046,11 +3076,11 @@ export default function VideoCanvasStudio({
                 </div>
               </div>}
             </div>}
-            <p>{generationInFlight ? (zh ? '生成中发现需要修改？点击“停止生成”后即可调整 Prompt，再次提交。' : 'Need to change something while rendering? Stop the task, edit the Prompt, and submit again.') : referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。MiniMax H3、Seedance 2.0 / 2.5 均可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. MiniMax H3 and Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 首尾帧模式将沿用 START 图片比例。' : 'MiniMax H3 start/end mode follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
+            <p>{generationInFlight ? (zh ? '生成中发现需要修改？点击“停止生成”后即可调整 Prompt，再次提交。' : 'Need to change something while rendering? Stop the task, edit the Prompt, and submit again.') : referenceMode === 'text' ? (zh ? 'Veo 3.1 Lite 固定生成 8 秒纯文本视频，不会上传或使用当前参考图片。' : 'Veo 3.1 Lite creates a fixed 8-second text-only video and does not upload or use the current reference images.') : referenceMode === 'omni' ? (zh ? '全能参考支持 1–9 张图片；用 @图片编号说明人物、服装、场景或动作来源。MiniMax H3、Seedance 2.0 / 2.5 均可用。' : 'Omni reference accepts 1–9 images. Use @image labels to identify people, wardrobe, scenes, or motion. MiniMax H3 and Seedance 2.0 / 2.5 are supported.') : model === 'minimax-h3' ? (zh ? 'MiniMax H3 首尾帧模式将沿用 START 图片比例。' : 'MiniMax H3 start/end mode follows the START image ratio.') : (zh ? '任务异步运行；离开页面后仍会继续生成。失败不扣积分。' : 'Tasks continue asynchronously. Failed generations are not charged.')}</p>
           </div>
           </>}
           {composerCollapsed && <div id="canvas-composer-content" className="canvas-composer-collapsed-summary" aria-live="polite">
-            <div className="canvas-composer-summary-references"><span>{zh ? '参考' : 'References'}</span><b>{referenceMode === 'omni' ? `${referenceFrames.length}/9` : `${startFrame ? 1 : 0}${endFrame ? ' + END' : ''}`}</b></div>
+            <div className="canvas-composer-summary-references"><span>{zh ? '参考' : 'References'}</span><b>{referenceMode === 'text' ? (zh ? '纯文本' : 'Text') : referenceMode === 'omni' ? `${referenceFrames.length}/9` : `${startFrame ? 1 : 0}${endFrame ? ' + END' : ''}`}</b></div>
             <div className="canvas-composer-summary-prompt"><span>{zh ? 'Prompt' : 'Prompt'}</span><b>{prompt.trim() || (zh ? '尚未填写' : 'Not written yet')}</b></div>
             <div className="canvas-composer-summary-settings"><b>{modelName(model)}</b><span>{duration} · {resolution} · {aspectRatio}</span><em className={generation?.status || 'draft'}>{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '草稿' : 'Draft')}</em></div>
           </div>}

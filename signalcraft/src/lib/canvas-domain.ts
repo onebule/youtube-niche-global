@@ -153,7 +153,7 @@ export type CanvasAgentContext = {
     duration: string;
     aspectRatio: '9:16' | '16:9' | '1:1';
     resolution: string;
-    referenceMode: 'start-end' | 'omni';
+    referenceMode: 'start-end' | 'omni' | 'text';
     startAssetId: string | null;
     endAssetId: string | null;
     referenceAssetIds: string[];
@@ -177,7 +177,7 @@ const SHOT_STATUSES: CanvasShotStatus[] = ['draft', 'generating', 'completed', '
 const EDGE_TYPES: CanvasEdgeType[] = ['INPUT', 'REFERENCE', 'CONTINUITY', 'VARIATION', 'GENERATION', 'SHOT_FLOW'];
 const EVENT_TYPES: CanvasEventType[] = ['asset.bound', 'asset.invalidated', 'agent.planned', 'generation.status'];
 const EVENT_ACTORS: CanvasEventActor[] = ['user', 'agent', 'system'];
-const VIDEO_MODELS: VideoModelId[] = ['auto', 'seedance-2', 'seedance-2-5', 'minimax-h3', 'kling-3'];
+const VIDEO_MODELS: VideoModelId[] = ['auto', 'seedance-2', 'seedance-2-5', 'minimax-h3', 'kling-3', 'veo-3.1-lite'];
 const MAX_SEMANTIC_ROWS = 100;
 
 function text(value: unknown, fallback = '', maximum = 160) {

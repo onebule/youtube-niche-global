@@ -4,7 +4,7 @@ import { normalizeVideoDuration, type VideoGeneration, type VideoGenerationPlan,
 import type { ModelRoutingStrategy } from './video-model-router';
 
 export type CanvasAspectRatio = '9:16' | '16:9' | '1:1';
-export type CanvasReferenceMode = 'start-end' | 'omni';
+export type CanvasReferenceMode = 'start-end' | 'omni' | 'text';
 export type UploadedFrame = { assetId: string; name: string; previewUrl: string; width: number; height: number; referenceIndex?: number };
 export type PersistedFrame = Omit<UploadedFrame, 'previewUrl'>;
 export type ScriptOcrDraft = { assetId: string; text: string; extractedAt?: string | null };

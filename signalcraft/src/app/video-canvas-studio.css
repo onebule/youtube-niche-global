@@ -1992,6 +1992,61 @@
   font-size: 9px;
 }
 
+.canvas-composer-media.is-text {
+  width: min(330px, 32vw);
+  align-items: stretch;
+}
+
+.canvas-text-mode-note,
+.canvas-text-source-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(11, 117, 111, .22);
+  border-radius: 12px;
+  background: #eef8f5;
+  color: #173f3a;
+}
+
+.canvas-text-mode-note {
+  width: 100%;
+  min-height: 78px;
+  padding: 12px 14px;
+}
+
+.canvas-text-mode-note > span,
+.canvas-text-source-node > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 9px;
+  background: #d4eee8;
+  color: #08786e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.canvas-text-mode-note b,
+.canvas-text-mode-note small,
+.canvas-text-source-node b,
+.canvas-text-source-node small {
+  display: block;
+}
+
+.canvas-text-mode-note small,
+.canvas-text-source-node small {
+  margin-top: 3px;
+  color: #5b7772;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.canvas-text-source-node {
+  padding: 11px;
+}
+
 .canvas-preferences-auto select {
   min-height: 25px;
   padding: 3px 7px;

@@ -3,7 +3,7 @@
 import { authHeaders } from './auth';
 import type { CanvasAgentAction, CanvasAgentContext, CanvasAssetReference } from './canvas-domain';
 
-export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3' | 'kling-3';
+export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3' | 'kling-3' | 'veo-3.1-lite';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type VideoGenerationCancellation = 'confirmed' | 'requested' | 'unsupported' | 'failed' | 'not_applicable';
@@ -23,8 +23,8 @@ export type GenerationSpecReference = {
 export type GenerationSpecV2 = {
   schemaVersion: 2;
   requestId: string;
-  taskType: 'image-to-video';
-  referenceMode: 'start-end' | 'omni';
+  taskType: 'image-to-video' | 'text-to-video';
+  referenceMode: 'start-end' | 'omni' | 'text';
   routing: {
     mode: 'locked' | 'auto';
     requestedModel: VideoModelId;
@@ -62,6 +62,7 @@ const VIDEO_GENERATION_TIME_PROFILES: Record<VideoModelId, VideoGenerationTimePr
   'seedance-2-5': { minSeconds: 90, maxSeconds: 300 },
   'minimax-h3': { minSeconds: 60, maxSeconds: 180 },
   'kling-3': { minSeconds: 75, maxSeconds: 240 },
+  'veo-3.1-lite': { minSeconds: 60, maxSeconds: 180 },
 };
 
 export type VideoGenerationTimeEstimate = {
@@ -159,6 +160,7 @@ const VIDEO_DURATION_LIMITS: Record<VideoModelId, { min: number; max: number }> 
   'seedance-2-5': { min: 4, max: 30 },
   'minimax-h3': { min: 4, max: 15 },
   'kling-3': { min: 3, max: 15 },
+  'veo-3.1-lite': { min: 8, max: 8 },
 };
 
 export function videoDurationOptions(model: VideoModelId) {
@@ -198,7 +200,7 @@ export function preflightVideoGeneration(input: {
   model: VideoModelId;
   modelReady: boolean;
   prompt: string;
-  referenceMode: 'start-end' | 'omni';
+  referenceMode: 'start-end' | 'omni' | 'text';
   startFrame: PreflightFrame | null;
   endFrame?: PreflightFrame | null;
   referenceFrames?: PreflightFrame[];
@@ -221,10 +223,10 @@ export function preflightVideoGeneration(input: {
   const modelLimits = VIDEO_DURATION_LIMITS[input.model] || VIDEO_DURATION_LIMITS.auto;
   const resolutions = input.model === 'minimax-h3'
     ? ['768P', '2K']
-    : input.model === 'kling-3' ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
+    : ['kling-3', 'veo-3.1-lite'].includes(input.model) ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
   const frames = input.referenceMode === 'omni'
     ? (input.referenceFrames || [])
-    : [input.startFrame, input.endFrame].filter((frame): frame is PreflightFrame => Boolean(frame));
+    : input.referenceMode === 'text' ? [] : [input.startFrame, input.endFrame].filter((frame): frame is PreflightFrame => Boolean(frame));
 
   if (!input.prompt.trim()) add('error', 'PROMPT_REQUIRED', copy('填写 Motion Prompt 后才能生成。', 'Add a Motion Prompt before generating.'));
   if (input.prompt.length > 1200) add('error', 'PROMPT_TOO_LONG', copy('Motion Prompt 不能超过 1200 个字符。', 'Motion Prompt must be 1,200 characters or fewer.'));
@@ -233,8 +235,14 @@ export function preflightVideoGeneration(input: {
   if (input.referenceMode === 'omni') {
     if (!frames.length) add('error', 'REFERENCE_REQUIRED', copy('全能参考至少需要 1 张图片。', 'Omni reference needs at least one image.'));
     if (frames.length > 9) add('error', 'REFERENCE_LIMIT', copy('全能参考最多支持 9 张图片。', 'Omni reference supports up to 9 images.'));
-  } else if (!input.startFrame) {
+  } else if (input.referenceMode !== 'text' && !input.startFrame) {
     add('error', 'START_REQUIRED', copy('首尾帧模式需要 START 图片。', 'Start / end mode needs a START image.'));
+  }
+  if (input.model === 'veo-3.1-lite' && input.referenceMode !== 'text') {
+    add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('Veo 3.1 Lite 只支持纯文本生视频，请切换参考模式。', 'Veo 3.1 Lite only supports text-to-video. Switch the reference mode.'));
+  }
+  if (input.model !== 'veo-3.1-lite' && input.referenceMode === 'text') {
+    add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('纯文本生视频当前仅支持 Veo 3.1 Lite。', 'Text-to-video is currently supported only by Veo 3.1 Lite.'));
   }
   if (input.referenceMode === 'omni' && !['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(input.model)) {
     add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('当前模型不支持所选参考模式。', 'This model does not support the selected reference mode.'));
@@ -242,7 +250,7 @@ export function preflightVideoGeneration(input: {
   const durationSeconds = Number.parseInt(duration, 10);
   const requestedDurationSeconds = Number.parseInt(String(input.duration || ''), 10);
   if (Number.isFinite(requestedDurationSeconds) && (requestedDurationSeconds < modelLimits.min || requestedDurationSeconds > modelLimits.max)) {
-    const modelLabel = input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : input.model === 'kling-3' ? 'Kling 3.0' : 'Seedance 2.0';
+    const modelLabel = input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : input.model === 'kling-3' ? 'Kling 3.0' : input.model === 'veo-3.1-lite' ? 'Veo 3.1 Lite' : 'Seedance 2.0';
     add('error', 'DURATION_UNSUPPORTED', copy(`${modelLabel} 时长需在 ${modelLimits.min}–${modelLimits.max} 秒之间。`, `${modelLabel} supports ${modelLimits.min}–${modelLimits.max} seconds.`));
   }
   if (!resolutions.includes(input.resolution)) add('error', 'RESOLUTION_UNSUPPORTED', copy(`当前模型不支持 ${input.resolution}，可用分辨率为 ${resolutions.join('、')}。`, `${input.resolution} is not supported by this model. Use ${resolutions.join(', ')}.`));
@@ -301,7 +309,7 @@ export type VideoGeneration = {
   providerTaskId?: string | null;
   model: VideoModelId;
   prompt: string;
-  startImageAssetId: string;
+  startImageAssetId: string | null;
   endImageAssetId: string | null;
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
@@ -326,7 +334,7 @@ export type VideoGenerationPlan = {
   director: { id: 'gpt' | 'claude'; label: string; model: string; mode: string; provider?: string | null };
   model: Exclude<VideoModelId, 'auto'>;
   modelLabel: string;
-  referenceMode: 'start-end' | 'omni';
+  referenceMode: 'start-end' | 'omni' | 'text';
   referenceCount: number;
   referenceImageRoles?: Array<{ index: number; role: string }>;
   prompt: string;
@@ -383,9 +391,9 @@ export async function loadVideoModels() {
 export function buildGenerationSpecV2(input: {
   model: VideoModelId;
   prompt: string;
-  startImageAssetId: string;
+  startImageAssetId?: string | null;
   endImageAssetId?: string | null;
-  referenceMode?: 'start-end' | 'omni';
+  referenceMode?: 'start-end' | 'omni' | 'text';
   referenceImageAssetIds?: string[];
   referenceBindings?: CanvasAssetReference[];
   duration: string;
@@ -397,10 +405,12 @@ export function buildGenerationSpecV2(input: {
   characterSetId?: string | null;
   continuityFromShotId?: string | null;
 }, { requestId, idempotencyKey, generationGroupId = null, shotId = null, shotOrder = null, characterSetId = null, continuityFromShotId = null, userConfirmed = true }: { requestId: string; idempotencyKey: string; generationGroupId?: string | null; shotId?: string | null; shotOrder?: number | null; characterSetId?: string | null; continuityFromShotId?: string | null; userConfirmed?: boolean }): GenerationSpecV2 {
-  const referenceIds = input.referenceMode === 'omni'
-    ? Array.from(new Set(input.referenceImageAssetIds || []))
-    : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
-  const references = referenceIds.filter(Boolean).map((assetId, index) => {
+  const referenceIds = input.referenceMode === 'text'
+    ? []
+    : input.referenceMode === 'omni'
+      ? Array.from(new Set(input.referenceImageAssetIds || []))
+      : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
+  const references = referenceIds.filter((assetId): assetId is string => Boolean(assetId)).map((assetId, index) => {
     const binding = input.referenceBindings?.find(item => item.assetId === assetId && (!shotId || item.shotId === shotId));
     const bindingRole = binding?.role && ['character', 'start_frame', 'end_frame', 'motion', 'style', 'scene', 'prop', 'script', 'storyboard', 'reference'].includes(binding.role)
       ? binding.role as GenerationSpecReferenceRole
@@ -420,7 +430,7 @@ export function buildGenerationSpecV2(input: {
   return {
     schemaVersion: 2,
     requestId,
-    taskType: 'image-to-video',
+    taskType: input.referenceMode === 'text' ? 'text-to-video' : 'image-to-video',
     referenceMode: input.referenceMode || 'start-end',
     routing: {
       mode,
@@ -455,7 +465,7 @@ export function buildGenerationSpecV2(input: {
 export async function planVideoGeneration(input: {
   prompt: string;
   preferredModel?: VideoModelId;
-  referenceMode: 'start-end' | 'omni';
+  referenceMode: 'start-end' | 'omni' | 'text';
   referenceCount: number;
   referenceImageAssetIds?: string[];
   duration: string;
@@ -511,9 +521,9 @@ export async function uploadVideoInput(file: File, dimensions?: { width: number;
 export async function createVideoGeneration(input: {
   model: VideoModelId;
   prompt: string;
-  startImageAssetId: string;
+  startImageAssetId?: string | null;
   endImageAssetId?: string | null;
-  referenceMode?: 'start-end' | 'omni';
+  referenceMode?: 'start-end' | 'omni' | 'text';
   referenceImageAssetIds?: string[];
   referenceBindings?: CanvasAssetReference[];
   duration: string;
