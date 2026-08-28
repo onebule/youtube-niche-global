@@ -657,6 +657,16 @@ export default function VideoCanvasStudio({
         || role.includes(query);
     }).slice(0, 9);
   }, [mentionCandidates, mentionMenuOpen, mentionQuery, mentionStart, zh]);
+  const promptMentionChips = useMemo(() => assetMentionValidation.mentions.map(mention => {
+    const candidate = mentionCandidates.find(item => frameReferenceIndex(item.frame, item.index) === mention.index);
+    const binding = assetMentionValidation.bindings.find(item => item.mentionId === mention.mentionId);
+    return {
+      ...mention,
+      frame: candidate?.frame || null,
+      role: binding?.role || candidate?.role || 'reference',
+      status: binding?.status || (candidate ? 'valid' : 'unbound'),
+    };
+  }), [assetMentionValidation.bindings, assetMentionValidation.mentions, mentionCandidates]);
   const recentCanvasEvents = useMemo(() => canvasSemantics.events
     .filter(event => event.shotId === canvasSemantics.shot.id)
     .slice(-5)
@@ -1442,6 +1452,14 @@ export default function VideoCanvasStudio({
     setPrompt(current => mentionId && parseCanvasAssetMentions(current).some(item => item.mentionId === mentionId)
       ? current
       : `${current.trim()} ${mention} `.trimStart());
+  };
+
+  const focusPromptMention = (mention: { index: number }) => {
+    const candidate = mentionCandidates.find(item => frameReferenceIndex(item.frame, item.index) === mention.index);
+    if (!candidate) return;
+    setSelectedNodeId('source');
+    setSelectedCustomNodeId(null);
+    setHighlightedAssetId(candidate.frame.assetId);
   };
 
   const syncMentionMenu = (value: string, cursor: number) => {
@@ -2697,6 +2715,20 @@ export default function VideoCanvasStudio({
             <div className="canvas-composer-prompt">
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div>
               <div className="canvas-prompt-input-wrap">
+                {promptMentionChips.length > 0 && <div className="canvas-prompt-mention-strip" aria-label={zh ? 'Prompt 中已引用的素材' : 'Assets referenced in the prompt'}>
+                  <span className="canvas-prompt-mention-strip-label">{zh ? '已引用' : 'REFERENCES'}</span>
+                  <div className="canvas-prompt-mention-chips">
+                    {promptMentionChips.map(chip => {
+                      const label = `@${zh ? '图片' : 'image'}${chip.index}`;
+                      const roleLabel = canvasReferenceRoleLabel(chip.role, zh);
+                      const invalid = chip.status !== 'valid';
+                      return <button type="button" key={`${chip.mentionId}-${chip.start}`} className={'canvas-prompt-mention-chip ' + (invalid ? 'is-invalid' : '')} onClick={() => focusPromptMention(chip)} title={invalid ? (zh ? '素材未绑定或已失效' : 'Asset is unbound or unavailable') : (zh ? '定位到画布素材' : 'Focus this asset on the canvas')}>
+                        {chip.frame?.previewUrl ? <img src={chip.frame.previewUrl} alt="" /> : <span className="canvas-prompt-mention-placeholder" aria-hidden="true">@</span>}
+                        <span><b>{label}</b><small>{invalid ? (zh ? '未绑定' : 'Unbound') : roleLabel}</small></span>
+                      </button>;
+                    })}
+                  </div>
+                </div>}
                 <textarea
                   ref={promptRef}
                   id="canvas-motion-prompt"
