@@ -59,6 +59,7 @@ export default function ImageGenerationPanel({
       try {
         const next = await refreshImageGeneration(task.taskId);
         if (cancelled) return;
+        setError('');
         setTask(previous => ({ ...previous, ...next }));
         if (!['completed', 'failed'].includes(next.status)) timeout = window.setTimeout(poll, 2400);
       } catch (cause) {
