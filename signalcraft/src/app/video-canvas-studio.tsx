@@ -269,6 +269,21 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function fitViewportForFrame(
+  frame: { x: number; y: number; width: number; height: number },
+  bounds: { width: number; height: number },
+): Viewport {
+  const padding = 72;
+  const availableWidth = Math.max(1, bounds.width - padding * 2);
+  const availableHeight = Math.max(1, bounds.height - padding * 2);
+  const scale = clamp(Math.min(availableWidth / frame.width, availableHeight / frame.height), 0.45, 1.2);
+  return {
+    scale,
+    x: bounds.width / 2 - (frame.x + frame.width / 2) * scale,
+    y: bounds.height / 2 - (frame.y + frame.height / 2) * scale,
+  };
+}
+
 function uuidV4Fallback() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, token => {
     const random = Math.floor(Math.random() * 16);
@@ -470,6 +485,7 @@ export default function VideoCanvasStudio({
   const [comparePreviewLoading, setComparePreviewLoading] = useState(false);
   const [comparePreviewError, setComparePreviewError] = useState('');
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [composerCollapsed, setComposerCollapsed] = useState(false);
   const [customLayoutMode, setCustomLayoutMode] = useState(false);
@@ -484,6 +500,7 @@ export default function VideoCanvasStudio({
   const [customEdges, setCustomEdges] = useState<CanvasCustomEdge[]>([]);
   const [nodePaletteParentId, setNodePaletteParentId] = useState<string | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
   const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
   const [appliedAgentActionIds, setAppliedAgentActionIds] = useState<string[]>([]);
@@ -504,6 +521,21 @@ export default function VideoCanvasStudio({
   const generationContextRef = useRef<VideoGeneration | null>(null);
   const historyRestoreRequestRef = useRef(0);
   const fullscreenFallbackRef = useRef(false);
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+    const updateSize = () => setViewportSize({ width: element.clientWidth, height: element.clientHeight });
+    const frame = window.requestAnimationFrame(updateSize);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateSize);
+    observer?.observe(element);
+    window.addEventListener('resize', updateSize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [isCanvasFullscreen]);
 
   const setActiveGeneration = useCallback((next: VideoGeneration | null) => {
     const resolved = next ? mergeGenerationContext(generationContextRef.current, next) : null;
@@ -566,6 +598,7 @@ export default function VideoCanvasStudio({
     setNodePaletteOpen(false);
     setNodePaletteParentId(null);
     setTemplateOpen(false);
+    setMinimapOpen(false);
   };
 
   const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
@@ -854,6 +887,7 @@ export default function VideoCanvasStudio({
     if (next) setCompareOpen(false);
     if (next) setNodePaletteOpen(false);
     if (next) setTemplateOpen(false);
+    if (next) setMinimapOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
 
@@ -863,6 +897,7 @@ export default function VideoCanvasStudio({
     if (next) setHistoryOpen(false);
     if (next) setNodePaletteOpen(false);
     if (next) setTemplateOpen(false);
+    if (next) setMinimapOpen(false);
     if (next && history.length === 0 && !historyLoading) void loadHistoryPage();
   };
 
@@ -1020,17 +1055,18 @@ export default function VideoCanvasStudio({
   }, [isCanvasFullscreen]);
 
   useEffect(() => {
-    if (!historyOpen && !nodePaletteOpen && !compareOpen && !templateOpen) return;
+    if (!historyOpen && !nodePaletteOpen && !compareOpen && !templateOpen && !minimapOpen) return;
     const closePanels = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setHistoryOpen(false);
       setNodePaletteOpen(false);
       setCompareOpen(false);
       setTemplateOpen(false);
+      setMinimapOpen(false);
     };
     window.addEventListener('keydown', closePanels);
     return () => window.removeEventListener('keydown', closePanels);
-  }, [compareOpen, historyOpen, nodePaletteOpen, templateOpen]);
+  }, [compareOpen, historyOpen, minimapOpen, nodePaletteOpen, templateOpen]);
 
   useEffect(() => {
     try {
@@ -1539,6 +1575,7 @@ export default function VideoCanvasStudio({
     selectModel(alternateModel);
     setAgentPlan(null);
     setPreferencesOpen(true);
+    setMinimapOpen(false);
     notify(zh ? `已切换到 ${modelName(alternateModel)} 分支，请确认参数后再提交。` : `Switched to the ${modelName(alternateModel)} branch. Review settings before submitting.`);
   };
 
@@ -1644,6 +1681,7 @@ export default function VideoCanvasStudio({
     setHistoryOpen(false);
     setCompareOpen(false);
     setTemplateOpen(false);
+    setMinimapOpen(false);
   };
   const closeNodePalette = () => {
     setNodePaletteOpen(false);
@@ -1657,11 +1695,24 @@ export default function VideoCanvasStudio({
         setHistoryOpen(false);
         setCompareOpen(false);
         setTemplateOpen(false);
+        setMinimapOpen(false);
       } else {
         setNodePaletteParentId(null);
       }
       return next;
     });
+  };
+  const toggleMinimap = () => {
+    const next = !minimapOpen;
+    setMinimapOpen(next);
+    if (next) {
+      setHistoryOpen(false);
+      setCompareOpen(false);
+      setNodePaletteOpen(false);
+      setNodePaletteParentId(null);
+      setTemplateOpen(false);
+      setPreferencesOpen(false);
+    }
   };
   const handlePaletteImage = async (file: File) => {
     if (nodePaletteParentId) {
@@ -1758,6 +1809,7 @@ export default function VideoCanvasStudio({
         setHistoryOpen(false);
         setCompareOpen(false);
         setNodePaletteOpen(false);
+        setMinimapOpen(false);
       } else {
         setNodePaletteParentId(null);
       }
@@ -2037,7 +2089,7 @@ export default function VideoCanvasStudio({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer')) return;
+    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel')) return;
     setSelectedNodeId(null);
     setSelectedCustomNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -2230,6 +2282,53 @@ export default function VideoCanvasStudio({
     return { x: minX - 32, y: minY - 64, width: maxX - minX + 64, height: maxY - minY + 96 };
   }, [customNodes, graphNodes]);
 
+  const fitCanvasToContent = () => {
+    const viewportElement = viewportRef.current;
+    if (!viewportElement) {
+      setViewport(INITIAL_VIEWPORT);
+      return;
+    }
+    setViewport(fitViewportForFrame(shotFrame, {
+      width: viewportElement.clientWidth,
+      height: viewportElement.clientHeight,
+    }));
+  };
+
+  const minimapNodes = useMemo(() => Array.from(graphNodes.entries())
+    .filter(([id]) => id !== 'prompt' && id !== 'model')
+    .map(([id, node]) => ({ id, ...node })), [graphNodes]);
+
+  const minimapViewport = useMemo(() => {
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return null;
+    const width = Math.min(STAGE_SIZE.width, viewportSize.width / viewport.scale);
+    const height = Math.min(STAGE_SIZE.height, viewportSize.height / viewport.scale);
+    return {
+      left: clamp(-viewport.x / viewport.scale, 0, Math.max(0, STAGE_SIZE.width - width)),
+      top: clamp(-viewport.y / viewport.scale, 0, Math.max(0, STAGE_SIZE.height - height)),
+      width,
+      height,
+    };
+  }, [viewport.scale, viewport.x, viewport.y, viewportSize.height, viewportSize.width]);
+
+  const focusCanvasNode = (id: string) => {
+    const node = graphNodes.get(id);
+    const viewportElement = viewportRef.current;
+    if (!node || !viewportElement) return;
+    setViewport(previous => ({
+      ...previous,
+      x: viewportElement.clientWidth / 2 - (node.x + node.width / 2) * previous.scale,
+      y: viewportElement.clientHeight / 2 - (node.y + node.height / 2) * previous.scale,
+    }));
+    if ((Object.keys(nodes) as NodeId[]).includes(id as NodeId)) {
+      setSelectedNodeId(id as NodeId);
+      setSelectedCustomNodeId(null);
+    } else {
+      setSelectedNodeId(null);
+      setSelectedCustomNodeId(id);
+    }
+    setMinimapOpen(false);
+  };
+
   const edges = useMemo(() => [...CONNECTIONS.map(([from, to]) => ({ from, to, id: from + '-' + to })), ...customEdges.map(edge => ({ ...edge, id: `custom-${edge.id}` }))].flatMap(edge => {
     const from = graphNodes.get(edge.from);
     const to = graphNodes.get(edge.to);
@@ -2291,7 +2390,7 @@ export default function VideoCanvasStudio({
         onWheel={wheel}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer')) {
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel')) {
             setSelectedNodeId(null);
             setSelectedCustomNodeId(null);
           }
@@ -2301,10 +2400,23 @@ export default function VideoCanvasStudio({
           <button type="button" onClick={() => zoomAt(viewport.scale / 1.12)} aria-label={zh ? '缩小' : 'Zoom out'}>−</button>
           <button type="button" onClick={() => zoomAt(1)}>{Math.round(viewport.scale * 100)}%</button>
           <button type="button" onClick={() => zoomAt(viewport.scale * 1.12)} aria-label={zh ? '放大' : 'Zoom in'}>＋</button>
-          <button type="button" onClick={() => setViewport(INITIAL_VIEWPORT)}>{zh ? '回到流程' : 'Fit'}</button>
+          <button type="button" onClick={fitCanvasToContent} title={zh ? '让当前镜头的节点完整进入视野' : 'Fit the current shot into view'}>{zh ? '回到流程' : 'Fit'}</button>
+          <button type="button" className={'canvas-minimap-toolbar-button ' + (minimapOpen ? 'is-open' : '')} aria-expanded={minimapOpen} aria-controls="canvas-minimap-panel" onClick={toggleMinimap} aria-label={minimapOpen ? (zh ? '关闭画布导航' : 'Close canvas map') : (zh ? '打开画布导航' : 'Open canvas map')} title={minimapOpen ? (zh ? '关闭画布导航' : 'Close canvas map') : (zh ? '打开画布导航' : 'Open canvas map')}><span aria-hidden="true">▦</span><b>{zh ? '导航' : 'Map'}</b></button>
           <button type="button" className="canvas-history-toolbar-button" aria-expanded={historyOpen} aria-controls="canvas-history-panel" onClick={toggleHistory} aria-label={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')} title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}><span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}</button>
           <button type="button" className="canvas-fullscreen-button" onClick={() => void toggleCanvasFullscreen()} aria-label={isCanvasFullscreen ? (zh ? '退出全屏' : 'Exit fullscreen') : (zh ? '进入全屏' : 'Enter fullscreen')} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}><span aria-hidden="true">{isCanvasFullscreen ? '↙' : '⛶'}</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b></button>
         </div>
+        {minimapOpen && <aside id="canvas-minimap-panel" className="canvas-minimap-panel" role="dialog" aria-labelledby="canvas-minimap-title">
+          <div className="canvas-minimap-head"><div><span>{zh ? '画布导航' : 'CANVAS MAP'}</span><b id="canvas-minimap-title">{zh ? '当前镜头概览' : 'Current shot overview'}</b></div><button type="button" className="canvas-minimap-close" aria-label={zh ? '关闭画布导航' : 'Close canvas map'} onClick={() => setMinimapOpen(false)}>×</button></div>
+          <div className="canvas-minimap-map" aria-label={zh ? '点击节点定位' : 'Click a node to focus'}>
+            {minimapViewport && <span className="canvas-minimap-viewport" style={{ left: `${minimapViewport.left / STAGE_SIZE.width * 100}%`, top: `${minimapViewport.top / STAGE_SIZE.height * 100}%`, width: `${minimapViewport.width / STAGE_SIZE.width * 100}%`, height: `${minimapViewport.height / STAGE_SIZE.height * 100}%` }} />}
+            {minimapNodes.map(node => {
+              const custom = customNodes.find(item => item.id === node.id);
+              const label = custom ? CUSTOM_NODE_LABELS[custom.type][zh ? 'zh' : 'en'] : canvasNodeName(node.id as NodeId, zh);
+              return <button type="button" key={node.id} className={'canvas-minimap-node ' + (custom ? `is-custom custom-node-${custom.type}` : `is-${node.id}`) + ((selectedNodeId === node.id || selectedCustomNodeId === node.id) ? ' is-selected' : '')} style={{ left: `${node.x / STAGE_SIZE.width * 100}%`, top: `${node.y / STAGE_SIZE.height * 100}%`, width: `${node.width / STAGE_SIZE.width * 100}%`, height: `${node.height / STAGE_SIZE.height * 100}%` }} onClick={() => focusCanvasNode(node.id)} aria-label={zh ? `定位到${label}` : `Focus ${label}`} title={label}><span aria-hidden="true" /></button>;
+            })}
+          </div>
+          <small>{zh ? '点击色块定位节点；拖动和缩放仍在主画布完成。' : 'Click a block to focus a node. Pan and zoom in the main canvas.'}</small>
+        </aside>}
         <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
           <div
             className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
@@ -2399,7 +2511,7 @@ export default function VideoCanvasStudio({
             <span className="node-port input" aria-hidden="true" />
             <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => setSelectedNodeId('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
-              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
+              <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setMinimapOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '等待提交' : 'Ready to submit')}</div>
@@ -2616,7 +2728,7 @@ export default function VideoCanvasStudio({
                   className={'canvas-preferences-trigger ' + (preferencesOpen ? 'is-open' : '')}
                   aria-expanded={preferencesOpen}
                   aria-controls="canvas-preferences-panel"
-                  onClick={() => setPreferencesOpen(current => { const next = !current; if (next) setTemplateOpen(false); return next; })}
+                  onClick={() => setPreferencesOpen(current => { const next = !current; if (next) { setTemplateOpen(false); setMinimapOpen(false); } return next; })}
                 >
                   <span className="canvas-preferences-trigger-icon" aria-hidden="true">☷</span>
                   <span className="canvas-preferences-trigger-copy">

@@ -5084,6 +5084,187 @@
   font-weight: 800;
 }
 
+/* A small, clickable map keeps large custom layouts navigable without adding
+   a second scroll surface or a canvas-wide pointer listener. */
+.video-canvas-toolbar .canvas-minimap-toolbar-button {
+  position: relative;
+  display: inline-flex;
+  min-width: 68px;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  border-left: 1px solid var(--canvas-line-soft);
+  font-size: 10px;
+}
+
+.canvas-minimap-toolbar-button span {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.canvas-minimap-toolbar-button b {
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.canvas-minimap-toolbar-button.is-open {
+  background: var(--canvas-purple-soft);
+  color: var(--canvas-purple);
+}
+
+.canvas-minimap-panel {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  z-index: 35;
+  display: grid;
+  width: min(370px, calc(100vw - 36px));
+  gap: 10px;
+  padding: 15px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 16px;
+  background: var(--canvas-paper);
+  box-shadow: 10px 12px 0 rgba(31, 35, 40, .1), 0 18px 40px rgba(31, 35, 40, .16);
+}
+
+.canvas-minimap-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.canvas-minimap-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.canvas-minimap-head span {
+  color: var(--canvas-purple);
+  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .13em;
+}
+
+.canvas-minimap-head b {
+  color: var(--canvas-line);
+  font: 700 18px/1.1 Georgia, 'Times New Roman', serif;
+}
+
+.canvas-minimap-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 50%;
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.canvas-minimap-close:hover,
+.canvas-minimap-close:focus-visible {
+  border-color: var(--canvas-line);
+  background: var(--canvas-soft);
+}
+
+.canvas-minimap-map {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1900 / 900;
+  border: 1px solid var(--canvas-line-soft);
+  background-color: var(--canvas-wash);
+  background-image: radial-gradient(circle, rgba(115, 121, 128, .22) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.canvas-minimap-viewport {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  min-width: 5%;
+  min-height: 8%;
+  border: 2px solid var(--canvas-purple);
+  background: rgba(107, 92, 240, .08);
+  pointer-events: none;
+}
+
+.canvas-minimap-node {
+  position: absolute;
+  z-index: 2;
+  min-width: 6px;
+  min-height: 6px;
+  padding: 0;
+  border: 1px solid var(--canvas-line);
+  border-radius: 3px;
+  background: var(--canvas-soft-strong);
+  cursor: pointer;
+}
+
+.canvas-minimap-node span {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+}
+
+.canvas-minimap-node.is-source,
+.canvas-minimap-node.is-task {
+  background: var(--canvas-line);
+}
+
+.canvas-minimap-node.is-agent {
+  border-color: var(--canvas-purple);
+  background: var(--canvas-purple);
+}
+
+.canvas-minimap-node.is-result {
+  border-color: var(--canvas-success);
+  background: var(--canvas-success);
+}
+
+.canvas-minimap-node.is-custom {
+  border-color: #9ca2a9;
+  background: #cfd2d8;
+}
+
+.canvas-minimap-node.is-selected,
+.canvas-minimap-node:hover,
+.canvas-minimap-node:focus-visible {
+  z-index: 3;
+  border-color: var(--canvas-danger);
+  outline: 2px solid rgba(221, 80, 72, .25);
+  outline-offset: 2px;
+}
+
+.canvas-minimap-panel > small {
+  color: var(--canvas-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .video-canvas-toolbar .canvas-minimap-toolbar-button {
+    min-width: 38px;
+    padding: 0 8px;
+  }
+
+  .canvas-minimap-toolbar-button b {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .canvas-minimap-panel {
+    top: 72px;
+    right: 10px;
+    width: min(340px, calc(100vw - 20px));
+  }
+}
+
 /* Readability pass: the caption marker needs to be a chip, not the legacy
    full-size coral square applied to every caption span. */
 .video-canvas-caption .video-canvas-caption-center > span {
