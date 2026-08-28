@@ -1,6 +1,7 @@
 export type AccountSession={accessToken:string;email:string;name:string;expiresAt?:number};
 
 const key='signalcraft-auth-v1';
+const legacyFrontendHosts=new Set(['youtube-niche-global.vercel.app','www.youtube-niche-global.vercel.app']);
 // This URL is public by design. The hosted client only needs it to start the
 // OAuth redirect; it never contains a service-role key or OAuth secret.
 const supabaseUrl=(process.env.NEXT_PUBLIC_SUPABASE_URL||'https://fkapfjnecdcbggazyncb.supabase.co').replace(/\/$/,'');
@@ -39,7 +40,10 @@ export function startGoogleSignIn({direct=false}:{direct?:boolean}={}){
     location.assign('/login');
     return true;
   }
-  const redirectTo=`${location.origin}${location.pathname}`;
+  // Keep OAuth on the custom frontend host even when a user starts from an
+  // old Vercel bookmark. Local/preview hosts continue to use their own origin.
+  const origin=legacyFrontendHosts.has(location.hostname.toLowerCase())?'https://niqivo.top':location.origin;
+  const redirectTo=`${origin}${location.pathname}`;
   location.assign(`${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`);
   return true;
 }
