@@ -8634,3 +8634,244 @@
 @media (prefers-reduced-motion: reduce) {
   .video-canvas-stage { will-change: auto; }
 }
+
+/* Production canvas controls: a small, readable command dock keeps the
+   surface focused while exposing the existing actions at the moment they are
+   useful.  It deliberately stays paper-first and uses coral only for the
+   single AI action. */
+.video-canvas-page {
+  --canvas-wash: #f7f4ee;
+  --canvas-paper: #fffdf8;
+  --canvas-soft: #f1ede6;
+  --canvas-soft-strong: #e6dfd5;
+  --canvas-line: #253239;
+  --canvas-line-soft: #d8d0c5;
+  --canvas-muted: #667278;
+  --canvas-purple: #d94a3b;
+  --canvas-purple-soft: #fff0ec;
+  --canvas-success: #0b756f;
+  --canvas-success-soft: #e7f5f0;
+  --canvas-danger: #d94a3b;
+  --canvas-danger-soft: #fff0ec;
+  background: #f3eee5;
+}
+
+.video-canvas-page .video-canvas-shell {
+  border-color: #cec4b8;
+  background: var(--canvas-paper);
+  box-shadow: 0 20px 58px rgba(91, 77, 60, .14);
+}
+
+.video-canvas-page .video-canvas-caption {
+  background: var(--canvas-paper);
+  border-bottom-color: var(--canvas-line-soft);
+  color: var(--canvas-line);
+}
+
+.video-canvas-page .video-canvas-viewport {
+  background-color: var(--canvas-wash);
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M48 0H0V48' fill='none' stroke='%23e2ddd5' stroke-width='1'/%3E%3Ccircle cx='24' cy='24' r='1.1' fill='%23c8c0b5'/%3E%3C/svg%3E");
+}
+
+.video-canvas-page .video-canvas-toolbar {
+  border-color: var(--canvas-line-soft);
+  border-radius: 12px;
+  background: rgba(255, 253, 248, .98);
+  box-shadow: 5px 6px 0 rgba(91, 77, 60, .1);
+}
+
+.video-canvas-page .video-canvas-toolbar button {
+  min-height: 36px;
+  border-radius: 7px;
+  color: var(--canvas-line);
+  transition: background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.video-canvas-page .video-canvas-toolbar button:hover,
+.video-canvas-page .video-canvas-toolbar button:focus-visible,
+.video-canvas-page .video-canvas-toolbar button.is-open {
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+}
+
+.video-canvas-page .video-canvas-toolbar button:focus-visible,
+.video-canvas-page .canvas-main-tool:focus-visible,
+.video-canvas-page .canvas-add-node-trigger:focus-visible {
+  outline: 3px solid rgba(217, 74, 59, .2);
+  outline-offset: 2px;
+}
+
+.canvas-main-toolbar {
+  position: absolute;
+  z-index: 24;
+  bottom: 18px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 32px);
+  padding: 6px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 15px;
+  background: rgba(255, 253, 248, .98);
+  box-shadow: 0 12px 26px rgba(91, 77, 60, .16), 5px 5px 0 rgba(91, 77, 60, .06);
+  transform: translateX(-50%);
+}
+
+.canvas-main-tool {
+  position: relative;
+  display: inline-flex;
+  min-width: 52px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--canvas-line);
+  font: 750 11px/1 var(--canvas-font-sans);
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+}
+
+.canvas-main-tool > span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 7px;
+  background: var(--canvas-soft);
+  color: var(--canvas-line);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.canvas-main-tool:hover:not(:disabled),
+.canvas-main-tool:focus-visible,
+.canvas-main-tool.is-active {
+  border-color: var(--canvas-line-soft);
+  background: var(--canvas-soft);
+}
+
+.canvas-main-tool:hover:not(:disabled) > span,
+.canvas-main-tool:focus-visible > span,
+.canvas-main-tool.is-active > span {
+  border-color: #b9c8c3;
+  background: var(--canvas-success-soft);
+  color: var(--canvas-success);
+}
+
+.canvas-main-tool.is-primary {
+  min-width: 108px;
+  border-color: var(--canvas-danger);
+  background: var(--canvas-danger);
+  color: #fffdf8;
+  box-shadow: 0 3px 0 #a83c31;
+}
+
+.canvas-main-tool.is-primary > span {
+  border-color: rgba(255, 255, 255, .55);
+  background: rgba(255, 255, 255, .15);
+  color: #fffdf8;
+}
+
+.canvas-main-tool.is-primary:hover:not(:disabled),
+.canvas-main-tool.is-primary:focus-visible {
+  border-color: #b83f34;
+  background: #c94337;
+  color: #fffdf8;
+  transform: translateY(-1px);
+}
+
+.canvas-main-tool:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.canvas-main-tool > i {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--canvas-success);
+  color: #fff;
+  font: 800 8px/14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-style: normal;
+}
+
+/* Keep selection feedback explicit but quiet: the selected node gets a
+   coral keyline, while hover only lifts the card slightly. */
+.video-canvas-page .video-canvas-node {
+  border-color: #bfc8c4;
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  box-shadow: 7px 8px 0 rgba(91, 77, 60, .13);
+}
+
+.video-canvas-page .video-canvas-node:hover {
+  box-shadow: 7px 10px 0 rgba(91, 77, 60, .14);
+}
+
+.video-canvas-page .video-canvas-node.is-selected,
+.video-canvas-page .video-canvas-node[data-selected='true'] {
+  border-color: var(--canvas-danger);
+  box-shadow: 0 0 0 1px var(--canvas-danger), 0 0 0 5px rgba(217, 74, 59, .12), 7px 8px 0 rgba(91, 77, 60, .13);
+}
+
+.video-canvas-page .canvas-node-grip {
+  color: var(--canvas-line);
+}
+
+.video-canvas-page .canvas-custom-node-actions {
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.video-canvas-page .canvas-custom-node:hover .canvas-custom-node-actions,
+.video-canvas-page .canvas-custom-node:focus-within .canvas-custom-node-actions,
+.video-canvas-page .canvas-custom-node[data-selected='true'] .canvas-custom-node-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 760px) {
+  .canvas-main-toolbar {
+    right: 10px;
+    bottom: 12px;
+    left: 10px;
+    max-width: none;
+    justify-content: stretch;
+    transform: none;
+  }
+
+  .canvas-main-tool {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0 5px;
+  }
+
+  .canvas-main-tool.is-primary {
+    min-width: 92px;
+    flex: 1.45 1 0;
+  }
+
+  .canvas-main-tool:not(.is-primary) b {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-main-tool,
+  .video-canvas-page .video-canvas-toolbar button,
+  .video-canvas-page .canvas-custom-node-actions {
+    transition: none;
+  }
+}

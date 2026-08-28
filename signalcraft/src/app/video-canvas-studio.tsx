@@ -2345,7 +2345,7 @@ export default function VideoCanvasStudio({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) return;
+    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) return;
     setSelectedNodeId(null);
     setSelectedCustomNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -2677,7 +2677,7 @@ export default function VideoCanvasStudio({
         onWheel={wheel}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) {
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) {
             setSelectedNodeId(null);
             setSelectedCustomNodeId(null);
           }
@@ -2710,6 +2710,26 @@ export default function VideoCanvasStudio({
           </div>
           <small>{zh ? '点击色块定位节点；拖动和缩放仍在主画布完成。' : 'Click a block to focus a node. Pan and zoom in the main canvas.'}</small>
         </aside>}
+        <div className="canvas-main-toolbar" role="toolbar" aria-label={zh ? '画布主工具' : 'Canvas tools'} onPointerDown={event => event.stopPropagation()}>
+          <button type="button" className="canvas-main-tool" onClick={toggleNodePalette} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" title={nodePaletteOpen ? (zh ? '关闭添加节点面板' : 'Close add node panel') : (zh ? '添加节点' : 'Add node')}>
+            <span aria-hidden="true">＋</span><b>{zh ? '添加' : 'Add'}</b>
+          </button>
+          <button type="button" className="canvas-main-tool" onClick={addTextNode} title={zh ? '聚焦 Motion Prompt' : 'Focus Motion Prompt'}>
+            <span aria-hidden="true">T</span><b>{zh ? '文字' : 'Text'}</b>
+          </button>
+          <button type="button" className="canvas-main-tool" onClick={addNextAfterSelectedCanvasNode} disabled={!selectedCanvasNodeId} title={!selectedCanvasNodeId ? (zh ? '先选择一个节点' : 'Select a node first') : (zh ? '为当前节点添加下一步' : 'Add a next step after the selected node')}>
+            <span aria-hidden="true">↗</span><b>{zh ? '下一步' : 'Next'}</b>
+          </button>
+          <button type="button" className="canvas-main-tool is-primary" onClick={handleAgentAction} title={zh ? '让 Agent 规划当前镜头；提交前仍需你确认' : 'Let the Agent plan this shot; you still confirm before submit'}>
+            <span aria-hidden="true">✦</span><b>{zh ? 'AI 创建' : 'AI create'}</b>
+          </button>
+          <button type="button" className={'canvas-main-tool ' + (historyOpen ? 'is-active' : '')} onClick={toggleHistory} aria-expanded={historyOpen} aria-controls="canvas-history-panel" title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}>
+            <span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}
+          </button>
+          <button type="button" className="canvas-main-tool" onClick={() => void toggleCanvasFullscreen()} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}>
+            <span aria-hidden="true">⛶</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b>
+          </button>
+        </div>
         {selectedCanvasImageNode && selectedImageToolbarPosition && <div className="canvas-selected-asset-toolbar" style={{ left: selectedImageToolbarPosition.left, top: selectedImageToolbarPosition.top }} role="toolbar" aria-label={zh ? '图片节点操作' : 'Image node actions'} onPointerDown={event => event.stopPropagation()}>
           <span className="canvas-selected-asset-toolbar-label"><span aria-hidden="true">▧</span><b>{zh ? '图片节点' : 'IMAGE NODE'}</b></span>
           <button type="button" onClick={openSelectedImagePreview} disabled={!customNodePreviewUrls[selectedCanvasImageNode.id]}>{zh ? '高清查看' : 'View HD'}</button>
