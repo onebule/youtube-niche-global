@@ -8481,6 +8481,11 @@
 .video-canvas-stage .canvas-node-body p,
 .video-canvas-stage .canvas-node-body li,
 .video-canvas-stage .canvas-node-body dd,
+.video-canvas-stage .canvas-model-fields select,
+.video-canvas-stage .canvas-task-model > div b,
+.video-canvas-stage .canvas-omni-node-head b,
+.video-canvas-stage .canvas-agent-badge,
+.video-canvas-stage .canvas-agent-badge b,
 .video-canvas-stage .canvas-custom-node-body p,
 .video-canvas-stage .canvas-custom-node-body textarea {
   font-size: calc(13px / var(--canvas-readable-scale));
@@ -8490,7 +8495,11 @@
 .video-canvas-stage .canvas-node-body dt,
 .video-canvas-stage .canvas-node-body > small,
 .video-canvas-stage .canvas-custom-node-body small,
+.video-canvas-stage .canvas-model-fields label,
 .video-canvas-stage .canvas-task-model > div small,
+.video-canvas-stage .canvas-omni-node > small,
+.video-canvas-stage .canvas-omni-node-head span,
+.video-canvas-stage .canvas-agent-badge small,
 .video-canvas-stage .canvas-agent-confidence,
 .video-canvas-stage .canvas-agent-prerequisite,
 .video-canvas-stage .canvas-agent-warning {
