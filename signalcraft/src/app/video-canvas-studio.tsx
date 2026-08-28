@@ -2061,6 +2061,61 @@ export default function VideoCanvasStudio({
     if (selectedCustomNodeId === id) setSelectedCustomNodeId(null);
     notify(zh ? '自定义节点已移除，主生成链路未改变。' : 'Custom node removed; the main generation flow was unchanged.');
   };
+
+  const addSelectedImageToReferences = async () => {
+    const node = selectedCanvasImageNode;
+    if (!node?.assetId) {
+      notify(zh ? '这个图片节点还没有绑定可用素材。' : 'This image node is not bound to an available asset yet.');
+      return;
+    }
+    const existing = referenceFrames.find(frame => frame.assetId === node.assetId);
+    if (existing) {
+      setReferenceMode('omni');
+      setSelectedNodeId('source');
+      setSelectedCustomNodeId(null);
+      setHighlightedAssetId(existing.assetId);
+      notify(zh ? '这张图片已经在全能参考中。' : 'This image is already in the omni reference set.');
+      return;
+    }
+    if (referenceFrames.length >= 9) {
+      notify(zh ? '全能参考已达到 9 张上限，请先移除一张。' : 'The omni reference set is full. Remove one image first.');
+      return;
+    }
+    try {
+      const asset = await loadVideoAsset(node.assetId);
+      const usedIndexes = new Set(referenceFrames.map((frame, index) => frameReferenceIndex(frame, index)));
+      const referenceIndex = Array.from({ length: 9 }, (_, index) => index + 1).find(index => !usedIndexes.has(index)) || referenceFrames.length + 1;
+      const frame: UploadedFrame = {
+        assetId: node.assetId,
+        name: node.body || (zh ? '画布图片' : 'Canvas image'),
+        previewUrl: asset.url,
+        width: asset.width || 0,
+        height: asset.height || 0,
+        referenceIndex,
+      };
+      setReferenceMode('omni');
+      setReferenceFrames(current => [...current, frame].slice(0, 9));
+      rememberImageAsset(frame, 'reference');
+      const mention = bindMentionToFrame(frame, referenceIndex - 1);
+      setPrompt(current => current.includes(mention) ? current : `${current.trim()} ${mention}`.trim());
+      setAgentPlan(null);
+      setSelectedNodeId('source');
+      setSelectedCustomNodeId(null);
+      setHighlightedAssetId(node.assetId);
+      notify(zh ? `已加入全能参考，并插入 ${mention}。` : `Added to omni references and inserted ${mention}.`);
+    } catch (cause) {
+      setError(clientMessage(cause));
+    }
+  };
+
+  const openSelectedImagePreview = () => {
+    const url = selectedCanvasImageNode ? customNodePreviewUrls[selectedCanvasImageNode.id] : '';
+    if (!url) {
+      notify(zh ? '高清预览尚未准备好。' : 'The high-resolution preview is not ready yet.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
   const updateCustomNodeBody = (id: string, body: string) => {
     setCustomNodes(previous => previous.map(node => node.id === id ? { ...node, body: body.slice(0, 1200) } : node));
   };
@@ -2155,7 +2210,7 @@ export default function VideoCanvasStudio({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel')) return;
+    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) return;
     setSelectedNodeId(null);
     setSelectedCustomNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -2376,6 +2431,20 @@ export default function VideoCanvasStudio({
     };
   }, [viewport.scale, viewport.x, viewport.y, viewportSize.height, viewportSize.width]);
 
+  const selectedCanvasImageNode = useMemo(() => selectedCustomNodeId
+    ? customNodes.find(node => node.id === selectedCustomNodeId && node.type === 'image') || null
+    : null, [customNodes, selectedCustomNodeId]);
+  const selectedImageToolbarPosition = useMemo(() => {
+    if (!selectedCanvasImageNode) return null;
+    const toolbarWidth = 352;
+    const width = viewportSize.width || 900;
+    const height = viewportSize.height || 600;
+    return {
+      left: clamp((selectedCanvasImageNode.x + CUSTOM_NODE_SIZE.width / 2) * viewport.scale + viewport.x - toolbarWidth / 2, 12, Math.max(12, width - toolbarWidth - 12)),
+      top: clamp(selectedCanvasImageNode.y * viewport.scale + viewport.y - 64, 56, Math.max(56, height - 68)),
+    };
+  }, [selectedCanvasImageNode, viewport.scale, viewport.x, viewport.y, viewportSize.height, viewportSize.width]);
+
   const focusCanvasNode = (id: string) => {
     const node = graphNodes.get(id);
     const viewportElement = viewportRef.current;
@@ -2456,7 +2525,7 @@ export default function VideoCanvasStudio({
         onWheel={wheel}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel')) {
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) {
             setSelectedNodeId(null);
             setSelectedCustomNodeId(null);
           }
@@ -2483,6 +2552,12 @@ export default function VideoCanvasStudio({
           </div>
           <small>{zh ? '点击色块定位节点；拖动和缩放仍在主画布完成。' : 'Click a block to focus a node. Pan and zoom in the main canvas.'}</small>
         </aside>}
+        {selectedCanvasImageNode && selectedImageToolbarPosition && <div className="canvas-selected-asset-toolbar" style={{ left: selectedImageToolbarPosition.left, top: selectedImageToolbarPosition.top }} role="toolbar" aria-label={zh ? '图片节点操作' : 'Image node actions'} onPointerDown={event => event.stopPropagation()}>
+          <span className="canvas-selected-asset-toolbar-label"><span aria-hidden="true">▧</span><b>{zh ? '图片节点' : 'IMAGE NODE'}</b></span>
+          <button type="button" onClick={openSelectedImagePreview} disabled={!customNodePreviewUrls[selectedCanvasImageNode.id]}>{zh ? '高清查看' : 'View HD'}</button>
+          <button type="button" onClick={() => void addSelectedImageToReferences()} disabled={!selectedCanvasImageNode.assetId}>{zh ? '加入参考' : 'Add reference'}</button>
+          <button type="button" onClick={() => removeCustomNode(selectedCanvasImageNode.id)}>{zh ? '删除' : 'Delete'}</button>
+        </div>}
         <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
           <div
             className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
