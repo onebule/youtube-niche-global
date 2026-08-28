@@ -8635,6 +8635,110 @@
   .video-canvas-stage { will-change: auto; }
 }
 
+/* GPT-Image-2 creation drawer: a quiet paper surface that shares the canvas
+   palette while keeping the image workflow separate from video submission. */
+.image-generation-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 33, 39, .28);
+  backdrop-filter: blur(4px);
+}
+
+.image-generation-panel {
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid #c8d1ce;
+  border-radius: 20px;
+  background: #fffdf8;
+  color: #172127;
+  box-shadow: 12px 16px 0 rgba(91, 77, 60, .12), 0 24px 70px rgba(23, 33, 39, .24);
+}
+
+.image-generation-panel-head,
+.image-generation-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.image-generation-panel-head { border-bottom: 1px solid #e1e5e2; }
+.image-generation-panel-head > div { display: grid; gap: 4px; }
+.image-generation-panel-head span,
+.image-generation-result-head span {
+  color: #0d7b71;
+  font: 800 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .14em;
+}
+.image-generation-panel-head h2 { margin: 0; font: 760 24px/1.1 var(--canvas-font-serif, Georgia, serif); }
+.image-generation-panel-head small { color: #6e7775; font-size: 12px; }
+.image-generation-close { width: 34px; height: 34px; border: 1px solid #d3dbd8; border-radius: 50%; background: #f3f5f2; color: #172127; font-size: 22px; cursor: pointer; }
+.image-generation-field { display: grid; gap: 8px; }
+.image-generation-field > span { color: #52615e; font: 760 12px/1.2 var(--canvas-font-sans, Arial, sans-serif); }
+.image-generation-panel > .image-generation-field { padding: 20px 24px 0; }
+.image-generation-field textarea,
+.image-generation-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd6d2;
+  border-radius: 10px;
+  background: #f8faf7;
+  color: #172127;
+  font: 500 14px/1.55 var(--canvas-font-sans, Arial, sans-serif);
+}
+.image-generation-field textarea { min-height: 132px; padding: 12px 14px; resize: vertical; }
+.image-generation-field select { min-height: 42px; padding: 0 12px; }
+.image-generation-field textarea:focus-visible,
+.image-generation-field select:focus-visible,
+.image-generation-close:focus-visible,
+.image-generation-panel button:focus-visible,
+.image-generation-panel a:focus-visible { outline: 3px solid rgba(217, 74, 59, .24); outline-offset: 2px; }
+.image-generation-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 24px 0; }
+.image-generation-note { display: flex; gap: 10px; margin: 18px 24px 0; padding: 12px 14px; border: 1px solid #b9d8cf; border-radius: 10px; background: #edf8f2; color: #24675d; }
+.image-generation-note span { color: #d94a3b; font-size: 16px; }
+.image-generation-note p { margin: 0; font-size: 12px; line-height: 1.55; }
+.image-generation-error { margin: 14px 24px 0; color: #ae3c32; font-size: 13px; }
+.image-generation-result { margin: 18px 24px 0; padding: 14px; border: 1px solid #d1d9d5; border-radius: 12px; background: #f7faf7; }
+.image-generation-result.is-failed { border-color: #edc8c2; background: #fff5f1; }
+.image-generation-result-head { display: flex; align-items: end; justify-content: space-between; }
+.image-generation-result-head > div { display: grid; gap: 4px; }
+.image-generation-result-head b { font-size: 14px; }
+.image-generation-result-head strong { color: #0d7b71; font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.image-generation-progress { height: 7px; overflow: hidden; margin-top: 12px; border-radius: 999px; background: #dfe9e4; }
+.image-generation-progress i { display: block; height: 100%; border-radius: inherit; background: #0d7b71; transition: width .3s ease; }
+.image-generation-preview { display: block; width: 100%; max-height: 340px; margin-top: 14px; border-radius: 9px; object-fit: contain; background: #e9eeea; }
+.image-generation-result > p { margin: 12px 0 0; color: #ae3c32; font-size: 13px; line-height: 1.5; }
+.image-generation-result-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.image-generation-result-actions button,
+.image-generation-result-actions a { min-height: 36px; padding: 0 14px; border: 1px solid #cad4d0; border-radius: 8px; background: #fffdf8; color: #172127; font: 700 12px/36px var(--canvas-font-sans, Arial, sans-serif); text-decoration: none; cursor: pointer; }
+.image-generation-result-actions button.is-primary { border-color: #0d7b71; background: #0d7b71; color: #fff; }
+.image-generation-panel-foot { margin-top: 20px; border-top: 1px solid #e1e5e2; }
+.image-generation-cancel,
+.image-generation-submit { min-height: 42px; padding: 0 16px; border-radius: 9px; font: 760 13px/42px var(--canvas-font-sans, Arial, sans-serif); cursor: pointer; }
+.image-generation-cancel { border: 1px solid #cad4d0; background: transparent; color: #52615e; }
+.image-generation-submit { border: 1px solid #d94a3b; background: #d94a3b; color: #fffdf8; box-shadow: 0 3px 0 #a83c31; }
+.image-generation-submit span { margin-left: 10px; }
+.image-generation-submit:disabled { cursor: not-allowed; opacity: .45; box-shadow: none; }
+
+@media (max-width: 560px) {
+  .image-generation-backdrop { padding: 12px; place-items: end center; }
+  .image-generation-panel { max-height: calc(100vh - 24px); border-radius: 16px; }
+  .image-generation-options { grid-template-columns: 1fr; }
+  .image-generation-panel-head, .image-generation-panel-foot { padding: 16px 18px; }
+  .image-generation-panel > .image-generation-field, .image-generation-options, .image-generation-note, .image-generation-result { margin-left: 18px; margin-right: 18px; }
+  .image-generation-panel > .image-generation-field { padding-left: 0; padding-right: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-generation-progress i { transition: none; }
+}
+
 /* Production canvas controls: a small, readable command dock keeps the
    surface focused while exposing the existing actions at the moment they are
    useful.  It deliberately stays paper-first and uses coral only for the
@@ -8785,6 +8889,15 @@
   background: #c94337;
   color: #fffdf8;
   transform: translateY(-1px);
+}
+
+.canvas-main-tool-image > span,
+.canvas-node-palette-item.is-image-generator > span {
+  color: #0d7b71;
+}
+.canvas-node-palette-item.is-image-generator {
+  border-color: #b9d8cf;
+  background: #edf8f2;
 }
 
 .canvas-main-tool:disabled {

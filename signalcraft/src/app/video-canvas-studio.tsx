@@ -83,6 +83,7 @@ import {
   routeShot,
   type ModelRoutingStrategy,
 } from '@/src/lib/video-model-router';
+import ImageGenerationPanel from './image-generation-panel';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
@@ -510,6 +511,7 @@ export default function VideoCanvasStudio({
   const [comparePreviewLoading, setComparePreviewLoading] = useState(false);
   const [comparePreviewError, setComparePreviewError] = useState('');
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
+  const [imageGenerationOpen, setImageGenerationOpen] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
   const [composerCollapsed, setComposerCollapsed] = useState(false);
@@ -1863,6 +1865,15 @@ export default function VideoCanvasStudio({
       return next;
     });
   };
+  const openImageGeneration = () => {
+    setImageGenerationOpen(true);
+    setNodePaletteOpen(false);
+    setNodePaletteParentId(null);
+    setHistoryOpen(false);
+    setCompareOpen(false);
+    setTemplateOpen(false);
+    setMinimapOpen(false);
+  };
   const toggleMinimap = () => {
     const next = !minimapOpen;
     setMinimapOpen(next);
@@ -2241,6 +2252,43 @@ export default function VideoCanvasStudio({
     } catch (cause) {
       setError(clientMessage(cause));
     }
+  };
+
+  const addGeneratedImageToReferences = (assetId: string, previewUrl: string) => {
+    if (!assetId || !previewUrl) return;
+    if (referenceFrames.some(frame => frame.assetId === assetId)) {
+      setReferenceMode('omni');
+      setImageGenerationOpen(false);
+      notify(zh ? '这张 GPT-Image-2 图片已经在全能参考中。' : 'This GPT-Image-2 image is already in the omni reference set.');
+      return;
+    }
+    if (referenceFrames.length >= 9) {
+      notify(zh ? '全能参考已达到 9 张上限，请先移除一张。' : 'The omni reference set is full. Remove one image first.');
+      return;
+    }
+    const usedIndexes = new Set(referenceFrames.map((frame, index) => frameReferenceIndex(frame, index)));
+    const referenceIndex = Array.from({ length: 9 }, (_, index) => index + 1).find(index => !usedIndexes.has(index)) || referenceFrames.length + 1;
+    const frame: UploadedFrame = {
+      assetId,
+      name: 'GPT-Image-2.png',
+      previewUrl,
+      // Output-frame rows may not carry optional dimensions. A safe fallback
+      // keeps the provider-neutral preflight usable until metadata is added.
+      width: 1024,
+      height: 1024,
+      referenceIndex,
+    };
+    setReferenceMode('omni');
+    setReferenceFrames(current => [...current, frame].slice(0, 9));
+    rememberImageAsset(frame, 'reference');
+    const mention = bindMentionToFrame(frame, referenceIndex - 1);
+    setPrompt(current => current.includes(mention) ? current : `${current.trim()} ${mention}`.trim());
+    setAgentPlan(null);
+    setImageGenerationOpen(false);
+    setSelectedNodeId('source');
+    setSelectedCustomNodeId(null);
+    setHighlightedAssetId(assetId);
+    notify(zh ? `已把 GPT-Image-2 结果加入全能参考，并插入 ${mention}。` : `GPT-Image-2 result added to omni references as ${mention}.`);
   };
 
   const openSelectedImagePreview = () => {
@@ -2723,6 +2771,9 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-main-tool is-primary" onClick={handleAgentAction} title={zh ? '让 Agent 规划当前镜头；提交前仍需你确认' : 'Let the Agent plan this shot; you still confirm before submit'}>
             <span aria-hidden="true">✦</span><b>{zh ? 'AI 创建' : 'AI create'}</b>
           </button>
+          <button type="button" className="canvas-main-tool canvas-main-tool-image" onClick={openImageGeneration} title={zh ? '使用 GPT-Image-2 生成图片' : 'Generate an image with GPT-Image-2'}>
+            <span aria-hidden="true">▧</span><b>{zh ? 'AI 生图' : 'AI image'}</b>
+          </button>
           <button type="button" className={'canvas-main-tool ' + (historyOpen ? 'is-active' : '')} onClick={toggleHistory} aria-expanded={historyOpen} aria-controls="canvas-history-panel" title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}>
             <span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}
           </button>
@@ -2891,6 +2942,7 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
           <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{nodePaletteParentId ? (zh ? '添加图片步骤' : 'Add an image step') : (zh ? '加入 START / 参考图' : 'Add START / reference')}</small></label>
           <button type="button" className="canvas-node-palette-item" onClick={addVideoNode}><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><em className="canvas-node-palette-badge">{selectedModel?.enabled ? modelName(model) : (zh ? '选择模型' : 'Choose model')}</em><small>{zh ? '选择模型并写动作提示' : 'Choose a model and prompt'}</small></button>
+          <button type="button" className="canvas-node-palette-item is-image-generator" onClick={openImageGeneration}><span aria-hidden="true">✦</span><b>{zh ? 'AI 生图' : 'AI image'}</b><em className="canvas-node-palette-badge">GPT-Image-2</em><small>{zh ? '先生成图片，再加入当前镜头' : 'Generate an image, then use it in this shot'}</small></button>
           <button type="button" className="canvas-node-palette-item" onClick={addOtherNode}><span aria-hidden="true">✦</span><b>{zh ? '其他' : 'Other'}</b><small>{zh ? '自定义步骤或素材说明' : 'Custom step or asset note'}</small></button>
         </div></div>
         <div className="canvas-node-palette-section"><span>{zh ? '素材' : 'ASSETS'}</span><div className="canvas-node-palette-list">
@@ -2898,6 +2950,14 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-node-palette-row" onClick={addReferenceNode}><span aria-hidden="true">@</span><div><b>{zh ? '引用参考' : 'Reference set'}</b><small>{zh ? '切换到最多 9 张全能参考' : 'Switch to up to 9 omni references'}</small></div></button>
         </div></div>
       </aside>}
+
+      <ImageGenerationPanel
+        open={imageGenerationOpen}
+        zh={zh}
+        onClose={() => setImageGenerationOpen(false)}
+        onUseAsReference={addGeneratedImageToReferences}
+        notify={notify}
+      />
 
       {historyOpen && <aside id="canvas-history-panel" className="canvas-history-panel" role="region" aria-labelledby="canvas-history-title" onKeyDown={event => { if (event.key === 'Escape') setHistoryOpen(false); }}>
         <div className="canvas-history-head">
