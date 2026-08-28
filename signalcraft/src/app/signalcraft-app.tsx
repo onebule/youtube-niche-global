@@ -41,9 +41,9 @@ const defaultState:Persisted={saved:[],collections:initialCollections,ideas:init
 const EMPTY_VIDEO_LIST:Video[]=[];
 // These categories are fixed out of scope. Keep them out of both the visible
 // filter and the client-side saved-data guard; the API enforces the same rule.
-const categoryOptions=[['all','全部类别'],['2','汽车'],['15','宠物动物'],['17','体育'],['19','旅行'],['22','人物生活'],['23','喜剧'],['25','新闻政治'],['26','生活技巧'],['27','教育'],['28','科技'],['29','公益']];
+const categoryOptions=[['all','全部类别'],['2','汽车'],['15','宠物动物'],['19','旅行'],['22','人物生活'],['23','喜剧'],['26','生活技巧'],['27','教育'],['28','科技'],['29','公益']];
 const categoryLabel=(value:string)=>categoryOptions.find(([id])=>id===value)?.[1];
-const excludedTopics=new Set(['影视动画','音乐','游戏','娱乐']);
+const excludedTopics=new Set(['影视动画','音乐','体育','体育赛事','新闻政治','游戏','娱乐']);
 const matchesContentScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>!excludedTopics.has(video.topic)&&!video.tags.includes('儿童内容')&&(filters.category==='all'||video.topic===categoryLabel(filters.category));
 const matchesRankingScope=(video:Video,filters:ReturnType<typeof parseFilters>)=>{
   const subscribers=channelFor(video).subscribers;
@@ -114,7 +114,7 @@ function RankingFilters({filters,setFilters,locale}:{filters:ReturnType<typeof p
   const setBand=(band:string,kind:'subscribers'|'views')=>{const [min,max]=band==='all'?['0','all']:band.split('-');patch(kind==='subscribers'?{minSubs:min,maxSubs:max}:{minViews:min,maxViews:max});};
   const reset=()=>patch({format:'short',entity:'videos',window:'28d',minSubs:'0',maxSubs:'all',minViews:'0',maxViews:'all',display:'list',category:'all',language:'all'});
   return <aside className="ranking-filters ranking-rules" aria-label={copy.filterAria}>
-    <div><span className="eyebrow">{zh?'筛选':'Filters'}</span><h2>{zh?'按规则缩小范围':'Narrow the ranking'}</h2><p>{copy.fixedRule}</p></div>
+    <div><span className="eyebrow">{zh?'筛选':'Filters'}</span><h2>{zh?'按条件筛选':'Filter the ranking'}</h2></div>
     <RankingOptionGroup label={zh?'内容形态':'Content format'} value={filters.format==='long'?'long':'short'} onChange={value=>patch({format:value})} options={[{value:'short',label:zh?'短视频':'Short-form'},{value:'long',label:zh?'长视频':'Long-form'}]}/>
     <RankingOptionGroup label={zh?'榜单维度':'Ranking entity'} value={filters.entity} onChange={value=>patch({entity:value})} options={[{value:'videos',label:zh?'视频':'Videos'},{value:'channels',label:zh?'频道':'Channels'}]}/>
     <RankingOptionGroup label={zh?'时间窗口':'Time window'} value={filters.window} onChange={value=>patch({window:value})} options={[{value:'24h',label:zh?'24小时':'24h'},{value:'7d',label:zh?'7天':'7d'},{value:'28d',label:zh?'28天':'28d'},{value:'365d',label:zh?'历史数据':'History'}]}/>
