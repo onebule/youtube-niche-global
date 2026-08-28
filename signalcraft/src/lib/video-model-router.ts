@@ -61,6 +61,55 @@ export type ShotAnalysis = {
   priority: ModelRoutingStrategy;
 };
 
+export type ModelSelectionMode = 'AUTO' | 'MANUAL';
+export type GenerationAttemptStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type GenerationInputSnapshot = {
+  prompt: string;
+  startImageAssetId: string;
+  endImageAssetId: string | null;
+  duration: string;
+  aspectRatio: string;
+  resolution: string;
+};
+export type GenerationAttempt = {
+  id: string;
+  generationId: string | null;
+  modelId: RoutableVideoModelId;
+  shotId: string;
+  status: GenerationAttemptStatus;
+  errorType: string | null;
+  latency: number | null;
+  estimatedCost: number | null;
+  actualCost: number | null;
+  userSelected: boolean;
+  userFeedback: string | null;
+  input: GenerationInputSnapshot;
+  createdAt: string;
+};
+export type VideoCandidate = {
+  id: string;
+  shotId: string;
+  attemptId: string;
+  modelId: RoutableVideoModelId;
+  generationId: string | null;
+  status: GenerationAttemptStatus;
+  videoAssetId: string | null;
+  thumbnailAssetId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};
+export type ShotRouterState = {
+  selectionMode: ModelSelectionMode;
+  manualModelId: RoutableVideoModelId | null;
+  locked: boolean;
+  strategy: ModelRoutingStrategy;
+  analysis: ShotAnalysis;
+  lastRouting: ModelRoutingResult | null;
+  attempts: GenerationAttempt[];
+  candidates: VideoCandidate[];
+  activeCandidateId: string | null;
+};
+
 export type ModelRoutingAlternative = {
   modelId: RoutableVideoModelId;
   score: number;
