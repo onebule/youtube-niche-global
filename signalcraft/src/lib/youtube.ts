@@ -41,7 +41,7 @@ type ApiResponse = {
   nextPageToken?:string|null;
   dataScope?:PublicRankingScope;
   error?:string;
-  quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number|null;configured?:boolean;owner?:boolean;authenticated?:boolean;access_tier?:'guest'|'signed-in';ranking_limit?:number;account?:{email?:string}|null};
+  quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number|null;configured?:boolean;owner?:boolean;authenticated?:boolean;access_tier?:'guest'|'signed-in'|'owner';ranking_limit?:number;account?:{email?:string}|null};
 };
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
