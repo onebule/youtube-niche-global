@@ -8515,6 +8515,122 @@
   font-size: calc(13px / var(--canvas-readable-scale));
 }
 
+/* Selection context: keep the active node and its next action visible while
+   the creator pans a large workflow. The strip is viewport-level, so it stays
+   readable instead of shrinking with the stage transform. */
+.video-canvas-page .canvas-selection-context {
+  position: absolute;
+  z-index: 21;
+  top: 16px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(430px, calc(100% - 360px));
+  min-height: 48px;
+  padding: 7px 9px 7px 10px;
+  border: 1px solid var(--canvas-line-soft);
+  border-left: 3px solid var(--canvas-danger);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .97);
+  color: var(--canvas-line);
+  box-shadow: 5px 5px 0 rgba(31, 35, 40, .1);
+}
+
+.canvas-selection-context-mark {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--canvas-danger-soft);
+  color: var(--canvas-danger);
+  font-size: 12px;
+}
+
+.canvas-selection-context-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.canvas-selection-context-copy small {
+  color: var(--canvas-muted);
+  font: 800 9px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.canvas-selection-context-copy b {
+  overflow: hidden;
+  color: var(--canvas-line);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-canvas-page .canvas-selection-context button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--canvas-line-soft);
+  border-radius: 7px;
+  background: var(--canvas-paper);
+  color: var(--canvas-line);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.video-canvas-page .canvas-selection-context button:last-child {
+  border-color: var(--canvas-danger);
+  background: var(--canvas-danger);
+  color: #fff;
+}
+
+.video-canvas-page .canvas-selection-context button:hover,
+.video-canvas-page .canvas-selection-context button:focus-visible {
+  border-color: var(--canvas-danger);
+  background: var(--canvas-danger-soft);
+  color: #8e2f29;
+}
+
+.video-canvas-page .canvas-selection-context button:last-child:hover,
+.video-canvas-page .canvas-selection-context button:last-child:focus-visible {
+  background: #b93f35;
+  color: #fff;
+}
+
+.video-canvas-page .canvas-selection-context button:focus-visible {
+  outline: 3px solid rgba(217, 74, 59, .2);
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+  .video-canvas-page .canvas-selection-context {
+    right: 16px;
+    max-width: calc(100% - 32px);
+  }
+}
+
+@media (max-width: 560px) {
+  .video-canvas-page .canvas-selection-context {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    gap: 6px;
+    min-height: 44px;
+    padding: 6px 7px;
+  }
+
+  .video-canvas-page .canvas-selection-context button {
+    padding-inline: 8px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .video-canvas-stage { will-change: auto; }
 }
