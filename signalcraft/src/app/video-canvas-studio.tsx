@@ -1546,7 +1546,12 @@ export default function VideoCanvasStudio({
     const safeCursor = Math.max(0, Math.min(cursor, value.length));
     const before = value.slice(0, safeCursor);
     const at = before.lastIndexOf('@');
-    if (at < 0 || (at > 0 && !/[\s([{，。！？；：、“”‘’]/u.test(before[at - 1]))) {
+    // Allow Chinese text (for example “参考脚本@”) directly before the
+    // trigger while still avoiding email-like ASCII words such as `name@`.
+    // The previous implementation only accepted whitespace/punctuation, so
+    // the menu silently failed for the most natural Chinese sentence form.
+    const previous = at > 0 ? before[at - 1] : '';
+    if (at < 0 || /[A-Za-z0-9_@]/u.test(previous)) {
       setMentionMenuOpen(false);
       setMentionStart(null);
       return;
