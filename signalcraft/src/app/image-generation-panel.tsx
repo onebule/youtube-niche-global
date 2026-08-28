@@ -50,6 +50,7 @@ export default function ImageGenerationPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const completionNotified = useRef<string | null>(null);
+  const pollingHandle = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open || !task?.taskId || ['completed', 'failed'].includes(task.status)) return;
@@ -57,10 +58,11 @@ export default function ImageGenerationPanel({
     let timeout: number | undefined;
     const poll = async () => {
       try {
-        const next = await refreshImageGeneration(task.taskId);
+        const next = await refreshImageGeneration(pollingHandle.current || task.taskId);
         if (cancelled) return;
+        if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
         setError('');
-        setTask(previous => ({ ...previous, ...next }));
+        setTask(previous => ({ ...previous, ...next, taskId: pollingHandle.current || next.taskId }));
         if (!['completed', 'failed'].includes(next.status)) timeout = window.setTimeout(poll, 2400);
       } catch (cause) {
         if (!cancelled) {
@@ -100,9 +102,11 @@ export default function ImageGenerationPanel({
     setSubmitting(true);
     setError('');
     setTask(null);
+    pollingHandle.current = null;
     completionNotified.current = null;
     try {
       const next = await createImageGeneration({ prompt: prompt.trim(), size, resolution });
+      if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
       setTask(next);
     } catch (cause) {
       setError(clientMessage(cause, zh));
