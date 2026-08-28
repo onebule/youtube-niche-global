@@ -8825,6 +8825,11 @@
   box-shadow: 0 0 0 1px var(--canvas-danger), 0 0 0 5px rgba(217, 74, 59, .12), 7px 8px 0 rgba(91, 77, 60, .13);
 }
 
+.video-canvas-page .video-canvas-node.is-selected:hover,
+.video-canvas-page .video-canvas-node[data-selected='true']:hover {
+  box-shadow: 0 0 0 1px var(--canvas-danger), 0 0 0 5px rgba(217, 74, 59, .12), 7px 10px 0 rgba(91, 77, 60, .14);
+}
+
 .video-canvas-page .canvas-node-grip {
   color: var(--canvas-line);
 }
