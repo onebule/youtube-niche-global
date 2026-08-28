@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
@@ -2677,7 +2678,7 @@ export default function VideoCanvasStudio({
           <button type="button" onClick={() => void addSelectedImageToReferences()} disabled={!selectedCanvasImageNode.assetId}>{zh ? '加入参考' : 'Add reference'}</button>
           <button type="button" onClick={() => removeCustomNode(selectedCanvasImageNode.id)}>{zh ? '删除' : 'Delete'}</button>
         </div>}
-        <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')' }}>
+        <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')', '--canvas-zoom': viewport.scale } as CSSProperties}>
           <div
             className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
             data-shot-id={canvasSemantics.shot.id}

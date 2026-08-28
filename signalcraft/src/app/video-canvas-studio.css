@@ -8463,3 +8463,49 @@
   .canvas-node-add-next { right: -37px; width: 28px; height: 28px; }
   .canvas-custom-node { width: 250px !important; }
 }
+
+/* Zoom-aware typography: the stage is intentionally zoomable so a full shot
+   can stay in view, but the copy should not become a tiny bitmap at 74–82%.
+   Scale the key reading elements inversely with the stage transform while
+   keeping a safety floor for very small overview zooms. */
+.video-canvas-stage {
+  --canvas-readable-scale: max(var(--canvas-zoom, .82), .72);
+}
+
+.video-canvas-stage .canvas-node-grip b,
+.video-canvas-stage .canvas-custom-node .canvas-node-grip b {
+  font-size: calc(15px / var(--canvas-readable-scale));
+}
+
+.video-canvas-stage .canvas-node-body,
+.video-canvas-stage .canvas-node-body p,
+.video-canvas-stage .canvas-node-body li,
+.video-canvas-stage .canvas-node-body dd,
+.video-canvas-stage .canvas-custom-node-body p,
+.video-canvas-stage .canvas-custom-node-body textarea {
+  font-size: calc(13px / var(--canvas-readable-scale));
+}
+
+.video-canvas-stage .canvas-node-body small,
+.video-canvas-stage .canvas-node-body dt,
+.video-canvas-stage .canvas-node-body > small,
+.video-canvas-stage .canvas-custom-node-body small,
+.video-canvas-stage .canvas-task-model > div small,
+.video-canvas-stage .canvas-agent-confidence,
+.video-canvas-stage .canvas-agent-prerequisite,
+.video-canvas-stage .canvas-agent-warning {
+  font-size: calc(10.5px / var(--canvas-readable-scale));
+}
+
+.video-canvas-stage .canvas-agent-body p,
+.video-canvas-stage .canvas-task-state,
+.video-canvas-stage .canvas-status,
+.video-canvas-stage .canvas-result-empty p,
+.video-canvas-stage .canvas-result-actions button,
+.video-canvas-stage .canvas-task-model > button {
+  font-size: calc(13px / var(--canvas-readable-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-canvas-stage { will-change: auto; }
+}
