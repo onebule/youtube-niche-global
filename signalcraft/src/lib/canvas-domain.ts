@@ -177,7 +177,7 @@ const SHOT_STATUSES: CanvasShotStatus[] = ['draft', 'generating', 'completed', '
 const EDGE_TYPES: CanvasEdgeType[] = ['INPUT', 'REFERENCE', 'CONTINUITY', 'VARIATION', 'GENERATION', 'SHOT_FLOW'];
 const EVENT_TYPES: CanvasEventType[] = ['asset.bound', 'asset.invalidated', 'agent.planned', 'generation.status'];
 const EVENT_ACTORS: CanvasEventActor[] = ['user', 'agent', 'system'];
-const VIDEO_MODELS: VideoModelId[] = ['auto', 'seedance-2', 'seedance-2-5', 'minimax-h3'];
+const VIDEO_MODELS: VideoModelId[] = ['auto', 'seedance-2', 'seedance-2-5', 'minimax-h3', 'kling-3'];
 const MAX_SEMANTIC_ROWS = 100;
 
 function text(value: unknown, fallback = '', maximum = 160) {

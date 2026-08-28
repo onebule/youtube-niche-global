@@ -76,6 +76,12 @@ import {
   type VideoModelId,
   type ScriptOcrResult,
 } from '@/src/lib/video-generation';
+import {
+  analyzeShot,
+  registryWithApiModels,
+  routeShot,
+  type ModelRoutingStrategy,
+} from '@/src/lib/video-model-router';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
@@ -93,6 +99,7 @@ type SavedCanvas = {
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
+  routingStrategy?: ModelRoutingStrategy;
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
@@ -163,10 +170,12 @@ const CUSTOM_NODE_LABELS: Record<CanvasCustomNodeType, { zh: string; en: string;
 };
 
 const SCRIPT_OCR_MODEL_LABEL = 'GPT-5.6 Luna';
-const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : 'Auto';
+const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : model === 'kling-3' ? 'Kling 3.0' : 'Auto';
 const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
   ? (resolution === '2K' ? '2K' : '768P')
-  : ['480p', '720p', '1080p'].includes(resolution) ? resolution : '720p';
+  : model === 'kling-3'
+    ? (['720p', '1080p', '4K'].includes(resolution) ? resolution : '720p')
+    : ['480p', '720p', '1080p'].includes(resolution) ? resolution : '720p';
 const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGeneration) => {
   if (!previous || previous.id !== next.id) return next;
   return {
@@ -454,6 +463,7 @@ export default function VideoCanvasStudio({
   const [error, setError] = useState('');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState<VideoModelId>('seedance-2');
+  const [routingStrategy, setRoutingStrategy] = useState<ModelRoutingStrategy>('BALANCED');
   const [duration, setDuration] = useState('5s');
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16');
   const [resolution, setResolution] = useState('720p');
@@ -552,6 +562,7 @@ export default function VideoCanvasStudio({
     nodes: { ...nodes },
     prompt,
     model,
+    routingStrategy,
     duration,
     aspectRatio,
     resolution,
@@ -573,6 +584,7 @@ export default function VideoCanvasStudio({
     setNodes({ ...snapshot.nodes });
     setPrompt(snapshot.prompt);
     setModel(snapshot.model);
+    setRoutingStrategy(snapshot.routingStrategy || 'BALANCED');
     setDuration(normalizeVideoDuration(snapshot.model, snapshot.duration));
     setAspectRatio(snapshot.aspectRatio);
     setResolution(snapshot.resolution);
@@ -604,8 +616,24 @@ export default function VideoCanvasStudio({
     setMinimapOpen(false);
   };
 
-  const selectedModel = useMemo(() => models.find(item => item.id === model) || null, [models, model]);
+  const routingRegistry = useMemo(() => registryWithApiModels(models), [models]);
+  const shotAnalysis = useMemo(() => analyzeShot({
+    prompt,
+    startFrame: referenceMode === 'start-end' ? Boolean(startFrame) : false,
+    endFrame: referenceMode === 'start-end' ? Boolean(endFrame) : false,
+    referenceImages: referenceMode === 'omni' ? referenceFrames.length : 0,
+    referenceMode,
+    duration: Number.parseInt(duration, 10),
+    resolution,
+    aspectRatio,
+    priority: routingStrategy,
+  }), [aspectRatio, duration, endFrame, prompt, referenceFrames.length, referenceMode, resolution, routingStrategy, startFrame]);
+  const routingResult = useMemo(() => routeShot(shotAnalysis, routingStrategy, routingRegistry), [routingRegistry, routingStrategy, shotAnalysis]);
+  const effectiveModel = model === 'auto' ? routingResult.recommendedModel : model;
+  const selectedModel = useMemo(() => models.find(item => item.id === effectiveModel) || null, [effectiveModel, models]);
   const estimatedCredits = useMemo(() => estimateVideoCredits(selectedModel, duration), [duration, selectedModel]);
+  const settingsModel = effectiveModel || 'seedance-2';
+  const resolutionOptions = settingsModel === 'minimax-h3' ? ['768P', '2K'] : settingsModel === 'kling-3' ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
   const nodeSize = useMemo<Record<NodeId, { width: number; height: number }>>(() => ({
     ...NODE_SIZE,
     source: {
@@ -672,10 +700,10 @@ export default function VideoCanvasStudio({
     .filter(event => event.shotId === canvasSemantics.shot.id)
     .slice(-5)
     .reverse(), [canvasSemantics.events, canvasSemantics.shot.id]);
-  const referenceModeSupported = referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(model);
+  const referenceModeSupported = effectiveModel !== null && (referenceMode !== 'omni' || ['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(effectiveModel));
   const preflight = useMemo(() => preflightVideoGeneration({
     language: zh ? 'zh' : 'en',
-    model,
+    model: effectiveModel || 'auto',
     modelReady: Boolean(selectedModel?.enabled),
     prompt,
     referenceMode,
@@ -687,9 +715,9 @@ export default function VideoCanvasStudio({
     resolution,
     unboundMentionCount: assetMentionValidation.unbound.length,
     invalidMentionCount: assetMentionValidation.invalid.length,
-  }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, endFrame, model, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
+  }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, effectiveModel, endFrame, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
-  const canGenerate = Boolean(effectiveAccess === 'ready' && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
+  const canGenerate = Boolean(effectiveAccess === 'ready' && effectiveModel && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
   const shotActionsDisabled = submitting || cancelling || Boolean(uploading) || generationInFlight;
   const agentPlanBlockedReason = !prompt.trim()
     ? (zh ? '先在下方填写 Motion Prompt' : 'Add a Motion Prompt below first')
@@ -767,7 +795,7 @@ export default function VideoCanvasStudio({
     .filter(version => version.shotId === canvasSemantics.shot.id)
     .sort((left, right) => left.number - right.number)
     .map(version => ({ version, generation: history.find(item => item.id === version.generationId) || null })), [canvasSemantics, history]);
-  const alternateModel: Exclude<VideoModelId, 'auto'> = model === 'minimax-h3' ? 'seedance-2-5' : 'minimax-h3';
+  const alternateModel: Exclude<VideoModelId, 'auto'> = model === 'minimax-h3' || model === 'kling-3' ? 'seedance-2-5' : 'minimax-h3';
   const alternateModelDetails = useMemo(() => models.find(item => item.id === alternateModel) || null, [alternateModel, models]);
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
   const shotRailItems = useMemo(() => {
@@ -1097,6 +1125,7 @@ export default function VideoCanvasStudio({
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
           setModel(restoredModel);
+          setRoutingStrategy(saved.routingStrategy || 'BALANCED');
           setDuration(normalizeVideoDuration(restoredModel, saved.duration || '5s'));
           setAspectRatio(saved.aspectRatio || '9:16');
           setResolution(saved.resolution || '720p');
@@ -1130,6 +1159,7 @@ export default function VideoCanvasStudio({
       nodes: { ...nodes },
       prompt,
       model,
+      routingStrategy,
       duration,
       aspectRatio,
       resolution,
@@ -1153,6 +1183,7 @@ export default function VideoCanvasStudio({
       nodes,
       prompt,
       model,
+      routingStrategy,
       duration,
       aspectRatio,
       resolution,
@@ -1171,7 +1202,7 @@ export default function VideoCanvasStudio({
       customEdges: customEdges.map(edge => ({ ...edge })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1191,6 +1222,7 @@ export default function VideoCanvasStudio({
       setModels(next);
       setAccess('ready');
       setModel(currentModel => {
+        if (currentModel === 'auto') return currentModel;
         const current = next.find(item => item.id === currentModel);
         if (current?.enabled) return currentModel;
         const enabled = next.find(item => item.enabled && item.id !== 'auto');
@@ -1619,18 +1651,18 @@ export default function VideoCanvasStudio({
 
   const changeReferenceMode = (next: ReferenceMode) => {
     setReferenceMode(next);
-    if (next === 'omni') {
-      if (model !== 'minimax-h3' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
-    }
+    if (next === 'omni' && model === 'kling-3') notify(zh ? 'Kling 3.0 仅支持 START/END 首尾帧；请切换到 H3 或 Seedance 使用多图参考。' : 'Kling 3.0 supports START/END only. Switch to H3 or Seedance for Omni references.');
+    if (next === 'omni' && model !== 'minimax-h3' && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
   };
 
   const selectModel = (next: VideoModelId) => {
     // MiniMax H3 supports both FL2VA (start/end) and Ref2VA (multi-reference)
     // inputs. Keep the model selectable in either reference mode.
     setModel(next);
-    patchSemanticNode('task', { model: next, provider: next === 'minimax-h3' ? 'minimax' : next === 'auto' ? null : 'seedance' });
+    patchSemanticNode('task', { model: next, provider: next === 'minimax-h3' ? 'minimax' : next === 'auto' ? null : next === 'kling-3' ? 'kling' : 'seedance' });
     setDuration(current => normalizeVideoDuration(next, current));
     if (next === 'minimax-h3') setResolution('768P');
+    if (next === 'kling-3' && !['720p', '1080p', '4K'].includes(resolution)) setResolution('720p');
     if (['seedance-2', 'seedance-2-5'].includes(next) && !['480p', '720p', '1080p'].includes(resolution)) setResolution('720p');
   };
 
@@ -1900,12 +1932,12 @@ export default function VideoCanvasStudio({
 
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
-    if (!canGenerate || !primaryFrame) return;
+    if (!canGenerate || !primaryFrame || !effectiveModel) return;
     setSubmitting(true);
     setError('');
     setVideoUrl('');
     try {
-      if (model === 'minimax-h3') {
+      if (effectiveModel === 'minimax-h3') {
         if (referenceMode === 'omni') referenceFrames.forEach((frame, index) => assertMiniMaxFrame(frame, `${zh ? '参考图' : 'Reference image'} ${index + 1}`));
         else if (startFrame) {
           assertMiniMaxFrame(startFrame, 'START');
@@ -1913,7 +1945,7 @@ export default function VideoCanvasStudio({
         }
       }
       const next = await createVideoGeneration({
-        model,
+        model: effectiveModel,
         prompt: prompt.trim(),
         startImageAssetId: primaryFrame.assetId,
         endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
@@ -2906,19 +2938,20 @@ export default function VideoCanvasStudio({
                     <div><span>{zh ? '生成偏好' : 'Generation preferences'}</span><b id="canvas-preferences-title">{zh ? '把这一镜头的参数收在一起' : 'Keep this shot’s settings together'}</b></div>
                     <button type="button" className="canvas-preferences-close" aria-label={zh ? '关闭生成偏好' : 'Close generation preferences'} onClick={() => setPreferencesOpen(false)}>×</button>
                   </div>
-                  <div className="canvas-preferences-auto" aria-disabled="true">
-                    <div><b>{zh ? '智能推荐' : 'Auto recommend'}</b><small>{zh ? '根据 Prompt 自动选择模型（即将开放）' : 'Choose a model from the prompt (coming soon)'}</small></div>
-                    <span className="canvas-preferences-toggle" aria-hidden="true"><i /></span>
+                  <div className="canvas-preferences-auto">
+                    <div><b>{zh ? '智能推荐' : 'Auto recommend'}</b><small>{routingResult.recommendedModel ? (zh ? `推荐 ${modelName(routingResult.recommendedModel)} · ${routingResult.score} 分` : `Recommends ${modelName(routingResult.recommendedModel)} · ${routingResult.score}`) : (zh ? '当前镜头暂无可用模型' : 'No eligible model for this shot')}</small></div>
+                    <select value={routingStrategy} aria-label={zh ? '模型路由策略' : 'Model routing strategy'} onChange={event => setRoutingStrategy(event.target.value as ModelRoutingStrategy)}><option value="BALANCED">{zh ? '均衡' : 'Balanced'}</option><option value="COST">{zh ? '成本优先' : 'Cost first'}</option><option value="QUALITY">{zh ? '质量优先' : 'Quality first'}</option></select>
                   </div>
+                  {model === 'auto' && <div className="canvas-router-summary"><strong>{zh ? '本镜头推荐' : 'Recommended for this shot'}：{routingResult.recommendedModel ? modelName(routingResult.recommendedModel) : '—'}</strong><p>{routingResult.reason.slice(0, 3).join(' · ')}</p><div>{routingResult.alternatives.slice(0, 3).map(item => <span key={item.modelId}>{modelName(item.modelId as VideoModelId)} {item.score}</span>)}</div></div>}
                   <div className="canvas-preferences-grid">
-                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型' : 'Model'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto" disabled>Auto · {zh ? '即将开放' : 'Coming soon'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型模式' : 'Model mode'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto">Auto · {zh ? '智能推荐' : 'Smart routing'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
                     <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '参考模式' : 'Reference mode'}</span><select value={referenceMode} onChange={event => changeReferenceMode(event.target.value as ReferenceMode)}><option value="start-end">{zh ? '首尾帧参考' : 'Start / end'}</option><option value="omni">{zh ? '全能参考 · 多图' : 'Omni · multi-image'}</option></select></label>
                     <fieldset className="canvas-preference-field canvas-preference-ratio-field"><legend>{zh ? '画幅' : 'Aspect ratio'}</legend><div className="canvas-preference-ratios">{ASPECT_RATIO_OPTIONS.map(option => {
                       const disabled = model === 'minimax-h3' && referenceMode !== 'omni';
                       return <button key={option.value} type="button" className={'canvas-ratio-option ' + (aspectRatio === option.value ? 'is-selected ' : '') + option.className} aria-pressed={aspectRatio === option.value} disabled={disabled} onClick={() => setAspectRatio(option.value)}><span className="canvas-ratio-icon" aria-hidden="true" /><b>{option.label}</b></button>;
                     })}</div></fieldset>
-                    <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{(model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p']).map(value => <option key={value}>{value}</option>)}</select></label>
-                    <label className="canvas-preference-field"><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(model).map(value => <option key={value}>{value}</option>)}</select></label>
+                    <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{resolutionOptions.map(value => <option key={value}>{value}</option>)}</select></label>
+                    <label className="canvas-preference-field"><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(settingsModel).map(value => <option key={value}>{value}</option>)}</select></label>
                   </div>
                   <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置会自动保存到本地' : 'Settings save locally'}</em></div>
                 </div>}

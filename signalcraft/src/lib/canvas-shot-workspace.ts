@@ -1,6 +1,7 @@
 import { type CanvasNodePositions } from './canvas-commands';
 import { normalizeCanvasSemantics, type CanvasAgentContext, type CanvasNodeId, type CanvasSemantics } from './canvas-domain';
 import { normalizeVideoDuration, type VideoGeneration, type VideoGenerationPlan, type VideoModelId } from './video-generation';
+import type { ModelRoutingStrategy } from './video-model-router';
 
 export type CanvasAspectRatio = '9:16' | '16:9' | '1:1';
 export type CanvasReferenceMode = 'start-end' | 'omni';
@@ -27,6 +28,7 @@ export type ShotSnapshot = {
   nodes: CanvasNodePositions;
   prompt: string;
   model: VideoModelId;
+  routingStrategy?: ModelRoutingStrategy;
   duration: string;
   aspectRatio: CanvasAspectRatio;
   resolution: string;
@@ -49,6 +51,7 @@ export type SavedShot = {
   nodes: CanvasNodePositions;
   prompt: string;
   model: VideoModelId;
+  routingStrategy?: ModelRoutingStrategy;
   duration: string;
   aspectRatio: CanvasAspectRatio;
   resolution: string;
@@ -119,6 +122,7 @@ export function restoreSavedShot(saved: SavedShot, restoreNodes: (value: unknown
     nodes: restoreNodes(saved.nodes),
     prompt: saved.prompt || '',
     model,
+    routingStrategy: saved.routingStrategy || 'BALANCED',
     duration: normalizeVideoDuration(model, saved.duration || '5s'),
     aspectRatio: saved.aspectRatio || '9:16',
     resolution: saved.resolution || '720p',
@@ -258,6 +262,7 @@ export function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
     nodes: snapshot.nodes,
     prompt: snapshot.prompt,
     model: snapshot.model,
+    routingStrategy: snapshot.routingStrategy || 'BALANCED',
     duration: snapshot.duration,
     aspectRatio: snapshot.aspectRatio,
     resolution: snapshot.resolution,

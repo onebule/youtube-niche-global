@@ -3,7 +3,7 @@
 import { authHeaders } from './auth';
 import type { CanvasAgentAction, CanvasAgentContext, CanvasAssetReference } from './canvas-domain';
 
-export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3';
+export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3' | 'kling-3';
 export type GenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export type VideoGenerationCancellation = 'confirmed' | 'requested' | 'unsupported' | 'failed' | 'not_applicable';
@@ -61,6 +61,7 @@ const VIDEO_GENERATION_TIME_PROFILES: Record<VideoModelId, VideoGenerationTimePr
   'seedance-2': { minSeconds: 60, maxSeconds: 240 },
   'seedance-2-5': { minSeconds: 90, maxSeconds: 300 },
   'minimax-h3': { minSeconds: 60, maxSeconds: 180 },
+  'kling-3': { minSeconds: 75, maxSeconds: 240 },
 };
 
 export type VideoGenerationTimeEstimate = {
@@ -157,6 +158,7 @@ const VIDEO_DURATION_LIMITS: Record<VideoModelId, { min: number; max: number }> 
   'seedance-2': { min: 5, max: 15 },
   'seedance-2-5': { min: 4, max: 30 },
   'minimax-h3': { min: 4, max: 15 },
+  'kling-3': { min: 3, max: 15 },
 };
 
 export function videoDurationOptions(model: VideoModelId) {
@@ -217,7 +219,9 @@ export function preflightVideoGeneration(input: {
   const unboundMentionCount = Math.max(0, Number(input.unboundMentionCount) || 0);
   const invalidMentionCount = Math.max(0, Number(input.invalidMentionCount) || 0);
   const modelLimits = VIDEO_DURATION_LIMITS[input.model] || VIDEO_DURATION_LIMITS.auto;
-  const resolutions = input.model === 'minimax-h3' ? ['768P', '2K'] : ['480p', '720p', '1080p'];
+  const resolutions = input.model === 'minimax-h3'
+    ? ['768P', '2K']
+    : input.model === 'kling-3' ? ['720p', '1080p', '4K'] : ['480p', '720p', '1080p'];
   const frames = input.referenceMode === 'omni'
     ? (input.referenceFrames || [])
     : [input.startFrame, input.endFrame].filter((frame): frame is PreflightFrame => Boolean(frame));
@@ -232,13 +236,14 @@ export function preflightVideoGeneration(input: {
   } else if (!input.startFrame) {
     add('error', 'START_REQUIRED', copy('首尾帧模式需要 START 图片。', 'Start / end mode needs a START image.'));
   }
-  if (!['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(input.model)) {
+  if (input.referenceMode === 'omni' && !['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(input.model)) {
     add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('当前模型不支持所选参考模式。', 'This model does not support the selected reference mode.'));
   }
   const durationSeconds = Number.parseInt(duration, 10);
   const requestedDurationSeconds = Number.parseInt(String(input.duration || ''), 10);
   if (Number.isFinite(requestedDurationSeconds) && (requestedDurationSeconds < modelLimits.min || requestedDurationSeconds > modelLimits.max)) {
-    add('error', 'DURATION_UNSUPPORTED', copy(`${input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : 'Seedance 2.0'} 时长需在 ${modelLimits.min}–${modelLimits.max} 秒之间。`, `${input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : 'Seedance 2.0'} supports ${modelLimits.min}–${modelLimits.max} seconds.`));
+    const modelLabel = input.model === 'minimax-h3' ? 'MiniMax H3' : input.model === 'seedance-2-5' ? 'Seedance 2.5' : input.model === 'kling-3' ? 'Kling 3.0' : 'Seedance 2.0';
+    add('error', 'DURATION_UNSUPPORTED', copy(`${modelLabel} 时长需在 ${modelLimits.min}–${modelLimits.max} 秒之间。`, `${modelLabel} supports ${modelLimits.min}–${modelLimits.max} seconds.`));
   }
   if (!resolutions.includes(input.resolution)) add('error', 'RESOLUTION_UNSUPPORTED', copy(`当前模型不支持 ${input.resolution}，可用分辨率为 ${resolutions.join('、')}。`, `${input.resolution} is not supported by this model. Use ${resolutions.join(', ')}.`));
   if (input.model === 'minimax-h3' && input.referenceMode === 'start-end') add('warning', 'H3_RATIO_FOLLOWS_START', copy('MiniMax H3 首尾帧模式会沿用 START 图片比例。', 'MiniMax H3 start / end mode follows the START image ratio.'));
