@@ -22,7 +22,7 @@ export type LongformOpportunity = {
 export type LongformResponse = {
   available: boolean;
   engineVersion: string;
-  dataScope: { source: string; markets: string[]; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; note: string };
+  dataScope: { source: string; markets: string[]; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; marketSampleLimit?: number; failedMarkets?: string[]; note: string };
   availabilityAudit: { coverage: number; availableFields: number; unavailableFields: number; fields: Record<string, { available: boolean; provenance: string; confidence: string; note: string | null }> };
   lanes: Record<string, number>;
   opportunities: LongformOpportunity[];
