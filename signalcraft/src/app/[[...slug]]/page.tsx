@@ -18,6 +18,10 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     title: 'YouTube 机会雷达',
     description: '从公开数据中筛选低粉高播、快速增长和值得验证的 YouTube 内容机会。',
   },
+  '/longform': {
+    title: 'YouTube 长视频机会发现',
+    description: '基于公开采集样本，分开评估长视频市场机会、执行适配和进入信号。',
+  },
   '/doctor': {
     title: 'YouTube 频道诊断',
     description: '输入公开频道链接，检查频道结构、内容节奏与可验证的增长信号。',

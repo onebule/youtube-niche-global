@@ -4,7 +4,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://niqivo.top';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  const publicRoutes = ['/', '/discover', '/rankings', '/radar', '/doctor', '/methodology', '/pricing'];
+  const publicRoutes = ['/', '/discover', '/rankings', '/radar', '/longform', '/doctor', '/methodology', '/pricing'];
 
   return publicRoutes.map(path => ({
     url: `${siteUrl}${path}`,

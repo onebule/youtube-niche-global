@@ -19,6 +19,7 @@ const ChannelDoctor = dynamic(() => import('./channel-doctor'), { loading: Route
 const OwnerConsole = dynamic(() => import('./owner-console'), { loading: RouteLoading });
 const ImageToVideoStudio = dynamic(() => import('./image-to-video-studio'), { loading: RouteLoading });
 const VideoCanvasStudio = dynamic(() => import('./video-canvas-studio'), { loading: RouteLoading });
+const LongformOpportunities = dynamic(() => import('./longform-opportunities'), { loading: RouteLoading });
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || 'SignalCraft';
 const cn = (...names:(string|false|undefined)[]) => names.filter(Boolean).join(' ');
@@ -80,7 +81,7 @@ function Empty({title,body,action}:{title:string;body:string;action?:React.React
 function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange,isOwner}:{path:string;onTheme:()=>void;account:AccountSession|null;onSignIn:()=>void;onSignOut:()=>void;locale:UiLocale;onLocaleChange:(locale:UiLocale)=>void;isOwner:boolean}){
   const isApp=path.startsWith('/app');
   const copy=languageCopy[locale];
-  const publicItems=[['/discover',copy.nav[0]],['/rankings',copy.nav[1]],['/radar',copy.nav[2]],['/doctor',copy.nav[3]],['/pricing',copy.nav[4]]];
+  const publicItems=[['/discover',copy.nav[0]],['/rankings',copy.nav[1]],['/radar',copy.nav[2]],['/longform',locale==='zh'?'长视频机会':'Long-form'],['/doctor',copy.nav[3]],['/pricing',copy.nav[4]]];
   const appItems=[['/app',copy.studioNav[0]],['/app/research',copy.studioNav[1]],['/app/ideas',copy.studioNav[2]]];
   const items=isApp?appItems:publicItems;
   return <><header className="site-header"><button className="brand" onClick={()=>navigate('/')} aria-label={copy.backHome}><span className="brand-glyph">SC</span><span>{BRAND}<small>CONTENT INTELLIGENCE</small></span></button><nav className="site-nav" aria-label={locale==='zh'?'主导航':'Main navigation'}>{items.map(([href,label])=><button key={href} className={path===href?'active':''} aria-current={path===href?'page':undefined} onClick={()=>navigate(href)}>{label}</button>)}</nav><div className="head-actions"><div className="locale-toggle" role="group" aria-label={copy.interfaceLanguage}><button type="button" className={locale==='zh'?'active':''} aria-pressed={locale==='zh'} onClick={()=>onLocaleChange('zh')}>中文</button><button type="button" className={locale==='en'?'active':''} aria-pressed={locale==='en'} onClick={()=>onLocaleChange('en')}>EN</button></div><button className="icon-btn" onClick={onTheme} aria-label={copy.theme}>◐</button><button className="ghost" onClick={()=>navigate(isApp?'/discover':'/app')}>{isApp?copy.publicDiscovery:copy.enterStudio}</button>{isOwner&&<button className="owner-link" onClick={()=>navigate('/owner')}>{locale==='zh'?'站点管理':'Site admin'}</button>}{account?<button className="account-chip" onClick={onSignOut} title={copy.signOut}><span>●</span>{account.email}</button>:<button className="google-login" onClick={onSignIn} title={copy.signInTitle}><span>G</span>{copy.signIn}</button>}</div></header>{isApp&&<StudioNav path={path} locale={locale}/>}</>
@@ -350,9 +351,11 @@ export default function SignalCraftApp() {
       ? <Discovery mode="discover" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
-        : path === '/radar'
-          ? <Discovery mode="radar" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
-          : path === '/doctor' || path === '/app/doctor'
+    : path === '/radar'
+      ? <Discovery mode="radar" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+      : path === '/longform'
+        ? <LongformOpportunities locale={locale} />
+      : path === '/doctor' || path === '/app/doctor'
             ? <ChannelDoctor />
             : path === '/methodology'
               ? <Methodology />
