@@ -189,16 +189,16 @@ export default function ImageGenerationPanel({
         <label className="image-generation-field"><span>{zh ? '输出分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value as ImageGenerationResolution)}>{RESOLUTION_OPTIONS.map(option => <option value={option.value} key={option.value}>{zh ? option.label : option.value.toUpperCase()}</option>)}</select></label>
       </div>
       <div className="image-generation-note"><span aria-hidden="true">✦</span><p>{zh ? '生成结果会先转存到私有媒体，再出现在画布中；生成过程中请保持此面板打开。' : 'Results are copied into private media before appearing on the canvas. Keep this panel open while the task is running.'}</p></div>
-      {history.length > 0 && <section className="image-generation-history" aria-label={zh ? '最近图片任务' : 'Recent image tasks'}>
+      <section className="image-generation-history" aria-label={zh ? '最近图片任务' : 'Recent image tasks'}>
         <div className="image-generation-history-head"><div><span>{zh ? '最近任务' : 'RECENT TASKS'}</span><b>{zh ? '已有生成记录' : 'Saved on this browser'}</b></div><small>{zh ? '点击可恢复任务' : 'Click to resume'}</small></div>
-        <div className="image-generation-history-list">
+        {history.length > 0 ? <div className="image-generation-history-list">
           {history.slice(0, 6).map(item => <button type="button" className={'image-generation-history-item is-' + item.status} key={item.taskId} onClick={() => void restore(item)} disabled={busy}>
             <i aria-hidden="true" />
             <span><strong>{item.prompt || (zh ? '未命名任务' : 'Untitled task')}</strong><small>{historyTime(item.createdAt, zh)} · {statusLabel(item.status, zh)}</small></span>
             <em>{item.status === 'completed' ? '✓' : item.status === 'failed' ? '!' : `${Math.round(item.progress)}%`}</em>
           </button>)}
-        </div>
-      </section>}
+        </div> : <p className="image-generation-history-empty">{zh ? '当前浏览器还没有可恢复的任务。提交一次后，任务会保留在这里，重新打开即可继续查看。' : 'No resumable tasks on this browser yet. Submit once and the task will stay here for quick resume.'}</p>}
+      </section>
       {error && <p className="image-generation-error" role="alert">{error}</p>}
       {task && <section className={'image-generation-result is-' + task.status} aria-live="polite">
         <div className="image-generation-result-head"><div><span>{zh ? '任务状态' : 'TASK STATUS'}</span><b>{statusLabel(task.status, zh)}</b></div><strong>{Math.round(task.progress)}%</strong></div>

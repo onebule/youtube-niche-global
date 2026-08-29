@@ -8710,6 +8710,7 @@
 .image-generation-history-head b { color: #2a3736; font-size: 13px; }
 .image-generation-history-head small { color: #788380; font-size: 11px; }
 .image-generation-history-list { display: grid; gap: 6px; margin-top: 10px; }
+.image-generation-history-empty { margin: 10px 0 2px; color: #788380; font-size: 11px; line-height: 1.55; }
 .image-generation-history-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 9px 8px; border: 1px solid transparent; border-radius: 8px; background: #fffdf8; color: #253239; text-align: left; cursor: pointer; }
 .image-generation-history-item:hover:not(:disabled) { border-color: #b9d8cf; background: #f1f8f4; }
 .image-generation-history-item:disabled { cursor: not-allowed; opacity: .6; }
