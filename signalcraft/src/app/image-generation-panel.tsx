@@ -4,10 +4,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   createImageGeneration,
+  readImageGenerationHistory,
   refreshImageGeneration,
   type ImageGeneration,
   type ImageGenerationResolution,
   type ImageGenerationSize,
+  upsertImageGenerationHistory,
+  writeImageGenerationHistory,
 } from '@/src/lib/image-generation';
 import { VideoGenerationClientError } from '@/src/lib/video-generation';
 
@@ -30,6 +33,20 @@ function clientMessage(cause: unknown, zh: boolean) {
   return zh ? '图片生成服务暂时不可用，请稍后重试。' : 'Image generation is temporarily unavailable. Try again later.';
 }
 
+function statusLabel(status: ImageGeneration['status'], zh: boolean) {
+  if (status === 'queued') return zh ? '排队中' : 'Queued';
+  if (status === 'processing') return zh ? '生成中' : 'Processing';
+  if (status === 'completed') return zh ? '已完成' : 'Completed';
+  return zh ? '生成失败' : 'Failed';
+}
+
+function historyTime(value: string | null, zh: boolean) {
+  if (!value) return zh ? '刚刚' : 'Just now';
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return zh ? '最近' : 'Recent';
+  return time.toLocaleString(zh ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function ImageGenerationPanel({
   open,
   zh,
@@ -47,10 +64,39 @@ export default function ImageGenerationPanel({
   const [size, setSize] = useState<ImageGenerationSize>('16:9');
   const [resolution, setResolution] = useState<ImageGenerationResolution>('2k');
   const [task, setTask] = useState<ImageGeneration | null>(null);
+  const [history, setHistory] = useState<ImageGeneration[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const completionNotified = useRef<string | null>(null);
   const pollingHandle = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open || task) return;
+    // Defer the state sync one tick: localStorage is an external source and
+    // should not trigger a synchronous cascading render from the effect body.
+    const timer = window.setTimeout(() => {
+      const saved = readImageGenerationHistory();
+      setHistory(saved);
+      const active = saved.find(item => item.status === 'queued' || item.status === 'processing');
+      if (active) {
+        pollingHandle.current = active.taskId;
+        setTask(active);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open, task]);
+
+  useEffect(() => {
+    if (!task) return;
+    const timer = window.setTimeout(() => {
+      setHistory(previous => {
+        const next = upsertImageGenerationHistory(previous, task);
+        writeImageGenerationHistory(next);
+        return next;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [task]);
 
   useEffect(() => {
     if (!open || !task?.taskId || ['completed', 'failed'].includes(task.status)) return;
@@ -97,6 +143,22 @@ export default function ImageGenerationPanel({
   if (!open) return null;
 
   const busy = submitting || task?.status === 'queued' || task?.status === 'processing';
+  const restore = async (item: ImageGeneration) => {
+    if (busy) return;
+    setError('');
+    setSubmitting(true);
+    pollingHandle.current = item.taskId;
+    setTask(item);
+    try {
+      const next = await refreshImageGeneration(item.taskId);
+      if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
+      setTask(previous => ({ ...previous, ...next, taskId: pollingHandle.current || next.taskId }));
+    } catch (cause) {
+      setError(clientMessage(cause, zh));
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const generate = async () => {
     if (!prompt.trim() || busy) return;
     setSubmitting(true);
@@ -127,9 +189,19 @@ export default function ImageGenerationPanel({
         <label className="image-generation-field"><span>{zh ? '输出分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value as ImageGenerationResolution)}>{RESOLUTION_OPTIONS.map(option => <option value={option.value} key={option.value}>{zh ? option.label : option.value.toUpperCase()}</option>)}</select></label>
       </div>
       <div className="image-generation-note"><span aria-hidden="true">✦</span><p>{zh ? '生成结果会先转存到私有媒体，再出现在画布中；生成过程中请保持此面板打开。' : 'Results are copied into private media before appearing on the canvas. Keep this panel open while the task is running.'}</p></div>
+      {history.length > 0 && <section className="image-generation-history" aria-label={zh ? '最近图片任务' : 'Recent image tasks'}>
+        <div className="image-generation-history-head"><div><span>{zh ? '最近任务' : 'RECENT TASKS'}</span><b>{zh ? '已有生成记录' : 'Saved on this browser'}</b></div><small>{zh ? '点击可恢复任务' : 'Click to resume'}</small></div>
+        <div className="image-generation-history-list">
+          {history.slice(0, 6).map(item => <button type="button" className={'image-generation-history-item is-' + item.status} key={item.taskId} onClick={() => void restore(item)} disabled={busy}>
+            <i aria-hidden="true" />
+            <span><strong>{item.prompt || (zh ? '未命名任务' : 'Untitled task')}</strong><small>{historyTime(item.createdAt, zh)} · {statusLabel(item.status, zh)}</small></span>
+            <em>{item.status === 'completed' ? '✓' : item.status === 'failed' ? '!' : `${Math.round(item.progress)}%`}</em>
+          </button>)}
+        </div>
+      </section>}
       {error && <p className="image-generation-error" role="alert">{error}</p>}
       {task && <section className={'image-generation-result is-' + task.status} aria-live="polite">
-        <div className="image-generation-result-head"><div><span>{zh ? '任务状态' : 'TASK STATUS'}</span><b>{task.status === 'queued' ? (zh ? '排队中' : 'Queued') : task.status === 'processing' ? (zh ? '生成中' : 'Processing') : task.status === 'completed' ? (zh ? '已完成' : 'Completed') : (zh ? '生成失败' : 'Failed')}</b></div><strong>{Math.round(task.progress)}%</strong></div>
+        <div className="image-generation-result-head"><div><span>{zh ? '任务状态' : 'TASK STATUS'}</span><b>{statusLabel(task.status, zh)}</b></div><strong>{Math.round(task.progress)}%</strong></div>
         {(task.status === 'queued' || task.status === 'processing') && <div className="image-generation-progress"><i style={{ width: `${Math.max(4, task.progress)}%` }} /></div>}
         {task.status === 'completed' && task.imageUrl && <img className="image-generation-preview" src={task.imageUrl} alt={prompt || (zh ? '生成图片' : 'Generated image')} />}
         {task.status === 'failed' && <p>{task.errorMessage || (zh ? '图片生成失败，请调整描述后重试。' : 'Generation failed. Adjust the prompt and try again.')}</p>}
