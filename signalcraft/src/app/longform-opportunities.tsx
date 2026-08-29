@@ -11,6 +11,52 @@ const formatNumber = (value: number | null, locale: UiLocale) => {
 
 const score = (value: number | null) => value === null ? '—' : Math.round(value);
 
+const mediaUrl = (value: string | null | undefined) => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+
+const formatDuration = (seconds: number | null, locale: UiLocale) => {
+  if (seconds === null || !Number.isFinite(seconds)) return locale === 'zh' ? '时长未知' : 'Duration unknown';
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const remainder = total % 60;
+  if (minutes === 0) return locale === 'zh' ? `${remainder} 秒` : `${remainder}s`;
+  const hours = Math.floor(minutes / 60);
+  const minutePart = minutes % 60;
+  if (hours) return locale === 'zh' ? `${hours} 小时 ${minutePart} 分` : `${hours}h ${minutePart}m`;
+  return locale === 'zh' ? `${minutes} 分 ${String(remainder).padStart(2, '0')} 秒` : `${minutes}m ${String(remainder).padStart(2, '0')}s`;
+};
+
+const initials = (value: string | null, locale: UiLocale) => {
+  const fallback = locale === 'zh' ? '频' : 'CH';
+  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return fallback;
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase();
+};
+
+function RepresentativeVideoRow({ video, locale }: { video: LongformOpportunity['representativeVideos'][number]; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const thumbnail = mediaUrl(video.thumbnail);
+  const channelAvatar = mediaUrl(video.channelAvatar);
+  const channelTitle = video.channelTitle || (zh ? '公开频道' : 'Public channel');
+  const content = <>
+    <span className="longform-representative-thumb">
+      {thumbnail ? <img src={thumbnail} alt={zh ? `${video.title} 视频缩略图` : `${video.title} video thumbnail`} width={192} height={108} loading="lazy" decoding="async"/> : <span className="longform-representative-placeholder" aria-hidden="true">▶</span>}
+      <small className="longform-representative-duration">{formatDuration(video.durationSeconds, locale)}</small>
+    </span>
+    <span className="longform-representative-copy">
+      <strong className="longform-representative-title" title={video.title}>{video.title}</strong>
+      <span className="longform-representative-meta">
+        <span className="longform-representative-avatar" aria-hidden="true">
+          {channelAvatar ? <img src={channelAvatar} alt="" width={32} height={32} loading="lazy" decoding="async"/> : initials(channelTitle, locale)}
+        </span>
+        <span className="longform-representative-channel" title={channelTitle}>{channelTitle}</span>
+        <small className="longform-representative-views">{formatNumber(video.views, locale)} {zh ? '播放' : 'views'}</small>
+      </span>
+    </span>
+  </>;
+  return video.sourceUrl ? <a className="longform-representative-row" href={video.sourceUrl} target="_blank" rel="noreferrer" aria-label={zh ? `在新标签页打开：${video.title}` : `Open in a new tab: ${video.title}`}>{content}</a> : <div className="longform-representative-row longform-representative-missing">{content}</div>;
+}
+
 function Score({ label, value, tone = 'teal' }: { label: string; value: number | null; tone?: 'teal' | 'coral' | 'ink' }) {
   return <div className={`longform-score ${tone}`}><span>{label}</span><b>{score(value)}</b><small>/100</small></div>;
 }
@@ -23,10 +69,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-score-grid"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral"/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink"/></div>
     <div className="longform-lanes">{opportunity.lanes.map(lane => <span key={lane}>{lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
-    <details className="longform-representatives"><summary>{zh ? '查看代表视频' : 'View representative videos'}</summary>{opportunity.representativeVideos.map(video => {
-      const content = <><span>{video.title}</span><small>{video.channelTitle || (zh ? '公开频道' : 'Public channel')} · {formatNumber(video.views, locale)}</small></>;
-      return video.sourceUrl ? <a key={video.videoId} href={video.sourceUrl} target="_blank" rel="noreferrer">{content}</a> : <div key={video.videoId} className="longform-representative-missing">{content}</div>;
-    })}</details>
+    <details className="longform-representatives"><summary>{zh ? '查看代表视频' : 'View representative videos'}</summary>{opportunity.representativeVideos.map(video => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale}/>)}</details>
   </article>;
 }
 

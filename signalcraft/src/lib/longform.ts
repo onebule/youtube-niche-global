@@ -16,7 +16,7 @@ export type LongformOpportunity = {
   lanes: string[];
   metrics: Record<string, number | null>;
   execution: { score: number | null; coverage: number; rationale: string };
-  representativeVideos: Array<{ videoId: string; title: string; channelTitle: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
+  representativeVideos: Array<{ videoId: string; title: string; channelTitle: string | null; thumbnail: string | null; channelAvatar: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
 };
 
 export type LongformResponse = {
