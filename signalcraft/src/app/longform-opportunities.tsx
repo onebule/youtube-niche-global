@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
+import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
 const formatNumber = (value: number | null, locale: UiLocale) => {
@@ -113,7 +114,7 @@ export default function LongformOpportunities({ locale }: { locale: UiLocale }) 
       if (sequence === requestSequence.current) setData(nextData);
     } catch (reason) {
       if (controller.signal.aborted || sequence !== requestSequence.current) return;
-      setError(reason instanceof Error ? reason.message : (zh ? '数据暂时不可用。' : 'Data is temporarily unavailable.'));
+      setError(clientErrorMessage(reason, zh ? '数据暂时不可用。' : 'Data is temporarily unavailable.'));
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
     }
