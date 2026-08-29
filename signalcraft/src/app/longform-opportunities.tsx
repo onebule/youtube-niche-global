@@ -63,13 +63,14 @@ function Score({ label, value, tone = 'teal' }: { label: string; value: number |
 
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
+  const representativeCount = opportunity.representativeVideos.length;
   return <article className="longform-opportunity">
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><span className={`longform-confidence ${opportunity.confidenceLabel.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div>
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <div className="longform-score-grid"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral"/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink"/></div>
     <div className="longform-lanes">{opportunity.lanes.map(lane => <span key={lane}>{lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
-    <details className="longform-representatives"><summary>{zh ? '查看代表视频' : 'View representative videos'}</summary>{opportunity.representativeVideos.map(video => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale}/>)}</details>
+    <details className="longform-representatives"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map(video => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
   </article>;
 }
 
