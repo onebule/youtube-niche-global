@@ -40,7 +40,7 @@ export default function LongformOpportunities({ locale }: { locale: UiLocale }) 
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setData(await fetchLongformOpportunities({ market, window, limit: 100 })); }
+    try { setData(await fetchLongformOpportunities({ market, window, limit: 500 })); }
     catch (reason) { setError(reason instanceof Error ? reason.message : (zh ? '数据暂时不可用。' : 'Data is temporarily unavailable.')); }
     finally { setLoading(false); }
   }, [market, window, zh]);
