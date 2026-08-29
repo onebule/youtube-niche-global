@@ -1,6 +1,7 @@
 'use client';
 
 import { authHeaders } from './auth';
+import { clientErrorMessage } from './client-error';
 import type { CanvasAgentAction, CanvasAgentContext, CanvasAssetReference } from './canvas-domain';
 
 export type VideoModelId = 'auto' | 'seedance-2' | 'seedance-2-5' | 'minimax-h3' | 'kling-3' | 'veo-3.1-lite';
@@ -351,7 +352,7 @@ export type VideoGenerationPlan = {
   agentFallback?: boolean;
 };
 
-type ApiErrorPayload = { error?: string; code?: string; retryable?: boolean; failureStage?: string | null };
+type ApiErrorPayload = { error?: unknown; code?: string; retryable?: boolean; failureStage?: string | null };
 
 export type ScriptOcrResult = {
   text: string;
@@ -379,7 +380,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     cache: 'no-store',
   });
   const payload = await response.json().catch(() => ({})) as T & ApiErrorPayload;
-  if (!response.ok) throw new VideoGenerationClientError(payload.error || '视频生成服务暂时不可用。', response.status, payload.code);
+  if (!response.ok) throw new VideoGenerationClientError(clientErrorMessage(payload.error, '视频生成服务暂时不可用。'), response.status, payload.code);
   return payload;
 }
 

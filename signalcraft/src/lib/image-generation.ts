@@ -2,6 +2,7 @@
 
 import { authHeaders } from './auth';
 import { VideoGenerationClientError } from './video-generation';
+import { clientErrorMessage } from './client-error';
 
 export type ImageGenerationSize = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 export type ImageGenerationResolution = '1k' | '2k' | '4k';
@@ -100,7 +101,7 @@ export function upsertImageGenerationHistory(items: ImageGeneration[], task: Ima
   return [normalized, ...items.filter(item => item.taskId !== normalized.taskId)].slice(0, IMAGE_HISTORY_LIMIT);
 }
 
-type ApiErrorPayload = { error?: string; code?: string };
+type ApiErrorPayload = { error?: unknown; code?: string };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api/video/${path}`, {
@@ -114,7 +115,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     cache: 'no-store',
   });
   const payload = await response.json().catch(() => ({})) as T & ApiErrorPayload;
-  if (!response.ok) throw new VideoGenerationClientError(payload.error || '图片生成服务暂时不可用。', response.status, payload.code);
+  if (!response.ok) throw new VideoGenerationClientError(clientErrorMessage(payload.error, '图片生成服务暂时不可用。'), response.status, payload.code);
   return payload;
 }
 

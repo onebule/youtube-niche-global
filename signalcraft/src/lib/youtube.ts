@@ -1,5 +1,6 @@
 import type { AnalysisClass, Channel, ContentType, PlatformType, Video } from './types';
 import { authHeaders } from './auth';
+import { clientErrorMessage } from './client-error';
 
 type ApiOpportunity = {
   title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
@@ -40,7 +41,7 @@ type ApiResponse = {
   noCandidatesMessage?:string;
   nextPageToken?:string|null;
   dataScope?:PublicRankingScope;
-  error?:string;
+  error?:unknown;
   quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number|null;configured?:boolean;owner?:boolean;authenticated?:boolean;access_tier?:'guest'|'signed-in'|'opened'|'owner';ranking_limit?:number|null;ranking_unlimited?:boolean;account?:{email?:string}|null};
 };
 
@@ -77,7 +78,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   if(input.pageToken) params.set('pageToken',input.pageToken);
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
   const payload=await response.json() as ApiResponse;
-  if(!response.ok) throw new Error(payload.error||'YouTube 公开数据请求失败。');
+  if(!response.ok) throw new Error(clientErrorMessage(payload.error,'YouTube 公开数据请求失败。'));
   const source=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])].filter(item=>Boolean(item.channelId&&item.channelTitle&&item.channelUrl)&&Number.isFinite(Number(item.subscribers))&&Number(item.subscribers)>0);
   const channels:Channel[]=[];
   const videos:Video[]=source.map((item,index)=>{
