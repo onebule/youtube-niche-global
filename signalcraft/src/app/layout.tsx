@@ -29,6 +29,11 @@ export const metadata: Metadata = {
   authors: [{ name: 'SignalCraft' }],
   creator: 'SignalCraft',
   publisher: 'SignalCraft',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   openGraph: {
     type: 'website',
     siteName: 'SignalCraft',
