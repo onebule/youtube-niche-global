@@ -113,7 +113,11 @@ export default function ImageGenerationPanel({
       } catch (cause) {
         if (!cancelled) {
           setError(clientMessage(cause, zh));
-          timeout = window.setTimeout(poll, 4000);
+          // Expired/invalid handles cannot become valid by polling again.
+          // Transient provider/storage failures remain retryable in-place.
+          const terminalClientError = cause instanceof VideoGenerationClientError
+            && cause.status >= 400 && cause.status < 500 && cause.status !== 429;
+          if (!terminalClientError) timeout = window.setTimeout(poll, 4000);
         }
       }
     };
@@ -154,6 +158,12 @@ export default function ImageGenerationPanel({
       if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
       setTask(previous => ({ ...previous, ...next, taskId: pollingHandle.current || next.taskId }));
     } catch (cause) {
+      // A completed provider task may still need one more private-media copy.
+      // If that copy failed, show recovery in progress instead of claiming
+      // the image is complete while the retry is pending.
+      if (item.status === 'completed') {
+        setTask({ ...item, status: 'processing', progress: Math.max(1, Math.min(99, item.progress || 99)), errorMessage: null });
+      }
       setError(clientMessage(cause, zh));
     } finally {
       setSubmitting(false);
