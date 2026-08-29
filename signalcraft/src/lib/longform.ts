@@ -16,7 +16,7 @@ export type LongformOpportunity = {
   lanes: string[];
   metrics: Record<string, number | null>;
   execution: { score: number | null; coverage: number; rationale: string };
-  representativeVideos: Array<{ videoId: string; title: string; channelTitle: string | null; thumbnail: string | null; channelAvatar: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
+  representativeVideos: Array<{ videoId: string; title: string; titleZh?: string | null; channelTitle: string | null; thumbnail: string | null; channelAvatar: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
 };
 
 export type LongformResponse = {
@@ -30,11 +30,12 @@ export type LongformResponse = {
   quota?: { access_tier?: string; ranking_limit?: number | null; ranking_unlimited?: boolean };
 };
 
-export async function fetchLongformOpportunities(input: { market: string; window: string; category?: string; limit?: number } = { market: 'all', window: '28d' }) {
+export async function fetchLongformOpportunities(input: { market: string; window: string; category?: string; limit?: number; locale?: 'zh' | 'en' } = { market: 'all', window: '28d' }, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market, window: input.window });
+  if (input.locale) params.set('locale', input.locale);
   if (input.category && input.category !== 'all') params.set('category', input.category);
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
-  const response = await fetch(`/api/longform-opportunities?${params.toString()}`, { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store' });
+  const response = await fetch(`/api/longform-opportunities?${params.toString()}`, { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store', signal: options.signal });
   const payload = await response.json() as LongformResponse & { error?: string };
   if (!response.ok) throw new Error(payload.error || '长视频机会数据暂时不可用。');
   return payload;

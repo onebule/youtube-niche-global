@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -10,6 +10,20 @@ const formatNumber = (value: number | null, locale: UiLocale) => {
 };
 
 const score = (value: number | null) => value === null ? '—' : Math.round(value);
+
+const laneLabels: Record<string, { zh: string; en: string }> = {
+  BREAKOUT: { zh: '爆发信号', en: 'Breakout' },
+  UNDERSERVED: { zh: '低粉机会', en: 'Underserved' },
+  EVERGREEN: { zh: '长期需求', en: 'Evergreen' },
+  FORMAT_GAP: { zh: '形态空位', en: 'Format gap' },
+};
+
+const windowLabels: Record<string, { value: string; zh: string; en: string }> = {
+  '7d': { value: '7', zh: '天窗口', en: 'day window' },
+  '28d': { value: '28', zh: '天窗口', en: 'day window' },
+  '90d': { value: '90', zh: '天窗口', en: 'day window' },
+  '365d': { value: '1', zh: '年窗口', en: 'year window' },
+};
 
 const mediaUrl = (value: string | null | undefined) => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
 
@@ -38,13 +52,17 @@ function RepresentativeVideoRow({ video, locale }: { video: LongformOpportunity[
   const thumbnail = mediaUrl(video.thumbnail);
   const channelAvatar = mediaUrl(video.channelAvatar);
   const channelTitle = video.channelTitle || (zh ? '公开频道' : 'Public channel');
+  const titleZh = zh && video.titleZh && video.titleZh.trim() && video.titleZh.trim() !== video.title.trim() ? video.titleZh.trim() : null;
   const content = <>
     <span className="longform-representative-thumb">
       {thumbnail ? <img src={thumbnail} alt={zh ? `${video.title} 视频缩略图` : `${video.title} video thumbnail`} width={192} height={108} loading="lazy" decoding="async"/> : <span className="longform-representative-placeholder" aria-hidden="true">▶</span>}
       <small className="longform-representative-duration">{formatDuration(video.durationSeconds, locale)}</small>
     </span>
     <span className="longform-representative-copy">
-      <strong className="longform-representative-title" title={video.title}>{video.title}</strong>
+      <span className="longform-representative-title" title={titleZh ? `${video.title} · ${titleZh}` : video.title}>
+        <strong>{video.title}</strong>
+        {titleZh ? <small aria-label={`中文翻译：${titleZh}`}>{titleZh}</small> : null}
+      </span>
       <span className="longform-representative-meta">
         <span className="longform-representative-avatar" aria-hidden="true">
           {channelAvatar ? <img src={channelAvatar} alt="" width={32} height={32} loading="lazy" decoding="async"/> : initials(channelTitle, locale)}
@@ -68,7 +86,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><span className={`longform-confidence ${opportunity.confidenceLabel.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div>
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <div className="longform-score-grid"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral"/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink"/></div>
-    <div className="longform-lanes">{opportunity.lanes.map(lane => <span key={lane}>{lane.replace('_', ' ')}</span>)}</div>
+    <div className="longform-lanes">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
     <details className="longform-representatives"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map(video => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
   </article>;
@@ -82,17 +100,31 @@ export default function LongformOpportunities({ locale }: { locale: UiLocale }) 
   const [data, setData] = useState<LongformResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const requestSequence = useRef(0);
   const load = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const sequence = ++requestSequence.current;
     setLoading(true); setError(null);
-    try { setData(await fetchLongformOpportunities({ market, window, limit: 500 })); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : (zh ? '数据暂时不可用。' : 'Data is temporarily unavailable.')); }
-    finally { setLoading(false); }
-  }, [market, window, zh]);
+    try {
+      const nextData = await fetchLongformOpportunities({ market, window, limit: 500, locale }, { signal: controller.signal });
+      if (sequence === requestSequence.current) setData(nextData);
+    } catch (reason) {
+      if (controller.signal.aborted || sequence !== requestSequence.current) return;
+      setError(reason instanceof Error ? reason.message : (zh ? '数据暂时不可用。' : 'Data is temporarily unavailable.'));
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
+    }
+  }, [market, window, locale, zh]);
   useEffect(() => { const timer = setTimeout(() => { void load(); }, 0); return () => clearTimeout(timer); }, [load]);
+  useEffect(() => () => requestRef.current?.abort(), []);
   const laneOptions = useMemo(() => [{ key: 'ALL', label: zh ? '全部机会' : 'All opportunities' }, { key: 'BREAKOUT', label: zh ? '爆发信号' : 'Breakout' }, { key: 'UNDERSERVED', label: zh ? '低粉机会' : 'Underserved' }, { key: 'EVERGREEN', label: zh ? '长期需求' : 'Evergreen' }, { key: 'FORMAT_GAP', label: zh ? '形态空位' : 'Format gaps' }], [zh]);
   const opportunities = (data?.opportunities || []).filter(item => lane === 'ALL' || item.lanes.includes(lane));
+  const heroWindow = windowLabels[window] || windowLabels['28d'];
   return <main className="longform-page">
-    <section className="longform-hero"><div><span className="longform-kicker">LONG-FORM DISCOVERY ENGINE</span><h1>{zh ? '找到值得长期制作的长视频方向。' : 'Find long-form directions worth making.'}</h1><p>{zh ? '市场机会与执行适配分开计算。每个结论都回到公开样本、采集时间和置信度，不把不可见的 CTR、留存或收益伪装成事实。' : 'Market opportunity and execution fit stay separate. Every conclusion points back to public samples, capture time, and confidence.'}</p></div><div className="longform-hero-mark"><span>28</span><small>{zh ? '天窗口' : 'day window'}</small><i /></div></section>
+    <section className="longform-hero"><div><span className="longform-kicker">LONG-FORM DISCOVERY ENGINE</span><h1>{zh ? '找到值得长期制作的长视频方向。' : 'Find long-form directions worth making.'}</h1><p>{zh ? '市场机会与执行适配分开计算。每个结论都回到公开样本、采集时间和置信度，不把不可见的 CTR、留存或收益伪装成事实。' : 'Market opportunity and execution fit stay separate. Every conclusion points back to public samples, capture time, and confidence.'}</p></div><div className="longform-hero-mark"><span>{heroWindow.value}</span><small>{zh ? heroWindow.zh : heroWindow.en}</small><i /></div></section>
     <section className="longform-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => setWindow(event.target.value)}><option value="7d">{zh ? '近 7 天' : '7 days'}</option><option value="28d">{zh ? '近 28 天' : '28 days'}</option><option value="90d">{zh ? '近 90 天' : '90 days'}</option><option value="365d">{zh ? '近 1 年' : '1 year'}</option></select></label><button type="button" className="longform-refresh" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '更新中…' : 'Refreshing…') : (zh ? '更新数据' : 'Refresh')}</button></section>
     {data && <section className="longform-scope"><div><span className="longform-kicker">DATA SCOPE</span><b>{zh ? `${data.dataScope.longformRows} 条长视频 · ${data.dataScope.collectedRows} 条已采集样本` : `${data.dataScope.longformRows} long-form · ${data.dataScope.collectedRows} collected rows`}</b><small>{data.dataScope.source === 'longform_video_features' ? (zh ? '独立长视频候选池 · 不与 Shorts 共用排名样本' : 'Independent long-form pool · isolated from Shorts ranking samples') : (zh ? '兼容读取现有公开信号池 · 独立采集尚未启用' : 'Compatibility read from the existing public signal pool · independent collector not enabled')}</small><small>{data.dataScope.latestCapturedAt ? `${zh ? '最近采集' : 'Latest capture'} ${new Date(data.dataScope.latestCapturedAt).toLocaleString()}` : (zh ? '尚无采集时间' : 'No capture timestamp')}</small><small>{data.dataScope.marketSampleLimit ? (zh ? `按市场分层取样：每个市场最多 ${data.dataScope.marketSampleLimit} 条` : `Market-stratified pool: up to ${data.dataScope.marketSampleLimit} rows per market`) : null}</small>{data.dataScope.failedMarkets?.length ? <small className="longform-partial-warning">{zh ? `部分市场读取失败：${data.dataScope.failedMarkets.join('、')}` : `Partial market read failure: ${data.dataScope.failedMarkets.join(', ')}`}</small> : null}</div><div className="longform-coverage"><b>{data.availabilityAudit.coverage}%</b><small>{zh ? '可用字段覆盖' : 'field coverage'}</small></div></section>}
     <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => setLane(item.key)}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}</nav>
