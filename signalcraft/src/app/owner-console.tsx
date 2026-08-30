@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
-import { loadOwnerOverview, OwnerOverviewError, updateVideoTeamAccess, type OwnerOverview, type TeamAccessDuration } from '@/src/lib/owner-admin';
+import { loadOwnerOverview, OwnerOverviewError, updateVideoTeamAccess, type AccountPlan, type OwnerOverview, type TeamAccessDuration } from '@/src/lib/owner-admin';
 
 const compact = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 });
 const dateTime = (value?: string | number | null) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '尚未完成';
@@ -24,9 +24,9 @@ type DirectoryUser = OwnerOverview['users']['recent'][number];
 function teamAccessLabel(user: DirectoryUser): ReactNode {
   const access = user.teamAccess;
   if (access.status === 'owner') return <span className="team-access-state owner">站点主人</span>;
-  if (access.status === 'environment') return <span className="team-access-state configured">部署名单</span>;
-  if (access.status === 'active') return <span className="team-access-state active">Team{access.expiresAt ? ` · 至 ${accountDate(access.expiresAt)}` : ' · 长期'}</span>;
-  if (access.status === 'expired') return <span className="team-access-state expired">已到期{access.expiresAt ? ` · ${accountDate(access.expiresAt)}` : ''}</span>;
+  if (access.status === 'environment') return <span className="team-access-state configured">Team · 部署名单</span>;
+  if (access.status === 'active') return <span className="team-access-state active">{access.plan === 'pro' ? 'Pro' : 'Team'}{access.expiresAt ? ` · 至 ${accountDate(access.expiresAt)}` : ' · 长期'}</span>;
+  if (access.status === 'expired') return <span className="team-access-state expired">{access.plan === 'pro' ? 'Pro 已到期' : 'Team 已到期'}{access.expiresAt ? ` · ${accountDate(access.expiresAt)}` : ''}</span>;
   return <span className="team-access-state none">未开通</span>;
 }
 
@@ -41,13 +41,16 @@ function TeamAccessDialog({
   saving: boolean;
   error: string;
   onClose: () => void;
-  onSave: (action: 'grant' | 'revoke', duration?: TeamAccessDuration) => void;
+  onSave: (action: 'grant' | 'revoke', plan?: AccountPlan, duration?: TeamAccessDuration) => void;
 }) {
+  const currentPlan: AccountPlan = user.teamAccess.plan === 'pro' ? 'pro' : 'team';
+  const [plan, setPlan] = useState<AccountPlan>(currentPlan);
   const [duration, setDuration] = useState<TeamAccessDuration>('30d');
   const [confirmingRevoke, setConfirmingRevoke] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const isActive = user.teamAccess.status === 'active';
-  const title = confirmingRevoke ? '确认撤销 Team 权限' : isActive ? '管理 Team 权限' : '开通 Team 权限';
+  const planLabel = plan === 'pro' ? 'Pro' : 'Team';
+  const title = confirmingRevoke ? `确认撤销 ${user.teamAccess.plan === 'pro' ? 'Pro' : 'Team'} 权限` : isActive ? '管理账号套餐权限' : '开通账号套餐权限';
 
   useEffect(() => { dialogRef.current?.focus(); }, []);
 
@@ -64,13 +67,13 @@ function TeamAccessDialog({
 
   return <div className="team-access-backdrop" role="presentation">
     <section ref={dialogRef} className="team-access-dialog" role="dialog" aria-modal="true" aria-labelledby="team-access-title" tabIndex={-1} onKeyDown={keepFocusInDialog}>
-      <div className="team-access-dialog-head"><div><span className="eyebrow">TEAM ACCESS</span><h2 id="team-access-title">{title}</h2></div><button type="button" className="team-dialog-close" onClick={onClose} disabled={saving} aria-label="关闭权限管理窗口">×</button></div>
+      <div className="team-access-dialog-head"><div><span className="eyebrow">ACCOUNT PLAN ACCESS</span><h2 id="team-access-title">{title}</h2></div><button type="button" className="team-dialog-close" onClick={onClose} disabled={saving} aria-label="关闭权限管理窗口">×</button></div>
       <p className="team-access-account">{user.email}</p>
-      {confirmingRevoke ? <p className="team-access-warning">撤销后，该账号重新登录也不能使用 AI 图生视频或查看完整排行榜；以后可再次开通。</p> : <><p className="team-access-copy">此权限开放 AI 图生视频和完整排行榜，不会授予站点管理、数据采集或主人无限积分权限。</p><label className="team-access-duration" htmlFor="team-access-duration">权限有效期<select id="team-access-duration" name="team-access-duration" value={duration} onChange={event => setDuration(event.target.value as TeamAccessDuration)} disabled={saving}><option value="7d">7 天</option><option value="30d">30 天</option><option value="permanent">长期有效</option></select></label>{isActive && <p className="team-access-current">当前状态：{teamAccessLabel(user)}</p>}</>}
+      {confirmingRevoke ? <p className="team-access-warning">撤销后，该账号恢复 Free 权限（登录后仅可查看前 10 条榜单）；以后可再次开通。</p> : <><p className="team-access-copy">Pro 对应定价页的研究工作流和完整排行榜；Team 在此基础上开放 GPT-Image-2 生图、图生视频、团队成员与共享积分。两种套餐都不会授予站点管理或主人权限。</p><label className="team-access-duration" htmlFor="team-access-plan">开通套餐<select id="team-access-plan" name="team-access-plan" value={plan} onChange={event => setPlan(event.target.value as AccountPlan)} disabled={saving}><option value="pro">Pro · 研究工作流 + 完整排行榜</option><option value="team">Team · Pro 全部能力 + AI 生图与图生视频</option></select></label><label className="team-access-duration" htmlFor="team-access-duration">权限有效期<select id="team-access-duration" name="team-access-duration" value={duration} onChange={event => setDuration(event.target.value as TeamAccessDuration)} disabled={saving}><option value="7d">7 天</option><option value="30d">30 天</option><option value="quarter">季度（90 天）</option><option value="year">年度（365 天）</option><option value="permanent">长期有效</option></select></label>{isActive && <p className="team-access-current">当前状态：{teamAccessLabel(user)}</p>}</>}
       {error && <p className="team-access-error" role="alert">{error}</p>}
       <div className="team-access-actions">
         <button type="button" onClick={onClose} disabled={saving}>取消</button>
-        {confirmingRevoke ? <button type="button" className="team-access-danger" onClick={() => onSave('revoke')} disabled={saving}>{saving ? '正在撤销…' : '确认撤销'}</button> : <>{isActive && <button type="button" className="team-access-danger-link" onClick={() => setConfirmingRevoke(true)} disabled={saving}>撤销权限</button>}<button type="button" className="primary" onClick={() => onSave('grant', duration)} disabled={saving}>{saving ? '正在保存…' : isActive ? '更新权限' : '开通 Team 权限'}</button></>}
+        {confirmingRevoke ? <button type="button" className="team-access-danger" onClick={() => onSave('revoke')} disabled={saving}>{saving ? '正在撤销…' : '确认撤销'}</button> : <>{isActive && <button type="button" className="team-access-danger-link" onClick={() => setConfirmingRevoke(true)} disabled={saving}>撤销权限</button>}<button type="button" className="primary" onClick={() => onSave('grant', plan, duration)} disabled={saving}>{saving ? '正在保存…' : isActive ? '更新权限' : `开通 ${planLabel} 权限`}</button></>}
       </div>
       <p className="team-access-status" aria-live="polite">{saving ? '正在通过服务器更新账号权限…' : ''}</p>
     </section>
@@ -81,8 +84,8 @@ function RegisteredUsers({ users, onManage }: { users: OwnerOverview['users']; o
   let directory: ReactNode;
   if (!users.available) directory = <p className="owner-users-empty">注册账号目录暂时无法读取；采集和额度服务仍独立运行。请刷新后重试。</p>;
   else if (!users.recent.length) directory = <p className="owner-users-empty">暂无已完成注册的账号。</p>;
-  else directory = <div className="owner-user-table" role="table" aria-label="最近注册账号"><div className="owner-user-row owner-user-heading" role="row"><span role="columnheader">账号</span><span role="columnheader">登录方式</span><span role="columnheader">注册时间</span><span role="columnheader">最近登录</span><span role="columnheader">AI Studio Team</span><span role="columnheader">操作</span></div>{users.recent.map(user => <div className="owner-user-row" role="row" key={`${user.email}-${user.createdAt || 'unknown'}`}><span className="owner-user-email" role="cell"><i aria-hidden="true">{initials(user.email)}</i><b>{user.email}</b>{user.isOwner && <em>站点主人</em>}</span><span role="cell">{user.provider}</span><time role="cell" dateTime={user.createdAt || undefined}>{accountDate(user.createdAt)}</time><time role="cell" dateTime={user.lastSignInAt || undefined}>{accountDate(user.lastSignInAt)}</time><span role="cell">{teamAccessLabel(user)}</span><span className="owner-user-action" role="cell">{user.isOwner || user.teamAccess.status === 'environment' ? <small>{user.isOwner ? '固定权限' : '部署配置'}</small> : <button type="button" onClick={() => onManage(user)} disabled={!users.teamAccessAvailable}>{user.teamAccess.active ? '管理权限' : '开通权限'}</button>}</span></div>)}</div>;
-  return <section className="owner-panel owner-users" aria-labelledby="registered-users-title"><div className="owner-panel-head"><div><span className="eyebrow">ACCOUNT DIRECTORY</span><h2 id="registered-users-title">最近注册账号</h2></div><span className={`status ${users.available && users.teamAccessAvailable ? 'success' : 'warning'}`}>{users.available && users.teamAccessAvailable ? `最近 ${users.recent.length} 个账号` : '授权服务待初始化'}</span></div>{users.available && <p className="team-access-intro">在账号右侧开通 Team 后，该账号刷新页面或重新登录即可使用 AI 图生视频并查看完整排行榜；管理员和主人权限不会随之开放。</p>}{directory}<p className="owner-boundary">仅显示账号邮箱、注册时间、最近登录和登录方式；不会显示密码、访问令牌、用户 ID 或身份资料。部署环境变量名单继续有效，但仅能在部署配置中调整。</p></section>;
+  else directory = <div className="owner-user-table" role="table" aria-label="最近注册账号"><div className="owner-user-row owner-user-heading" role="row"><span role="columnheader">账号</span><span role="columnheader">登录方式</span><span role="columnheader">注册时间</span><span role="columnheader">最近登录</span><span role="columnheader">账号套餐</span><span role="columnheader">操作</span></div>{users.recent.map(user => <div className="owner-user-row" role="row" key={`${user.email}-${user.createdAt || 'unknown'}`}><span className="owner-user-email" role="cell"><i aria-hidden="true">{initials(user.email)}</i><b>{user.email}</b>{user.isOwner && <em>站点主人</em>}</span><span role="cell">{user.provider}</span><time role="cell" dateTime={user.createdAt || undefined}>{accountDate(user.createdAt)}</time><time role="cell" dateTime={user.lastSignInAt || undefined}>{accountDate(user.lastSignInAt)}</time><span role="cell">{teamAccessLabel(user)}</span><span className="owner-user-action" role="cell">{user.isOwner || user.teamAccess.status === 'environment' ? <small>{user.isOwner ? '固定权限' : '部署配置'}</small> : <button type="button" onClick={() => onManage(user)} disabled={!users.teamAccessAvailable}>{user.teamAccess.active ? '管理权限' : '开通权限'}</button>}</span></div>)}</div>;
+  return <section className="owner-panel owner-users" aria-labelledby="registered-users-title"><div className="owner-panel-head"><div><span className="eyebrow">ACCOUNT DIRECTORY</span><h2 id="registered-users-title">最近注册账号</h2></div><span className={`status ${users.available && users.teamAccessAvailable ? 'success' : 'warning'}`}>{users.available && users.teamAccessAvailable ? `最近 ${users.recent.length} 个账号` : '授权服务待初始化'}</span></div>{users.available && <p className="team-access-intro">按定价方案开通账号：Pro 解锁研究工作流和完整排行榜；Team 额外开放 GPT-Image-2 生图、图生视频、团队成员与共享积分。账号刷新页面或重新登录后生效。</p>}{directory}<p className="owner-boundary">仅显示账号邮箱、注册时间、最近登录和登录方式；不会显示密码、访问令牌、用户 ID 或身份资料。部署环境变量名单继续有效，但仅能在部署配置中调整。</p></section>;
 }
 
 export default function OwnerConsole({ account, onSignIn }: { account: AccountSession | null; onSignIn: () => void }) {
@@ -114,12 +117,12 @@ export default function OwnerConsole({ account, onSignIn }: { account: AccountSe
     return () => window.clearTimeout(task);
   }, [refresh]);
 
-  const saveTeamAccess = useCallback(async (action: 'grant' | 'revoke', duration?: TeamAccessDuration) => {
+  const saveTeamAccess = useCallback(async (action: 'grant' | 'revoke', plan?: AccountPlan, duration?: TeamAccessDuration) => {
     if (!teamTarget) return;
     setTeamSaving(true);
     setTeamError('');
     try {
-      await updateVideoTeamAccess({ email: teamTarget.email, action, duration });
+      await updateVideoTeamAccess({ email: teamTarget.email, action, plan, duration });
       setOverview(await loadOwnerOverview());
       setTeamTarget(null);
     } catch (reason) {
