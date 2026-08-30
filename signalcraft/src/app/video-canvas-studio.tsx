@@ -83,6 +83,7 @@ import {
   routeShot,
   type ModelRoutingStrategy,
 } from '@/src/lib/video-model-router';
+import { compileH3Prompt, describeH3PromptIssue, validateH3Prompt, type H3PromptMode } from '@/src/lib/h3-prompt-compiler';
 import ImageGenerationPanel from './image-generation-panel';
 
 type Point = { x: number; y: number };
@@ -477,6 +478,7 @@ export default function VideoCanvasStudio({
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [error, setError] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [h3Brief, setH3Brief] = useState('');
   const [model, setModel] = useState<VideoModelId>('seedance-2');
   const [routingStrategy, setRoutingStrategy] = useState<ModelRoutingStrategy>('BALANCED');
   const [duration, setDuration] = useState('5s');
@@ -737,6 +739,34 @@ export default function VideoCanvasStudio({
     unboundMentionCount: assetMentionValidation.unbound.length,
     invalidMentionCount: assetMentionValidation.invalid.length,
   }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, effectiveModel, endFrame, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
+  const h3PromptMode: H3PromptMode = referenceMode === 'omni'
+    ? 'Ref2VA'
+    : endFrame
+      ? 'FL2VA'
+      : startFrame
+        ? 'I2VA'
+        : 'T2VA';
+  const h3PromptValidation = useMemo(() => validateH3Prompt({
+    mode: h3PromptMode,
+    brief: h3Brief,
+    prompt,
+    duration,
+    hasStartFrame: referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame),
+    hasEndFrame: Boolean(endFrame),
+  }), [duration, endFrame, h3Brief, h3PromptMode, prompt, referenceFrames.length, referenceMode, startFrame]);
+  const compileH3PromptForCanvas = useCallback(() => {
+    const result = compileH3Prompt({
+      mode: h3PromptMode,
+      brief: h3Brief,
+      duration,
+      hasStartFrame: referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame),
+      hasEndFrame: Boolean(endFrame),
+    });
+    setPrompt(result.prompt);
+    setAgentPlan(null);
+    const firstIssue = result.validation.issues[0];
+    if (firstIssue) notify(describeH3PromptIssue(firstIssue, zh ? 'zh' : 'en'));
+  }, [duration, endFrame, h3Brief, h3PromptMode, notify, referenceFrames.length, referenceMode, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
   const canGenerate = Boolean(effectiveAccess === 'ready' && effectiveModel && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
   const compareModelIsEligible = (candidate: Exclude<VideoModelId, 'auto'>) => {
@@ -3024,8 +3054,13 @@ export default function VideoCanvasStudio({
             </>}
           </div>
 
-          <div className="canvas-composer-main">
-            <div className="canvas-composer-prompt">
+           <div className="canvas-composer-main">
+             {effectiveModel === 'minimax-h3' && <section className="canvas-h3-compiler" aria-labelledby="canvas-h3-compiler-title">
+               <div className="canvas-h3-compiler-head"><div><span>{zh ? 'MINIMAX H3 · PROMPT SKILL' : 'MINIMAX H3 · PROMPT SKILL'}</span><b id="canvas-h3-compiler-title">{zh ? 'H3 Prompt 编译器' : 'H3 Prompt compiler'}</b></div><small>{h3PromptMode}</small></div>
+               <textarea value={h3Brief} maxLength={1800} rows={2} onChange={event => setH3Brief(event.target.value)} placeholder={zh ? '用英文写主体、动作、镜头、节奏和声音；编译器会生成 H3 必需段落…' : 'Describe the subject, motion, camera, pacing, and sound in English; the compiler adds H3 sections…'} aria-label={zh ? 'H3 创作描述' : 'H3 creative brief'} />
+               <div className="canvas-h3-compiler-foot"><small>{h3PromptValidation.issues.length ? describeH3PromptIssue(h3PromptValidation.issues[0], zh ? 'zh' : 'en') : (zh ? '结构、时长和参考约束已就绪' : 'Structure, duration, and reference constraints are ready')}</small><button type="button" onClick={compileH3PromptForCanvas}>{zh ? '编译到 Motion Prompt' : 'Compile to Motion Prompt'}</button></div>
+             </section>}
+             <div className="canvas-composer-prompt">
               <div className="canvas-composer-prompt-head"><label htmlFor="canvas-motion-prompt">Motion Prompt</label><div className="canvas-composer-prompt-head-actions">{referenceMode !== 'text' && <label className="canvas-prompt-add-reference" title={zh ? '添加参考素材' : 'Add reference assets'}><input ref={promptReferenceInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading) || referenceFrames.length >= 9} onChange={event => { addPromptReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考素材' : 'References'}</b></label>}<small>{prompt.trim() ? (zh ? '已填写' : 'Ready') : (zh ? '必需' : 'Required')}</small></div></div>
               <div className="canvas-prompt-input-wrap">
                 {promptMentionChips.length > 0 && <div className="canvas-prompt-mention-strip" aria-label={zh ? 'Prompt 中已引用的素材' : 'Assets referenced in the prompt'}>
