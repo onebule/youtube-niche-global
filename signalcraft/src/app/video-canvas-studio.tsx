@@ -3117,7 +3117,7 @@ export default function VideoCanvasStudio({
               <button type="button" className="canvas-composer-collapse-button" aria-expanded={!composerCollapsed} aria-controls="canvas-composer-content" onClick={() => setComposerCollapsed(current => !current)}>{composerCollapsed ? (zh ? '展开生成台' : 'Expand composer') : (zh ? '折叠' : 'Collapse')}<span aria-hidden="true">{composerCollapsed ? '⌃' : '⌄'}</span></button>
             </div>
           </div>
-          {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前设备。' : 'Drag nodes on the canvas to arrange your workflow. Positions save on this device.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
+          {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前账号。' : 'Drag nodes on the canvas to arrange your workflow. Positions save for this account.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
           {!composerCollapsed && <>
           <div id={!composerCollapsed ? 'canvas-composer-content' : undefined} className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '') + (referenceMode === 'text' ? ' is-text' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
             {referenceMode === 'text' ? <div className="canvas-text-mode-note"><span aria-hidden="true">Aa</span><div><b>{zh ? 'Veo 3.1 Lite 纯文本模式' : 'Veo 3.1 Lite text mode'}</b><small>{zh ? '只提交 Prompt；START、END 和参考图不会上传或发送给模型。' : 'Only the Prompt is submitted; START, END, and reference images are not uploaded or sent to the model.'}</small></div></div> : referenceMode === 'start-end' ? <>
@@ -3283,7 +3283,7 @@ export default function VideoCanvasStudio({
                     <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{resolutionOptions.map(value => <option key={value}>{value}</option>)}</select></label>
                     <label className="canvas-preference-field"><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(settingsModel).map(value => <option key={value}>{value}</option>)}</select></label>
                   </div>
-                  <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置会自动保存到本地' : 'Settings save locally'}</em></div>
+                  <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置仅保存到当前账号' : 'Settings are private to this account'}</em></div>
                 </div>}
               </div>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>

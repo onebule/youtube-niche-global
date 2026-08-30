@@ -131,9 +131,9 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       const next = { ...store, selectedVideoId: selectedVideo.id };
       localStorage.setItem(storageKey, JSON.stringify(next));
       setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-      notify('拆解已保存在当前设备');
+      notify('拆解已保存在当前账号');
     } catch {
-      notify('当前设备无法保存研究笔记，请检查浏览器存储权限。');
+      notify('当前账号无法保存研究笔记，请检查浏览器存储权限。');
     }
   };
 
@@ -221,7 +221,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       onOpenCanvas();
       notify('原创 Prompt 已带入无限画布；请先确认模型、素材、时长和成本。');
     } catch {
-      notify('当前设备无法准备画布草稿，请先复制 Prompt。');
+      notify('当前账号无法准备画布草稿，请先复制 Prompt。');
     }
   };
 
@@ -280,7 +280,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
           {videos.map(video => <option key={video.id} value={video.id}>{videoTitle(video, locale)}</option>)}
         </select>
       </div>
-      <p>{videos.length} 个已保存样本 · 笔记仅存于当前设备</p>
+      <p>{videos.length} 个已保存样本 · 笔记仅存于当前账号</p>
       <button type="button" onClick={onOpenLibrary}>管理样本</button>
     </section>
     {importPanel}
@@ -370,7 +370,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
             <button className="primary" type="button" onClick={saveNotes}>保存拆解</button>
             <button type="button" disabled={!canCreateIdea} title={canCreateIdea ? undefined : '先填写“真正可复用的机制”'} onClick={() => onCreateIdea(selectedVideo, createIdeaDraftFromCase(selectedVideo, notes))}>生成选题卡</button>
             <button type="button" disabled={!canCreateIdea} title={canCreateIdea ? undefined : '先填写“真正可复用的机制”'} onClick={createH3Prompt}>生成原创 H3 Prompt</button>
-            <small>{savedAt ? `已自动保存于 ${savedAt} · 仅存当前设备` : '编辑后会自动保存到当前设备'}</small>
+            <small>{savedAt ? `已自动保存于 ${savedAt} · 仅存当前账号` : '编辑后会自动保存到当前账号'}</small>
           </div>
           <div className="viral-case-boundary">
             <b>当前能力边界</b>
