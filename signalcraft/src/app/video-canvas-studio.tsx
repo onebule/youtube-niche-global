@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
+import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
 import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
   cloneFrame,
@@ -479,6 +480,9 @@ export default function VideoCanvasStudio({
   notify: (message: string) => void;
 }) {
   const zh = locale === 'zh';
+  const accountScope = accountStorageScope(account);
+  const canvasStorageKey = accountStorageKey(STORAGE_KEY, account);
+  const handoffStorageKey = accountStorageKey(VIRAL_CASE_CANVAS_HANDOFF_KEY, account);
   const [nodes, setNodes] = useState<NodePositions>(INITIAL_NODES);
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [models, setModels] = useState<VideoModel[]>([]);
@@ -1202,7 +1206,7 @@ export default function VideoCanvasStudio({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(canvasStorageKey);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
         if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5) {
@@ -1237,10 +1241,10 @@ export default function VideoCanvasStudio({
         }
       }
     } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(canvasStorageKey);
     }
     try {
-      const handoffRaw = localStorage.getItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      const handoffRaw = localStorage.getItem(handoffStorageKey);
       const handoff = handoffRaw ? normalizeViralCaseCanvasHandoff(JSON.parse(handoffRaw)) : null;
       if (handoff) {
         // A handoff changes only the composer input; it never creates or submits a generation.
@@ -1248,14 +1252,14 @@ export default function VideoCanvasStudio({
         setH3Brief(handoff.brief);
         setReferenceMode('text');
         setDuration(normalizeVideoDuration('minimax-h3', `${handoff.duration}s`));
-        localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+        localStorage.removeItem(handoffStorageKey);
       }
     } catch {
-      localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      localStorage.removeItem(handoffStorageKey);
     } finally {
       setHydrated(true);
     }
-  }, []);
+  }, [canvasStorageKey, handoffStorageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1306,8 +1310,8 @@ export default function VideoCanvasStudio({
       customNodes: customNodes.map(node => ({ ...node })),
       customEdges: customEdges.map(edge => ({ ...edge })),
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+    localStorage.setItem(canvasStorageKey, JSON.stringify(saved));
+  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -2800,7 +2804,7 @@ export default function VideoCanvasStudio({
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
       <div><span>AI STUDIO · SHOT CANVAS</span><h1>{zh ? '把镜头思路铺开，再交给模型。' : 'Lay out the shot before handing it to the model.'}</h1><p>{zh ? '拖拽节点组织一次图生视频任务；底层仍复用现有 Provider、异步任务、积分和媒体存储。' : 'Arrange one image-to-video task with draggable nodes while reusing the existing providers, task lifecycle, credits, and storage.'}</p></div>
-      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前设备自动保存' : 'Auto-saved on this device'}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
+      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前账号在此设备自动保存' : 'Auto-saved for this account'}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
     </header>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
@@ -2814,7 +2818,7 @@ export default function VideoCanvasStudio({
 
     <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
       <div className="video-canvas-caption">
-        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{zh ? '未命名镜头项目' : 'Untitled shot project'}</b><small><i aria-hidden="true" />{zh ? '已保存到本地' : 'Saved locally'}</small></div></div>
+        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{zh ? '未命名镜头项目' : 'Untitled shot project'}</b><small><i aria-hidden="true" />{zh ? '仅当前账号可见' : 'Private to this account'}</small></div></div>
         <div className="video-canvas-caption-center">
           <div className="canvas-shot-rail" aria-label={zh ? '镜头列表' : 'Shot list'}>
             <small>SHOTS</small>
@@ -3066,6 +3070,7 @@ export default function VideoCanvasStudio({
       <ImageGenerationPanel
         open={imageGenerationOpen}
         zh={zh}
+        storageScope={accountScope}
         onClose={() => setImageGenerationOpen(false)}
         onUseAsReference={addGeneratedImageToReferences}
         notify={notify}
@@ -3112,7 +3117,7 @@ export default function VideoCanvasStudio({
               <button type="button" className="canvas-composer-collapse-button" aria-expanded={!composerCollapsed} aria-controls="canvas-composer-content" onClick={() => setComposerCollapsed(current => !current)}>{composerCollapsed ? (zh ? '展开生成台' : 'Expand composer') : (zh ? '折叠' : 'Collapse')}<span aria-hidden="true">{composerCollapsed ? '⌃' : '⌄'}</span></button>
             </div>
           </div>
-          {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前设备。' : 'Drag nodes on the canvas to arrange your workflow. Positions save on this device.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
+          {customLayoutMode && <div className="canvas-composer-arrange-note"><span aria-hidden="true">↗</span><small>{zh ? '拖动画布中的节点自定义排列，位置会自动保存到当前账号。' : 'Drag nodes on the canvas to arrange your workflow. Positions save for this account.'}</small><button type="button" onClick={organizeCanvas}>{zh ? '回到默认流程' : 'Restore default flow'}</button></div>}
           {!composerCollapsed && <>
           <div id={!composerCollapsed ? 'canvas-composer-content' : undefined} className={'canvas-composer-media ' + (referenceMode === 'omni' ? 'is-omni' : '') + (referenceMode === 'text' ? ' is-text' : '')} aria-label={zh ? '参考图片' : 'Reference images'}>
             {referenceMode === 'text' ? <div className="canvas-text-mode-note"><span aria-hidden="true">Aa</span><div><b>{zh ? 'Veo 3.1 Lite 纯文本模式' : 'Veo 3.1 Lite text mode'}</b><small>{zh ? '只提交 Prompt；START、END 和参考图不会上传或发送给模型。' : 'Only the Prompt is submitted; START, END, and reference images are not uploaded or sent to the model.'}</small></div></div> : referenceMode === 'start-end' ? <>
@@ -3278,7 +3283,7 @@ export default function VideoCanvasStudio({
                     <label className="canvas-preference-field"><span>{zh ? '分辨率' : 'Resolution'}</span><select value={resolution} onChange={event => setResolution(event.target.value)}>{resolutionOptions.map(value => <option key={value}>{value}</option>)}</select></label>
                     <label className="canvas-preference-field"><span>{zh ? '时长' : 'Duration'}</span><select value={duration} onChange={event => setDuration(event.target.value)}>{videoDurationOptions(settingsModel).map(value => <option key={value}>{value}</option>)}</select></label>
                   </div>
-                  <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置会自动保存到本地' : 'Settings save locally'}</em></div>
+                  <div className="canvas-preferences-footer"><span>{zh ? '生成数量' : 'Outputs'}</span><b>1 <small>{zh ? '当前单条生成' : 'single output for now'}</small></b><em>{zh ? '设置仅保存到当前账号' : 'Settings are private to this account'}</em></div>
                 </div>}
               </div>
               <div className="canvas-composer-cost"><small>{zh ? '预计积分' : 'Credits'}</small><b>{selectedModel?.ownerUnlimited ? '∞' : estimatedCredits || '—'}</b></div>

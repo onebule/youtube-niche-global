@@ -25,8 +25,11 @@ import { resolveYouTubeVideo } from '@/src/lib/youtube-video';
 import { compileH3Prompt } from '@/src/lib/h3-prompt-compiler';
 import type { Video } from '@/src/lib/types';
 import type { UiLocale } from '@/src/lib/ui-language';
+import type { AccountSession } from '@/src/lib/auth';
+import { accountStorageKey } from '@/src/lib/account-storage';
 
 type ViralCaseDeskProps = {
+  account: AccountSession | null;
   videos: Video[];
   locale: UiLocale;
   onCreateIdea: (video: Video, draft: ViralCaseIdeaDraft) => void;
@@ -66,11 +69,13 @@ function NoteField({ label, value, placeholder, onChange, rows = 3 }: { label: s
   return <label className="viral-case-field"><span>{label}</span><textarea value={value} rows={rows} placeholder={placeholder} onChange={event => onChange(event.target.value)} /></label>;
 }
 
-export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVideo, onOpenLibrary, onDiscover, onOpenCanvas, onImportVideo, notify }: ViralCaseDeskProps) {
+export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, onOpenVideo, onOpenLibrary, onDiscover, onOpenCanvas, onImportVideo, notify }: ViralCaseDeskProps) {
+  const storageKey = accountStorageKey(VIRAL_CASE_STORAGE_KEY, account);
+  const handoffStorageKey = accountStorageKey(VIRAL_CASE_CANVAS_HANDOFF_KEY, account);
   const [store, setStore] = useState<ViralCaseStore>(() => {
     if (typeof window === 'undefined') return initialStore;
     try {
-      return normalizeViralCaseStore(JSON.parse(localStorage.getItem(VIRAL_CASE_STORAGE_KEY) || 'null'));
+      return normalizeViralCaseStore(JSON.parse(localStorage.getItem(storageKey) || 'null'));
     } catch {
       return initialStore;
     }
@@ -86,14 +91,14 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
     if (typeof window === 'undefined') return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(VIRAL_CASE_STORAGE_KEY, JSON.stringify(store));
+        localStorage.setItem(storageKey, JSON.stringify(store));
         setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
       } catch {
         setSavedAt(null);
       }
     }, 240);
     return () => window.clearTimeout(timer);
-  }, [store]);
+  }, [storageKey, store]);
 
   const selectedVideo = useMemo(() => {
     if (!videos.length) return null;
@@ -128,11 +133,11 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
     if (!selectedVideo) return;
     try {
       const next = { ...store, selectedVideoId: selectedVideo.id };
-      localStorage.setItem(VIRAL_CASE_STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-      notify('拆解已保存在当前设备');
+      notify('拆解已保存在当前账号');
     } catch {
-      notify('当前设备无法保存研究笔记，请检查浏览器存储权限。');
+      notify('当前账号无法保存研究笔记，请检查浏览器存储权限。');
     }
   };
 
@@ -216,11 +221,11 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
   const openCanvasWithPrompt = () => {
     if (!selectedVideo || !h3Prompt) return;
     try {
-      localStorage.setItem(VIRAL_CASE_CANVAS_HANDOFF_KEY, JSON.stringify(createViralCaseCanvasHandoff(selectedVideo, notes, h3Prompt)));
+      localStorage.setItem(handoffStorageKey, JSON.stringify(createViralCaseCanvasHandoff(selectedVideo, notes, h3Prompt)));
       onOpenCanvas();
       notify('原创 Prompt 已带入无限画布；请先确认模型、素材、时长和成本。');
     } catch {
-      notify('当前设备无法准备画布草稿，请先复制 Prompt。');
+      notify('当前账号无法准备画布草稿，请先复制 Prompt。');
     }
   };
 
@@ -325,7 +330,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
           {videos.map(video => <option key={video.id} value={video.id}>{videoTitle(video, locale)}</option>)}
         </select>
       </div>
-      <p>{videos.length} 个已保存样本 · 笔记仅存于当前设备</p>
+      <p>{videos.length} 个已保存样本 · 笔记仅存于当前账号</p>
       <button type="button" onClick={onOpenLibrary}>管理样本</button>
     </section>
     {importPanel}
@@ -415,7 +420,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
             <button className="primary" type="button" onClick={saveNotes}>保存拆解</button>
             <button type="button" disabled={!canCreateIdea} title={canCreateIdea ? undefined : '先填写“真正可复用的机制”'} onClick={() => onCreateIdea(selectedVideo, createIdeaDraftFromCase(selectedVideo, notes))}>生成选题卡</button>
             <button type="button" disabled={!canCreateIdea} title={canCreateIdea ? undefined : '先填写“真正可复用的机制”'} onClick={createH3Prompt}>生成原创 H3 Prompt</button>
-            <small>{savedAt ? `已自动保存于 ${savedAt} · 仅存当前设备` : '编辑后会自动保存到当前设备'}</small>
+            <small>{savedAt ? `已自动保存于 ${savedAt} · 仅存当前账号` : '编辑后会自动保存到当前账号'}</small>
           </div>
           <div className="viral-case-boundary">
             <b>当前能力边界</b>
