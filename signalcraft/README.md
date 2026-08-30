@@ -40,6 +40,7 @@
 | 公开 | `/methodology` | 评分、数据和隐私边界 |
 | 公开 | `/pricing` | Free / Pro / Team 演示定价 |
 | 工作室 | `/app` | 今日指挥台 |
+| 工作室 | `/app/canvas` | 镜头级 Video Model Router 画布：Auto/Manual、成本、重试与 Compare |
 | 工作室 | `/app/library/channels`、`/app/library/videos` | 频道/视频资产 |
 | 工作室 | `/app/research` | 深度检索 |
 | 工作室 | `/app/watchlists` | 监听与模拟触发 |
