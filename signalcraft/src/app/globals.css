@@ -21,3 +21,7 @@ main{max-width:1180px;margin:auto;padding:56px 24px 84px}.hero{max-width:1360px;
 
 /* Make the homepage signal list read as a clear set of destinations. */
 .signal-row>span:last-child{display:inline-flex;align-items:center;gap:8px;color:var(--brand);font-size:12px;font-weight:750;white-space:nowrap}.signal-row>span:last-child::after{content:'→';font-size:16px;line-height:1;transition:transform .18s ease}.signal-row:hover>span:last-child::after{transform:translateX(3px)}.signal-row:focus-visible{background:var(--soft)}
+
+/* Give the explanatory steps the same intentional hierarchy as the route above. */
+.steps>div{position:relative;overflow:hidden;border:1px solid var(--line);border-top:2px solid var(--brand);box-shadow:0 8px 24px rgba(20,31,55,.035);transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}.steps>div:nth-child(2){border-top-color:var(--cyan)}.steps>div:hover{border-color:color-mix(in srgb,var(--cyan) 42%,var(--line));box-shadow:0 14px 30px rgba(20,31,55,.08);transform:translateY(-2px)}.steps>div>span{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:7px;background:var(--soft);color:var(--cyan);font-size:10px;letter-spacing:.08em}.steps>div:nth-child(3)>span{color:var(--brand)}
+@media(prefers-reduced-motion:reduce){.steps>div{transition:none}.steps>div:hover{transform:none}}
