@@ -50,12 +50,14 @@ function historyTime(value: string | null, zh: boolean) {
 export default function ImageGenerationPanel({
   open,
   zh,
+  storageScope,
   onClose,
   onUseAsReference,
   notify,
 }: {
   open: boolean;
   zh: boolean;
+  storageScope: string;
   onClose: () => void;
   onUseAsReference: (assetId: string, imageUrl: string) => void;
   notify: (message: string) => void;
@@ -71,11 +73,21 @@ export default function ImageGenerationPanel({
   const pollingHandle = useRef<string | null>(null);
 
   useEffect(() => {
+    // A session switch must never leave the previous account's task or
+    // history in memory while the newly scoped browser data is loading.
+    setTask(null);
+    setHistory([]);
+    setError('');
+    completionNotified.current = null;
+    pollingHandle.current = null;
+  }, [storageScope]);
+
+  useEffect(() => {
     if (!open || task) return;
     // Defer the state sync one tick: localStorage is an external source and
     // should not trigger a synchronous cascading render from the effect body.
     const timer = window.setTimeout(() => {
-      const saved = readImageGenerationHistory();
+      const saved = readImageGenerationHistory(storageScope);
       setHistory(saved);
       const active = saved.find(item => item.status === 'queued' || item.status === 'processing');
       if (active) {
@@ -84,19 +96,19 @@ export default function ImageGenerationPanel({
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [open, task]);
+  }, [open, storageScope, task]);
 
   useEffect(() => {
     if (!task) return;
     const timer = window.setTimeout(() => {
       setHistory(previous => {
         const next = upsertImageGenerationHistory(previous, task);
-        writeImageGenerationHistory(next);
+        writeImageGenerationHistory(next, storageScope);
         return next;
       });
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [task]);
+  }, [storageScope, task]);
 
   useEffect(() => {
     if (!open || !task?.taskId || ['completed', 'failed'].includes(task.status)) return;
@@ -126,7 +138,7 @@ export default function ImageGenerationPanel({
       cancelled = true;
       if (timeout) window.clearTimeout(timeout);
     };
-  }, [open, task?.taskId, task?.status, zh]);
+  }, [open, storageScope, task?.taskId, task?.status, zh]);
 
   useEffect(() => {
     if (!open) return;

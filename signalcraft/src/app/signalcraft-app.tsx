@@ -7,6 +7,7 @@ import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
 import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from '@/src/lib/types';
 import { searchYouTubeSignals, type PublicRankingScope } from '@/src/lib/youtube';
 import { signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
+import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
 import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
 import { hasOwnerAccess } from '@/src/lib/owner-admin';
@@ -73,9 +74,40 @@ const isLivePublicVideo=(value:unknown):value is Video=>{
   return typeof video.sourceUrl==='string'&&/youtube\.com\/(?:watch\?|shorts\/)/.test(video.sourceUrl)&&Array.isArray(video.tags)&&video.tags.includes('YouTube 公开数据');
 };
 
-function usePersisted(){
-  const [state,setState]=useState<Persisted>(()=>{if(typeof window==='undefined')return defaultState;const raw=localStorage.getItem('signalcraft-workspace-v2');try{const saved=raw?JSON.parse(raw):null;return {...defaultState,...saved,saved:Array.isArray(saved?.saved)?saved.saved.filter(isLivePublicVideo):[]}}catch{return defaultState}});
-  useEffect(()=>{localStorage.setItem('signalcraft-workspace-v2',JSON.stringify(state))},[state]);
+function parsePersisted(raw: string | null): Persisted {
+  try {
+    const saved = raw ? JSON.parse(raw) : null;
+    return {
+      ...defaultState,
+      ...saved,
+      saved: Array.isArray(saved?.saved) ? saved.saved.filter(isLivePublicVideo) : [],
+    };
+  } catch {
+    return defaultState;
+  }
+}
+
+function usePersisted(account: AccountSession | null){
+  const storageKey = useMemo(() => accountStorageKey('signalcraft-workspace-v2', account), [account?.email, account?.userId]);
+  const [state,setState]=useState<Persisted>(defaultState);
+  const [hydratedKey,setHydratedKey]=useState<string | null>(null);
+
+  useEffect(() => {
+    // Loading is keyed by the authenticated identity. Never fall back to the
+    // old global workspace key, otherwise a second account could inherit the
+    // first account's saved videos, ideas, alerts, or notes.
+    const next = typeof window === 'undefined' ? defaultState : parsePersisted(localStorage.getItem(storageKey));
+    setHydratedKey(null);
+    setState(next);
+    setHydratedKey(storageKey);
+  }, [storageKey]);
+
+  useEffect(() => {
+    // Avoid writing the previous account's in-memory state into the new
+    // namespace during the identity transition.
+    if (hydratedKey !== storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  }, [hydratedKey, state, storageKey]);
   return [state,setState] as const;
 }
 
@@ -299,11 +331,18 @@ export default function SignalCraftApp() {
   const path = useBrowserPath();
   const [theme, setTheme] = useState('light');
   const { account, clearAccount, locale, setLocale } = useBrowserSession();
-  const [state, setState] = usePersisted();
+  const [state, setState] = usePersisted(account);
   const [drawer, setDrawer] = useState<Video | null>(null);
   const [toast, setToast] = useState<Toast>(null);
   const [isOwner, setIsOwner] = useState(false);
   const accessToken = account?.accessToken;
+  const accountScope = accountStorageScope(account);
+
+  useEffect(() => {
+    // Do not leave a detail drawer from account A visible after switching to
+    // account B, even though the underlying video is public.
+    setDrawer(null);
+  }, [accountScope]);
 
   useEffect(() => {
     let active = true;
@@ -375,7 +414,7 @@ export default function SignalCraftApp() {
                     : path === '/app/image-to-video'
                       ? <ImageToVideoStudio account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
                     : path === '/app/canvas'
-                      ? <VideoCanvasStudio account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
+                      ? <VideoCanvasStudio key={accountScope} account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
                     : path === '/app/library/channels'
                       ? <Library kind="channels" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
                       : path === '/app/library/videos'

@@ -3,6 +3,7 @@
 import { authHeaders } from './auth';
 import { VideoGenerationClientError } from './video-generation';
 import { clientErrorMessage } from './client-error';
+import { scopedStorageKey } from './account-storage';
 
 export type ImageGenerationSize = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 export type ImageGenerationResolution = '1k' | '2k' | '4k';
@@ -43,6 +44,10 @@ export type ImageModel = {
 const IMAGE_HISTORY_STORAGE_KEY = 'signalcraft:image-generation-history:v1';
 const IMAGE_HISTORY_LIMIT = 12;
 
+function imageHistoryStorageKey(scope?: string) {
+  return scopedStorageKey(IMAGE_HISTORY_STORAGE_KEY, scope || 'anonymous');
+}
+
 function isImageGenerationStatus(value: unknown): value is ImageGenerationStatus {
   return value === 'queued' || value === 'processing' || value === 'completed' || value === 'failed';
 }
@@ -74,10 +79,10 @@ function historyItem(value: unknown): ImageGeneration | null {
   };
 }
 
-export function readImageGenerationHistory(): ImageGeneration[] {
+export function readImageGenerationHistory(scope?: string): ImageGeneration[] {
   if (typeof window === 'undefined') return [];
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(IMAGE_HISTORY_STORAGE_KEY) || '[]');
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(imageHistoryStorageKey(scope)) || '[]');
     if (!Array.isArray(parsed)) return [];
     return parsed.map(historyItem).filter((item): item is ImageGeneration => Boolean(item)).slice(0, IMAGE_HISTORY_LIMIT);
   } catch {
@@ -85,11 +90,11 @@ export function readImageGenerationHistory(): ImageGeneration[] {
   }
 }
 
-export function writeImageGenerationHistory(items: ImageGeneration[]) {
+export function writeImageGenerationHistory(items: ImageGeneration[], scope?: string) {
   if (typeof window === 'undefined') return;
   try {
     const serialized = items.map(historyItem).filter((item): item is ImageGeneration => Boolean(item)).slice(0, IMAGE_HISTORY_LIMIT);
-    window.localStorage.setItem(IMAGE_HISTORY_STORAGE_KEY, JSON.stringify(serialized));
+    window.localStorage.setItem(imageHistoryStorageKey(scope), JSON.stringify(serialized));
   } catch {
     // Storage may be disabled or full; polling continues in memory.
   }
