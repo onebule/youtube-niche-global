@@ -15,6 +15,9 @@ import './owner-users.css';
 import './image-to-video-studio.css';
 import './video-canvas-studio.css';
 import './longform-opportunities.css';
+import './site-footer.css';
+import './legal-page.css';
+import SiteFooter from './site-footer';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://niqivo.top';
 
@@ -51,5 +54,5 @@ export const metadata: Metadata = {
 };
 
 
-export default function RootLayout({children}:{children:React.ReactNode}) { return <html lang="zh-CN" suppressHydrationWarning><body>{children}</body></html>; }
+export default function RootLayout({children}:{children:React.ReactNode}) { return <html lang="zh-CN" suppressHydrationWarning><body>{children}<SiteFooter /></body></html>; }
 
