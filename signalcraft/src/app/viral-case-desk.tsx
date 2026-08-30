@@ -23,8 +23,11 @@ import { resolveYouTubeVideo } from '@/src/lib/youtube-video';
 import { compileH3Prompt } from '@/src/lib/h3-prompt-compiler';
 import type { Video } from '@/src/lib/types';
 import type { UiLocale } from '@/src/lib/ui-language';
+import type { AccountSession } from '@/src/lib/auth';
+import { accountStorageKey } from '@/src/lib/account-storage';
 
 type ViralCaseDeskProps = {
+  account: AccountSession | null;
   videos: Video[];
   locale: UiLocale;
   onCreateIdea: (video: Video, draft: ViralCaseIdeaDraft) => void;
@@ -64,11 +67,13 @@ function NoteField({ label, value, placeholder, onChange, rows = 3 }: { label: s
   return <label className="viral-case-field"><span>{label}</span><textarea value={value} rows={rows} placeholder={placeholder} onChange={event => onChange(event.target.value)} /></label>;
 }
 
-export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVideo, onOpenLibrary, onDiscover, onOpenCanvas, onImportVideo, notify }: ViralCaseDeskProps) {
+export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, onOpenVideo, onOpenLibrary, onDiscover, onOpenCanvas, onImportVideo, notify }: ViralCaseDeskProps) {
+  const storageKey = accountStorageKey(VIRAL_CASE_STORAGE_KEY, account);
+  const handoffStorageKey = accountStorageKey(VIRAL_CASE_CANVAS_HANDOFF_KEY, account);
   const [store, setStore] = useState<ViralCaseStore>(() => {
     if (typeof window === 'undefined') return initialStore;
     try {
-      return normalizeViralCaseStore(JSON.parse(localStorage.getItem(VIRAL_CASE_STORAGE_KEY) || 'null'));
+      return normalizeViralCaseStore(JSON.parse(localStorage.getItem(storageKey) || 'null'));
     } catch {
       return initialStore;
     }
@@ -83,14 +88,14 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
     if (typeof window === 'undefined') return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(VIRAL_CASE_STORAGE_KEY, JSON.stringify(store));
+        localStorage.setItem(storageKey, JSON.stringify(store));
         setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
       } catch {
         setSavedAt(null);
       }
     }, 240);
     return () => window.clearTimeout(timer);
-  }, [store]);
+  }, [storageKey, store]);
 
   const selectedVideo = useMemo(() => {
     if (!videos.length) return null;
@@ -124,7 +129,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
     if (!selectedVideo) return;
     try {
       const next = { ...store, selectedVideoId: selectedVideo.id };
-      localStorage.setItem(VIRAL_CASE_STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
       notify('拆解已保存在当前设备');
     } catch {
@@ -212,7 +217,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
   const openCanvasWithPrompt = () => {
     if (!selectedVideo || !h3Prompt) return;
     try {
-      localStorage.setItem(VIRAL_CASE_CANVAS_HANDOFF_KEY, JSON.stringify(createViralCaseCanvasHandoff(selectedVideo, notes, h3Prompt)));
+      localStorage.setItem(handoffStorageKey, JSON.stringify(createViralCaseCanvasHandoff(selectedVideo, notes, h3Prompt)));
       onOpenCanvas();
       notify('原创 Prompt 已带入无限画布；请先确认模型、素材、时长和成本。');
     } catch {

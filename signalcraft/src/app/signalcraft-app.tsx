@@ -88,7 +88,7 @@ function parsePersisted(raw: string | null): Persisted {
 }
 
 function usePersisted(account: AccountSession | null){
-  const storageKey = useMemo(() => accountStorageKey('signalcraft-workspace-v2', account), [account?.email, account?.userId]);
+  const storageKey = accountStorageKey('signalcraft-workspace-v2', account);
   const [state,setState]=useState<Persisted>(defaultState);
   const [hydratedKey,setHydratedKey]=useState<string | null>(null);
 
@@ -96,10 +96,12 @@ function usePersisted(account: AccountSession | null){
     // Loading is keyed by the authenticated identity. Never fall back to the
     // old global workspace key, otherwise a second account could inherit the
     // first account's saved videos, ideas, alerts, or notes.
-    const next = typeof window === 'undefined' ? defaultState : parsePersisted(localStorage.getItem(storageKey));
-    setHydratedKey(null);
-    setState(next);
-    setHydratedKey(storageKey);
+    const timer = window.setTimeout(() => {
+      const next = parsePersisted(localStorage.getItem(storageKey));
+      setState(next);
+      setHydratedKey(storageKey);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [storageKey]);
 
   useEffect(() => {
@@ -339,12 +341,6 @@ export default function SignalCraftApp() {
   const accountScope = accountStorageScope(account);
 
   useEffect(() => {
-    // Do not leave a detail drawer from account A visible after switching to
-    // account B, even though the underlying video is public.
-    setDrawer(null);
-  }, [accountScope]);
-
-  useEffect(() => {
     let active = true;
     if (!accessToken) {
       return () => {
@@ -422,7 +418,8 @@ export default function SignalCraftApp() {
                         : path === '/app/thumbnails'
                           ? <ThumbnailLab state={state} openDetail={setDrawer} locale={locale} />
                           : path === '/app/cases'
-                            ? <ViralCaseDesk
+                            ? <ViralCaseDesk key={accountScope}
+                              account={account}
                               videos={state.saved}
                               locale={locale}
                               onOpenVideo={setDrawer}

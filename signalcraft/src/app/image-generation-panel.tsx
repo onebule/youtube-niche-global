@@ -73,16 +73,6 @@ export default function ImageGenerationPanel({
   const pollingHandle = useRef<string | null>(null);
 
   useEffect(() => {
-    // A session switch must never leave the previous account's task or
-    // history in memory while the newly scoped browser data is loading.
-    setTask(null);
-    setHistory([]);
-    setError('');
-    completionNotified.current = null;
-    pollingHandle.current = null;
-  }, [storageScope]);
-
-  useEffect(() => {
     if (!open || task) return;
     // Defer the state sync one tick: localStorage is an external source and
     // should not trigger a synchronous cascading render from the effect body.

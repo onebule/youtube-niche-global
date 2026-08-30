@@ -482,6 +482,7 @@ export default function VideoCanvasStudio({
   const zh = locale === 'zh';
   const accountScope = accountStorageScope(account);
   const canvasStorageKey = accountStorageKey(STORAGE_KEY, account);
+  const handoffStorageKey = accountStorageKey(VIRAL_CASE_CANVAS_HANDOFF_KEY, account);
   const [nodes, setNodes] = useState<NodePositions>(INITIAL_NODES);
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [models, setModels] = useState<VideoModel[]>([]);
@@ -1243,7 +1244,7 @@ export default function VideoCanvasStudio({
       localStorage.removeItem(canvasStorageKey);
     }
     try {
-      const handoffRaw = localStorage.getItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      const handoffRaw = localStorage.getItem(handoffStorageKey);
       const handoff = handoffRaw ? normalizeViralCaseCanvasHandoff(JSON.parse(handoffRaw)) : null;
       if (handoff) {
         // A handoff changes only the composer input; it never creates or submits a generation.
@@ -1251,14 +1252,14 @@ export default function VideoCanvasStudio({
         setH3Brief(handoff.brief);
         setReferenceMode('text');
         setDuration(normalizeVideoDuration('minimax-h3', `${handoff.duration}s`));
-        localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+        localStorage.removeItem(handoffStorageKey);
       }
     } catch {
-      localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      localStorage.removeItem(handoffStorageKey);
     } finally {
       setHydrated(true);
     }
-  }, [canvasStorageKey]);
+  }, [canvasStorageKey, handoffStorageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
