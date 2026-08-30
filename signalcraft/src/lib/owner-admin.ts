@@ -43,7 +43,7 @@ export type OwnerOverview = {
   };
 };
 
-export type TeamAccessDuration = '7d' | '30d' | 'permanent';
+export type TeamAccessDuration = '7d' | '30d' | 'quarter' | 'year' | 'permanent';
 export type AccountPlan = 'pro' | 'team';
 
 export class OwnerOverviewError extends Error {
