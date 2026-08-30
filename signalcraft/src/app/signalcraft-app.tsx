@@ -269,7 +269,7 @@ function Pricing(){
   const [cycle,setCycle]=useState<'month'|'quarter'|'year'>('quarter');
   const [currency,setCurrency]=useState<'CNY'|'USD'>('CNY');
   const usdReferenceRate=7.2;
-  const rows=[['公开发现与市场榜单（登录后前 10 条）','✓','✓','✓'],['完整排行榜与长视频机会数据','—','✓','✓'],['可解释机会评分','—','✓','✓'],['保存、对标与选题工作流','—','✓','✓'],['AI 图生视频（GPT-Image-2 / Team）','—','—','✓'],['团队成员、共享积分与活动记录','—','—','✓'],['自定义监听与 Webhook','—','—','规划中']];
+  const rows=[['公开发现与市场榜单（登录后前 10 条）','✓','✓','✓'],['完整排行榜与长视频机会数据','—','✓','✓'],['可解释机会评分','—','✓','✓'],['保存、对标与选题工作流','—','✓','✓'],['AI 生图（GPT-Image-2）与图生视频','—','—','✓'],['团队成员、共享积分与活动记录','—','—','✓'],['自定义监听与 Webhook','—','—','规划中']];
   const cycleLabel={month:'月付',quarter:'季付',year:'年付'}[cycle];
   const cyclePriceLabel={month:'月',quarter:'季',year:'年'}[cycle];
   const formatPrice=(cny:number)=>new Intl.NumberFormat(currency==='USD'?'en-US':'zh-CN',{style:'currency',currency,minimumFractionDigits:currency==='USD'?2:0,maximumFractionDigits:2}).format(currency==='USD'?Number((cny/usdReferenceRate).toFixed(2)):cny);
