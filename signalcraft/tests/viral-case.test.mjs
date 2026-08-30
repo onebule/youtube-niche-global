@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyViralCaseAnalysisToNotes, applyViralCaseCorpusCardToNotes, applyViralPatternToNotes, createH3BriefFromCase, createIdeaDraftFromCase, createViralCaseCanvasHandoff, formatViralCaseReport, normalizeViralCaseAnalysis, normalizeViralCaseCanvasHandoff, normalizeViralCaseStore } from '../src/lib/viral-case.ts';
+import { applyViralCaseAnalysisToNotes, applyViralCaseCorpusCardToNotes, applyViralPatternToNotes, createH3BriefFromCase, createIdeaDraftFromCase, createViralCaseCanvasHandoff, createViralCaseCorpusBrief, formatViralCaseReport, normalizeViralCaseAnalysis, normalizeViralCaseCanvasHandoff, normalizeViralCaseStore } from '../src/lib/viral-case.ts';
 import { viralCaseCorpus } from '../src/lib/viral-case-corpus.ts';
 import { viralPatternLibrary } from '../src/lib/viral-patterns.ts';
 import { parseYouTubeVideoId } from '../src/lib/youtube-video-url.ts';
@@ -67,6 +67,9 @@ test('the full public corpus is source-linked and can seed a case without overwr
   assert.equal(patch.hook, '人工核对的开头');
   assert.equal(patch.reusableMechanism, '人工提炼的机制');
   assert.equal(patch.rule, card.formula);
+  const brief = createViralCaseCorpusBrief(card);
+  assert.match(brief, /原创改写提醒：/);
+  assert.match(brief, new RegExp(card.sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('analysis can seed only blank observation fields and export a traceable report', () => {

@@ -154,6 +154,17 @@ export function applyViralCaseCorpusCardToNotes(notes: ViralCaseNotes, card: Vir
   };
 }
 
+export function createViralCaseCorpusBrief(card: ViralCaseCorpusCard): string {
+  return [
+    `案例：${card.title}`,
+    `公开指标：${card.metrics || '未提供'}`,
+    `结构公式：${card.formula || '未提供'}`,
+    `情绪线：${card.emotion || '未提供'}`,
+    `原创改写提醒：保留观看机制，替换角色、场景、道具和结尾。不要复制原脚本或原画面。`,
+    `来源：${card.sourceUrl}`,
+  ].join('\n');
+}
+
 export function normalizeViralCaseStore(value: unknown): ViralCaseStore {
   if (!value || typeof value !== 'object') {
     return { version: VIRAL_CASE_STORAGE_VERSION, selectedVideoId: null, notesByVideoId: {} };

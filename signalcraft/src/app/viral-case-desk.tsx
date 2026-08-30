@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Image from 'next/image';
 import { getOpportunity } from '@/src/lib/mock';
 import {
   createIdeaDraftFromCase,
+  createViralCaseCorpusBrief,
   emptyViralCaseNotes,
   applyViralPatternToNotes,
   applyViralCaseCorpusCardToNotes,
@@ -46,6 +47,8 @@ type ViralCaseDeskProps = {
 const compact = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 });
 const initialStore: ViralCaseStore = { version: 1, selectedVideoId: null, notesByVideoId: {} };
 const beatLabels = ['0–3 秒 · 截停', '3–8 秒 · 规则', '8–17 秒 · 加码', '结尾 · 收口'] as const;
+const corpusBucketOptions = ['S', 'A', 'B', 'C'] as const;
+const corpusBucketPriority: Record<string, number> = { S: 0, A: 1, B: 2, C: 3 };
 
 const videoTitle = (video: Video, locale: UiLocale) => locale === 'zh' && video.titleZh?.trim() ? video.titleZh : video.title;
 
@@ -90,6 +93,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   const [activePatternId, setActivePatternId] = useState(viralPatternLibrary[0]?.id || '');
   const [corpusQuery, setCorpusQuery] = useState('');
   const [corpusBucket, setCorpusBucket] = useState('all');
+  const [corpusSort, setCorpusSort] = useState<'priority' | 'source' | 'title'>('priority');
   const [corpusVisibleCount, setCorpusVisibleCount] = useState(24);
 
   useEffect(() => {
@@ -114,15 +118,20 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   const embedId = selectedVideo ? youtubeVideoId(selectedVideo.sourceUrl) : null;
   const canCreateIdea = Boolean(notes.reusableMechanism.trim());
   const activePattern = getViralPattern(activePatternId) || viralPatternLibrary[0] || null;
+  const deferredCorpusQuery = useDeferredValue(corpusQuery);
+  const corpusBucketCounts = useMemo(() => viralCaseCorpus.reduce<Record<string, number>>((counts, card) => ({ ...counts, [card.bucket]: (counts[card.bucket] || 0) + 1 }), {}), []);
   const corpusMatches = useMemo(() => {
-    const query = corpusQuery.trim().toLowerCase();
-    return viralCaseCorpus.filter(card => {
+    const query = deferredCorpusQuery.trim().toLowerCase();
+    const matches = viralCaseCorpus.filter(card => {
       const matchesBucket = corpusBucket === 'all' || card.bucket === corpusBucket;
       if (!matchesBucket) return false;
       if (!query) return true;
       return [card.sourceCaseId, card.title, card.summary, card.metrics, card.formula, card.emotion].join(' ').toLowerCase().includes(query);
     });
-  }, [corpusBucket, corpusQuery]);
+    if (corpusSort === 'title') return [...matches].sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'));
+    if (corpusSort === 'priority') return matches.map((card, index) => ({ card, index })).sort((left, right) => (corpusBucketPriority[left.card.bucket] ?? 9) - (corpusBucketPriority[right.card.bucket] ?? 9) || left.index - right.index).map(item => item.card);
+    return matches;
+  }, [corpusBucket, corpusSort, deferredCorpusQuery]);
   const visibleCorpusCards = corpusMatches.slice(0, corpusVisibleCount);
 
   const selectVideo = (selectedVideoId: string) => {
@@ -281,6 +290,15 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     notify(`已带入「${card.title}」的公开拆解信号；时间点和画面仍需人工核对。`);
   };
 
+  const copyCorpusCard = async (card: ViralCaseCorpusCard) => {
+    try {
+      await navigator.clipboard?.writeText(createViralCaseCorpusBrief(card));
+      notify('机制摘要已复制，可直接放进选题或创作提示词。');
+    } catch {
+      notify('当前浏览器不允许复制，请打开原拆解页手动选择。');
+    }
+  };
+
   const importPanel = <form className="viral-case-import" onSubmit={importVideo}>
     <div><span className="eyebrow">DIRECT PUBLIC SOURCE</span><b>粘贴 YouTube 链接，直接建立研究样本</b><small>只读取公开视频元数据、播放量、频道订阅数和原始链接；缺失字段不会用演示值补齐。</small></div>
     <div className="viral-case-import-controls"><input type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube 视频链接" required /><button type="submit" className="primary" disabled={importState === 'loading'}>{importState === 'loading' ? '解析中…' : '解析并加入'}</button></div>
@@ -330,15 +348,17 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     </div>
     <div className="viral-case-corpus-controls">
       <label><span>搜索案例</span><input value={corpusQuery} onChange={event => { setCorpusQuery(event.target.value); setCorpusVisibleCount(24); }} placeholder="标题、公式、情绪或案例编号" aria-label="搜索全量案例" /></label>
-      <label><span>机会分桶</span><select value={corpusBucket} onChange={event => { setCorpusBucket(event.target.value); setCorpusVisibleCount(24); }} aria-label="按机会分桶筛选"><option value="all">全部分桶</option><option value="S">S · 核心样本</option><option value="A">A · 优先研究</option><option value="B">B · 值得观察</option><option value="C">C · 先补证据</option></select></label>
+      <label><span>机会分桶</span><select value={corpusBucket} onChange={event => { setCorpusBucket(event.target.value); setCorpusVisibleCount(24); }} aria-label="按机会分桶筛选"><option value="all">全部分桶</option>{corpusBucketOptions.map(bucket => <option key={bucket} value={bucket}>{bucket} · {bucket === 'S' ? '核心样本' : bucket === 'A' ? '优先研究' : bucket === 'B' ? '值得观察' : '先补证据'}</option>)}</select></label>
+      <label><span>结果排序</span><select value={corpusSort} onChange={event => { setCorpusSort(event.target.value as typeof corpusSort); setCorpusVisibleCount(24); }} aria-label="选择案例排序"><option value="priority">研究优先级</option><option value="source">源站顺序</option><option value="title">标题顺序</option></select></label>
     </div>
+    <div className="viral-case-corpus-quick-filters" aria-label="快速选择案例分桶"><span>快速分桶</span><button type="button" className={corpusBucket === 'all' ? 'active' : ''} onClick={() => { setCorpusBucket('all'); setCorpusVisibleCount(24); }}>全部 <b>{viralCaseCorpus.length}</b></button>{corpusBucketOptions.map(bucket => <button key={bucket} type="button" className={corpusBucket === bucket ? 'active' : ''} onClick={() => { setCorpusBucket(bucket); setCorpusVisibleCount(24); }}>{bucket} <b>{corpusBucketCounts[bucket] || 0}</b></button>)}</div>
     <div className="viral-case-corpus-list">
       {visibleCorpusCards.map(card => <article key={card.sourceCaseId} className="viral-case-corpus-card">
         <div className="viral-case-corpus-card-top"><span>{card.sourceCaseId} · {card.bucket} 桶</span><a href={card.sourceUrl} target="_blank" rel="noreferrer">原拆解 ↗</a></div>
         <h3>{card.title || '未命名案例'}</h3>
         <p className="viral-case-corpus-summary">{card.summary || '案例摘要待回到来源页核对。'}</p>
         <div className="viral-case-corpus-signals"><div><span>公开信号</span><b>{card.metrics || '未提供'}</b></div><div><span>结构公式</span><p>{card.formula || '未提供'}</p></div><div><span>情绪线</span><p>{card.emotion || '未提供'}</p></div></div>
-        <button type="button" onClick={() => applyCorpusCard(card)} disabled={!selectedVideo}>带入当前拆解卡</button>
+        <div className="viral-case-corpus-actions"><button type="button" onClick={() => copyCorpusCard(card)}>复制机制摘要</button><button type="button" className="primary" onClick={() => applyCorpusCard(card)} disabled={!selectedVideo}>带入当前拆解卡</button></div>
       </article>)}
     </div>
     {corpusMatches.length === 0 && <p className="viral-case-corpus-empty">没有匹配结果。换一个关键词或切回全部分桶。</p>}
