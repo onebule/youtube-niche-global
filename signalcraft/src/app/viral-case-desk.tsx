@@ -7,6 +7,7 @@ import {
   createIdeaDraftFromCase,
   emptyViralCaseNotes,
   applyViralPatternToNotes,
+  applyViralCaseCorpusCardToNotes,
   applyViralCaseAnalysisToNotes,
   createH3BriefFromCase,
   createViralCaseCanvasHandoff,
@@ -20,6 +21,7 @@ import {
   type ViralCaseStore,
 } from '@/src/lib/viral-case';
 import { getViralPattern, viralPatternLibrary, type ViralPattern } from '@/src/lib/viral-patterns';
+import { viralCaseCorpus, type ViralCaseCorpusCard } from '@/src/lib/viral-case-corpus';
 import { requestViralCaseAnalysis } from '@/src/lib/viral-case-analysis';
 import { resolveYouTubeVideo } from '@/src/lib/youtube-video';
 import { compileH3Prompt } from '@/src/lib/h3-prompt-compiler';
@@ -86,6 +88,9 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   const [importUrl, setImportUrl] = useState('');
   const [importState, setImportState] = useState<'idle' | 'loading'>('idle');
   const [activePatternId, setActivePatternId] = useState(viralPatternLibrary[0]?.id || '');
+  const [corpusQuery, setCorpusQuery] = useState('');
+  const [corpusBucket, setCorpusBucket] = useState('all');
+  const [corpusVisibleCount, setCorpusVisibleCount] = useState(24);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -109,6 +114,16 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   const embedId = selectedVideo ? youtubeVideoId(selectedVideo.sourceUrl) : null;
   const canCreateIdea = Boolean(notes.reusableMechanism.trim());
   const activePattern = getViralPattern(activePatternId) || viralPatternLibrary[0] || null;
+  const corpusMatches = useMemo(() => {
+    const query = corpusQuery.trim().toLowerCase();
+    return viralCaseCorpus.filter(card => {
+      const matchesBucket = corpusBucket === 'all' || card.bucket === corpusBucket;
+      if (!matchesBucket) return false;
+      if (!query) return true;
+      return [card.sourceCaseId, card.title, card.summary, card.metrics, card.formula, card.emotion].join(' ').toLowerCase().includes(query);
+    });
+  }, [corpusBucket, corpusQuery]);
+  const visibleCorpusCards = corpusMatches.slice(0, corpusVisibleCount);
 
   const selectVideo = (selectedVideoId: string) => {
     setStore(current => ({ ...current, selectedVideoId }));
@@ -257,6 +272,15 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     notify(`已把「${pattern.family}」填入空白观察项；人工内容保持不变。`);
   };
 
+  const applyCorpusCard = (card: ViralCaseCorpusCard) => {
+    if (!selectedVideo) {
+      notify('先导入或保存一个视频，再把案例机制带入拆解卡。');
+      return;
+    }
+    patchNotes(applyViralCaseCorpusCardToNotes(notes, card));
+    notify(`已带入「${card.title}」的公开拆解信号；时间点和画面仍需人工核对。`);
+  };
+
   const importPanel = <form className="viral-case-import" onSubmit={importVideo}>
     <div><span className="eyebrow">DIRECT PUBLIC SOURCE</span><b>粘贴 YouTube 链接，直接建立研究样本</b><small>只读取公开视频元数据、播放量、频道订阅数和原始链接；缺失字段不会用演示值补齐。</small></div>
     <div className="viral-case-import-controls"><input type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube 视频链接" required /><button type="submit" className="primary" disabled={importState === 'loading'}>{importState === 'loading' ? '解析中…' : '解析并加入'}</button></div>
@@ -295,9 +319,37 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     </article>}
   </section>;
 
+  const corpusLibrary = <section className="viral-case-corpus" aria-label="全量公开案例索引">
+    <div className="viral-case-corpus-heading">
+      <div>
+        <span className="eyebrow">PUBLIC CASE CORPUS · {viralCaseCorpus.length} CASES</span>
+        <h2>把案例页的全部公开拆解信号收进一个研究索引。</h2>
+        <p>这里保留案例标题、公开指标、公式和情绪线索，并为每条记录保留原拆解链接；它们是研究线索，不是对原视频画面、留存或收益的替代判断。</p>
+      </div>
+      <div className="viral-pattern-count"><b>{corpusMatches.length}</b><span>条匹配结果</span></div>
+    </div>
+    <div className="viral-case-corpus-controls">
+      <label><span>搜索案例</span><input value={corpusQuery} onChange={event => { setCorpusQuery(event.target.value); setCorpusVisibleCount(24); }} placeholder="标题、公式、情绪或案例编号" aria-label="搜索全量案例" /></label>
+      <label><span>机会分桶</span><select value={corpusBucket} onChange={event => { setCorpusBucket(event.target.value); setCorpusVisibleCount(24); }} aria-label="按机会分桶筛选"><option value="all">全部分桶</option><option value="S">S · 核心样本</option><option value="A">A · 优先研究</option><option value="B">B · 值得观察</option><option value="C">C · 先补证据</option></select></label>
+    </div>
+    <div className="viral-case-corpus-list">
+      {visibleCorpusCards.map(card => <article key={card.sourceCaseId} className="viral-case-corpus-card">
+        <div className="viral-case-corpus-card-top"><span>{card.sourceCaseId} · {card.bucket} 桶</span><a href={card.sourceUrl} target="_blank" rel="noreferrer">原拆解 ↗</a></div>
+        <h3>{card.title || '未命名案例'}</h3>
+        <p className="viral-case-corpus-summary">{card.summary || '案例摘要待回到来源页核对。'}</p>
+        <div className="viral-case-corpus-signals"><div><span>公开信号</span><b>{card.metrics || '未提供'}</b></div><div><span>结构公式</span><p>{card.formula || '未提供'}</p></div><div><span>情绪线</span><p>{card.emotion || '未提供'}</p></div></div>
+        <button type="button" onClick={() => applyCorpusCard(card)} disabled={!selectedVideo}>带入当前拆解卡</button>
+      </article>)}
+    </div>
+    {corpusMatches.length === 0 && <p className="viral-case-corpus-empty">没有匹配结果。换一个关键词或切回全部分桶。</p>}
+    {corpusVisibleCount < corpusMatches.length && <button type="button" className="viral-case-corpus-more" onClick={() => setCorpusVisibleCount(count => count + 24)}>继续查看（还剩 {corpusMatches.length - corpusVisibleCount} 条）</button>}
+    <p className="viral-case-corpus-footnote">索引来源：<a href="https://lulujai.com/zh-CN/shorts/cases" target="_blank" rel="noreferrer">lulujai 案例页 ↗</a> · 只做机制研究与原创改写，不复制原脚本、原画面或原媒体文件。</p>
+  </section>;
+
   if (!videos.length) {
     return <main className="app-page viral-case-page">
       {patternLibrary}
+      {corpusLibrary}
       <section className="viral-case-empty">
         <span>✦</span>
         <p className="eyebrow">VIRAL CASE DESK</p>
@@ -322,6 +374,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       </aside>
     </section>
     {patternLibrary}
+    {corpusLibrary}
 
     <section className="viral-case-selector" aria-label="选择研究样本">
       <div>

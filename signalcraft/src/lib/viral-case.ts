@@ -1,5 +1,6 @@
 import type { Video } from './types';
 import type { ViralPattern } from './viral-patterns';
+import type { ViralCaseCorpusCard } from './viral-case-corpus';
 
 export const VIRAL_CASE_STORAGE_KEY = 'signalcraft-viral-case-desk-v1';
 export const VIRAL_CASE_STORAGE_VERSION = 1;
@@ -137,6 +138,19 @@ export function applyViralPatternToNotes(notes: ViralCaseNotes, pattern: ViralPa
     propsAndSound: notes.propsAndSound || pattern.propsAndSound,
     reusableMechanism: notes.reusableMechanism || pattern.coreMechanism,
     adaptation: notes.adaptation || pattern.adaptationPrompt,
+  };
+}
+
+export function applyViralCaseCorpusCardToNotes(notes: ViralCaseNotes, card: ViralCaseCorpusCard): Partial<ViralCaseNotes> {
+  const emotion = card.emotion.replace(/^情绪曲线：?\s*/, '').trim();
+  return {
+    referencePatternId: `corpus-${card.sourceCaseId}`,
+    referencePatternTitle: card.title,
+    hook: notes.hook || `先核对摘要中的开头动作：${card.summary}`,
+    rule: notes.rule || card.formula,
+    emotionalCurve: notes.emotionalCurve || emotion,
+    reusableMechanism: notes.reusableMechanism || `把「${card.title}」中的观看规则提炼出来，再替换角色、场景、道具与结尾。`,
+    adaptation: notes.adaptation || `保留「${card.title}」带来的观看期待，改写成自己的赛道和原创情境；先回到原案例核对画面与节拍。`,
   };
 }
 
