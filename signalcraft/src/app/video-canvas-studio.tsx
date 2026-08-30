@@ -84,6 +84,7 @@ import {
   type ModelRoutingStrategy,
 } from '@/src/lib/video-model-router';
 import { compileH3Prompt, describeH3PromptIssue, validateH3Prompt, type H3PromptMode } from '@/src/lib/h3-prompt-compiler';
+import { VIRAL_CASE_CANVAS_HANDOFF_KEY, normalizeViralCaseCanvasHandoff } from '@/src/lib/viral-case';
 import ImageGenerationPanel from './image-generation-panel';
 
 type Point = { x: number; y: number };
@@ -1237,6 +1238,20 @@ export default function VideoCanvasStudio({
       }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
+    }
+    try {
+      const handoffRaw = localStorage.getItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      const handoff = handoffRaw ? normalizeViralCaseCanvasHandoff(JSON.parse(handoffRaw)) : null;
+      if (handoff) {
+        // A handoff changes only the composer input; it never creates or submits a generation.
+        setPrompt(handoff.prompt);
+        setH3Brief(handoff.brief);
+        setReferenceMode('text');
+        setDuration(normalizeVideoDuration('minimax-h3', `${handoff.duration}s`));
+        localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
+      }
+    } catch {
+      localStorage.removeItem(VIRAL_CASE_CANVAS_HANDOFF_KEY);
     } finally {
       setHydrated(true);
     }
