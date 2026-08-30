@@ -91,7 +91,7 @@ body {
 .drawer-title-translation { margin: 0 30px 9px 0; color: var(--brand); font-size: 15px; line-height: 1.45; }
 .ranking-title > b { display: grid; gap: 3px; min-width: 0; white-space: normal; }
 .ranking-title > b > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ranking-title > b > .title-translation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+.ranking-title > b > .title-translation { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 11px; font-weight: 600; line-height: 1.35; white-space: normal; }
 .ranking-card-title strong { display: grid; gap: 3px; min-width: 0; }
 .ranking-card-title strong > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .ranking-card-title strong > .title-translation { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 11px; font-weight: 600; }
