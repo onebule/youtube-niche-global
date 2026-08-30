@@ -24,7 +24,7 @@ export type ChannelDoctorReport = {
   funnel:{key:string;label:string;status:'ok'|'watch'|'unknown';reason:string}[];
   findings:DoctorFinding[];
   topicClusters:{name:string;count:number;percent:number}[];
-  videos:{id:string;title:string;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long'|'unknown';formatConfidence?:'high'|'medium'|'low';formatSource?:string;formatVersion?:number;formatSignals?:string[];thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
+  videos:{id:string;title:string;titleZh?:string|null;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long'|'unknown';formatConfidence?:'high'|'medium'|'low';formatSource?:string;formatVersion?:number;formatSignals?:string[];thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
   dataLimitations:string[];
   oauthAvailable:boolean;
 };
@@ -40,10 +40,11 @@ function endpoint(){
     :'https://youtube-niche-global-api.vercel.app/api/channel-doctor';
 }
 
-export async function diagnoseChannel(channel:string,limit=20):Promise<ChannelDoctorReport>{
+export async function diagnoseChannel(channel:string,limit=20,locale:'zh'|'en'='en'):Promise<ChannelDoctorReport>{
   const url=new URL(endpoint());
   url.searchParams.set('channel',channel.trim());
   url.searchParams.set('limit',String(limit));
+  url.searchParams.set('locale',locale);
   const response=await fetch(url,{headers:{accept:'application/json'}});
   const payload=await response.json().catch(()=>({}));
   if(!response.ok) throw new Error(payload.error||'频道公开数据暂时无法读取，请确认链接或稍后再试。');

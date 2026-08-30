@@ -3,7 +3,7 @@ import { authHeaders } from './auth';
 import { clientErrorMessage } from './client-error';
 
 type ApiOpportunity = {
-  title:string; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
+  title:string; titleZh?:string|null; topic?:string; languageCode?:string; marketCode?:string; channelId?:string; channelTitle:string; channelUrl?:string; channelThumbnail?:string; thumbnail?:string; videoUrl?:string; views:number; subscribers:number;
   ageDays:number; publishedAt?:string; durationSeconds?:number; likes?:number; comments?:number;
   format:'short'|'long'|'unknown'; formatConfidence?:'high'|'medium'|'low'; formatSource?:string; formatVersion?:number; formatSignals?:string[]; platformType?:PlatformType; platformTypeSource?:string; contentType?:ContentType; analysisClass?:AnalysisClass; formatConfidenceScore?:number; aspectRatio?:string|null; shortScore?:number|null; longScore?:number|null; evidenceUsed?:string[]; missingEvidence?:string[]; classificationReason?:string[]; needsSecondaryAnalysis?:boolean; classificationVersion?:string; breakoutRatio?:number; viralLabel?:string; isMadeForKids?:boolean; latestCapturedAt?:string|null; baselineViews?:number|null; baselineCapturedAt?:string|null;
 };
@@ -60,7 +60,7 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,
  * so the UI can distinguish average performance from a measured growth trend. */
-export async function searchYouTubeSignals(input:{query:string;language:string;region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;entity?:'videos'|'channels';ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
+export async function searchYouTubeSignals(input:{query:string;language:string;locale?:'zh'|'en';region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;entity?:'videos'|'channels';ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
   // A 1M-view floor made newer, smaller channels disappear before the
@@ -69,6 +69,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
   const region=input.region||'US';
   const minimumViews=Number(input.minimumViews||0)>0?String(input.minimumViews):'10000';
   const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews});
+  params.set('locale',input.locale||'en');
   if(input.format) params.set('format',input.format);
   if(input.category && input.category!=='all') params.set('category',input.category);
   if(input.ranking) params.set('ranking','1');
@@ -101,7 +102,7 @@ export async function searchYouTubeSignals(input:{query:string;language:string;r
     const snapshots=hasBaseline
       ? [{capturedAt:item.baselineCapturedAt!,views:Number(item.baselineViews),likes:0,comments:0,subscribers:item.subscribers},{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}]
       : [{capturedAt:currentCapturedAt,views:item.views,likes:item.likes||0,comments:item.comments||0,subscribers:item.subscribers}];
-    return {id:`yt-${sourceId}`,channelId,title:item.title,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,formatConfidence:item.formatConfidence,formatSource:item.formatSource,formatVersion:item.formatVersion,formatSignals:item.formatSignals,platformType:item.platformType,platformTypeSource:item.platformTypeSource,contentType:item.contentType,analysisClass:item.analysisClass,formatConfidenceScore:item.formatConfidenceScore,aspectRatio:item.aspectRatio,shortScore:item.shortScore,longScore:item.longScore,evidenceUsed:item.evidenceUsed,missingEvidence:item.missingEvidence,classificationReason:item.classificationReason,needsSecondaryAnalysis:item.needsSecondaryAnalysis,classificationVersion:item.classificationVersion,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
+    return {id:`yt-${sourceId}`,channelId,title:item.title,titleZh:item.titleZh||null,topic:item.topic||input.query||'公开趋势',language:videoLanguage,region:market,format:item.format,formatConfidence:item.formatConfidence,formatSource:item.formatSource,formatVersion:item.formatVersion,formatSignals:item.formatSignals,platformType:item.platformType,platformTypeSource:item.platformTypeSource,contentType:item.contentType,analysisClass:item.analysisClass,formatConfidenceScore:item.formatConfidenceScore,aspectRatio:item.aspectRatio,shortScore:item.shortScore,longScore:item.longScore,evidenceUsed:item.evidenceUsed,missingEvidence:item.missingEvidence,classificationReason:item.classificationReason,needsSecondaryAnalysis:item.needsSecondaryAnalysis,classificationVersion:item.classificationVersion,durationSeconds:item.durationSeconds || (item.format==='short'?55:480),thumbnail,sourceUrl:item.videoUrl,publishedAt,risk:'medium',tags:['YouTube 公开数据',hasBaseline?'两次采集对比':'单次快照',item.isMadeForKids?'儿童内容':'非儿童内容',item.viralLabel||''],snapshots};
   });
   return {videos,channels,requestedDays:payload.recentDays||days,quota:payload.quota,nextPageToken:payload.nextPageToken||null,dataScope:isPublicRankingScope(payload.dataScope)?payload.dataScope:null,noCandidatesMessage:source.length||input.pageToken?null:payload.noCandidatesMessage||'当前筛选条件下暂无可用的公开视频。请调整市场、时间范围或内容形态后重试。'};
 }

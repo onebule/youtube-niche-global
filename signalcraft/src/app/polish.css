@@ -82,6 +82,28 @@ body {
 [data-theme="dark"] .filters, [data-theme="dark"] .result-toolbar, [data-theme="dark"] .video-card { background: #121d30; border-color: #273b56; }
 [data-theme="dark"] .filters input, [data-theme="dark"] .filters select, [data-theme="dark"] .card-actions button { background: #0d1728; border-color: #2c405c; }
 [data-theme="dark"] .video-title, [data-theme="dark"] .page-intro h1 { color: #eff5ff; }
+
+/* Server-provided DeepL title translations are secondary evidence: keep the
+   original YouTube title prominent and place a readable Chinese line below it
+   only when the interface is in Chinese. */
+.title-translation { display: block; margin-top: 3px; color: var(--brand); font-size: .78em; font-weight: 600; line-height: 1.35; }
+.video-title .title-translation { max-height: 2.7em; overflow: hidden; }
+.drawer-title-translation { margin: 0 30px 9px 0; color: var(--brand); font-size: 15px; line-height: 1.45; }
+.ranking-title > b { display: grid; gap: 3px; min-width: 0; white-space: normal; }
+.ranking-title > b > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-title > b > .title-translation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+.ranking-card-title strong { display: grid; gap: 3px; min-width: 0; }
+.ranking-card-title strong > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.ranking-card-title strong > .title-translation { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 11px; font-weight: 600; }
+.doctor-video-title > span { display: grid; min-width: 0; }
+.doctor-video-title > span > b { white-space: nowrap; }
+.doctor-video-title > span > .title-translation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.compare-picker label > span { display: grid; min-width: 0; gap: 2px; }
+.compare-picker label .title-translation { margin-top: 0; font-size: 11px; }
+.compare-heading > b:not(:first-child) { display: grid; gap: 2px; min-width: 0; }
+.compare-heading > b:not(:first-child) > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-heading > b:not(:first-child) > .title-translation { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.idea-source-title { margin: 6px 0 0; }
 [data-theme="dark"] .metric-row { border-color: #25364e; }
 [data-theme="dark"] .card-actions button:first-child { background: #1b2a55; border-color: #334a83; color: #cdd8ff; }
 
