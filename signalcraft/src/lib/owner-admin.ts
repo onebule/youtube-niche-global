@@ -14,6 +14,7 @@ export type OwnerOverview = {
       isOwner: boolean;
       teamAccess: {
         status: 'owner' | 'environment' | 'active' | 'expired' | 'none';
+        plan: 'owner' | 'pro' | 'team' | null;
         active: boolean;
         expiresAt: string | null;
         updatedAt?: string | null;
@@ -43,6 +44,7 @@ export type OwnerOverview = {
 };
 
 export type TeamAccessDuration = '7d' | '30d' | 'permanent';
+export type AccountPlan = 'pro' | 'team';
 
 export class OwnerOverviewError extends Error {
   constructor(message: string, readonly status: number) {
@@ -72,16 +74,18 @@ export async function hasOwnerAccess(): Promise<boolean> {
 export async function updateVideoTeamAccess({
   email,
   action,
+  plan,
   duration,
 }: {
   email: string;
   action: 'grant' | 'revoke';
+  plan?: AccountPlan;
   duration?: TeamAccessDuration;
 }): Promise<void> {
   const response = await fetch('/api/owner-access', {
     method: action === 'grant' ? 'POST' : 'DELETE',
     headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ email, ...(action === 'grant' ? { duration } : {}) }),
+    body: JSON.stringify({ email, ...(action === 'grant' ? { plan: plan || 'team', duration } : {}) }),
     cache: 'no-store',
   });
   const payload = await response.json() as { error?: string };
