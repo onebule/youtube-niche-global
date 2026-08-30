@@ -23,6 +23,7 @@ export type ViralCaseAnalysis = {
 
 export type ViralCaseNotes = {
   referencePatternId: string | null;
+  referencePatternTitle: string | null;
   hook: string;
   rule: string;
   beats: [string, string, string, string];
@@ -86,6 +87,7 @@ export function normalizeViralCaseAnalysis(value: unknown): ViralCaseAnalysis | 
 export function emptyViralCaseNotes(): ViralCaseNotes {
   return {
     referencePatternId: null,
+    referencePatternTitle: null,
     hook: '',
     rule: '',
     beats: ['', '', '', ''],
@@ -107,6 +109,7 @@ export function normalizeViralCaseNotes(value: unknown): ViralCaseNotes {
   const rawBeatTimestamps = Array.isArray(raw.beatTimestamps) ? raw.beatTimestamps : [];
   return {
     referencePatternId: typeof raw.referencePatternId === 'string' ? raw.referencePatternId : null,
+    referencePatternTitle: typeof raw.referencePatternTitle === 'string' ? text(raw.referencePatternTitle) : null,
     hook: text(raw.hook),
     rule: text(raw.rule),
     beats: [text(rawBeats[0]), text(rawBeats[1]), text(rawBeats[2]), text(rawBeats[3])],
@@ -124,6 +127,7 @@ export function normalizeViralCaseNotes(value: unknown): ViralCaseNotes {
 export function applyViralPatternToNotes(notes: ViralCaseNotes, pattern: ViralPattern): Partial<ViralCaseNotes> {
   return {
     referencePatternId: pattern.id,
+    referencePatternTitle: pattern.title,
     hook: notes.hook || pattern.hookType,
     rule: notes.rule || pattern.formula,
     beats: notes.beats.map((beat, index) => beat || pattern.beats[index]) as ViralCaseNotes['beats'],
@@ -203,7 +207,7 @@ export function formatViralCaseReport(video: Video, notes: ViralCaseNotes): stri
     `- 主题：${video.topic || '未标注'}`,
     `- 报告来源：${report?.provider || '手动研究'}`,
     `- 报告置信度：${report?.confidence || '—'}`,
-    `- 参考模式：${notes.referencePatternId || '手动研究'}`,
+    `- 参考模式：${notes.referencePatternTitle || notes.referencePatternId || '手动研究'}`,
     '',
     '## 公开证据',
     '',

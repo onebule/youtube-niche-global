@@ -41,6 +41,7 @@ test('reference pattern cards seed only blank observations and keep provenance',
   } } }).notesByVideoId['yt-example'];
   const patch = applyViralPatternToNotes(notes, viralPatternLibrary[1]);
   assert.equal(patch.referencePatternId, 'pet-rule-loophole');
+  assert.equal(patch.referencePatternTitle, viralPatternLibrary[1].title);
   assert.equal(patch.hook, '人工确认的开头');
   assert.equal(patch.beats[1], '人工第二拍');
   assert.equal(patch.beats[0], viralPatternLibrary[1].beats[0]);
