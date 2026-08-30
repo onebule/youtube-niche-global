@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import LoginPage from '../login-page';
-import { captureOAuthReturn, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
+import { captureOAuthReturn, passwordSignIn, passwordSignUp, startGoogleSignIn, type AccountSession, type PasswordAuthInput, type PasswordAuthResult } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 
 export default function LoginRoute() {
@@ -24,6 +24,9 @@ export default function LoginRoute() {
   };
   const continueToRankings = () => { window.location.assign('/rankings'); };
   const signIn = () => { startGoogleSignIn({ direct: true }); };
+  const passwordAuth = (input: PasswordAuthInput): Promise<PasswordAuthResult> => input.action === 'register'
+    ? passwordSignUp({ email: input.email, password: input.password, name: input.name })
+    : passwordSignIn({ email: input.email, password: input.password });
 
-  return <LoginPage account={account} locale={locale} onLocaleChange={changeLocale} onSignIn={signIn} onContinue={continueToRankings} />;
+  return <LoginPage account={account} locale={locale} onLocaleChange={changeLocale} onSignIn={signIn} onPasswordAuth={async input => { const result = await passwordAuth(input); if (result.session) setAccount(result.session); return result; }} onContinue={continueToRankings} />;
 }

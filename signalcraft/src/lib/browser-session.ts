@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { captureOAuthReturn, type AccountSession } from '@/src/lib/auth';
+import { captureOAuthReturn, getStoredSession, refreshSession, type AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 
 const INITIAL_PATH = '/';
@@ -31,7 +31,15 @@ export function useBrowserSession() {
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
-      setAccount(captureOAuthReturn());
+      const current = captureOAuthReturn();
+      setAccount(current);
+      const stored = getStoredSession();
+      const needsRefresh = Boolean(stored?.refreshToken && stored.expiresAt && stored.expiresAt - Date.now() < 10 * 60 * 1000);
+      if (needsRefresh && stored?.refreshToken) {
+        refreshSession(stored.refreshToken).then(next => {
+          if (next) setAccount(next);
+        }).catch(() => undefined);
+      }
 
       const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
       if (savedLocale === 'en' || savedLocale === 'zh') {
