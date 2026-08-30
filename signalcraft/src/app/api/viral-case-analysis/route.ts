@@ -13,14 +13,10 @@ const isHttpUrl = (value: unknown): value is string => {
   }
 };
 
+const defaultUpstream = 'https://youtube-niche-global-api.vercel.app/api/viral-case-analysis';
+
 export async function POST(request: NextRequest) {
-  const upstream = process.env.VIRAL_CASE_ANALYSIS_URL?.trim();
-  if (!upstream) {
-    return Response.json(
-      { error: '自动视频分析服务尚未配置。当前仍可使用公开数据与手动拆解。', code: 'VIRAL_CASE_ANALYSIS_NOT_CONFIGURED' },
-      { status: 503, headers: { 'cache-control': 'no-store' } },
-    );
-  }
+  const upstream = process.env.VIRAL_CASE_ANALYSIS_URL?.trim() || defaultUpstream;
 
   let input: unknown;
   try {
@@ -33,13 +29,14 @@ export async function POST(request: NextRequest) {
   }
 
   const token = process.env.VIRAL_CASE_ANALYSIS_TOKEN?.trim();
+  const incomingAuthorization = request.headers.get('authorization');
   try {
     const response = await fetch(upstream, {
       method: 'POST',
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(incomingAuthorization ? { authorization: incomingAuthorization } : token ? { authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(45_000),

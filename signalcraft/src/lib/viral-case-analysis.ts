@@ -1,4 +1,5 @@
 import type { Video } from './types';
+import { authHeaders } from './auth';
 import { clientErrorMessage } from './client-error';
 import { normalizeViralCaseAnalysis, type ViralCaseAnalysis } from './viral-case';
 
@@ -14,7 +15,7 @@ export type ViralCaseAnalysisResponse = {
 export async function requestViralCaseAnalysis(video: Video): Promise<ViralCaseAnalysisResponse> {
   const response = await fetch('/api/viral-case-analysis', {
     method: 'POST',
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       videoId: video.id,
       sourceUrl: video.sourceUrl,

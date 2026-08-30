@@ -439,7 +439,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
         <div>
           <span className="eyebrow">AUTOMATED ANALYSIS ADAPTER</span>
           <h2>{notes.analysis ? '自动报告已返回，仍需人工复核。' : '让服务端替你先做一轮粗拆解。'}</h2>
-          <p>{notes.analysis ? `来源：${notes.analysis.provider} · 置信度：${notes.analysis.confidence === 'high' ? '高' : notes.analysis.confidence === 'medium' ? '中' : '低'} · ${new Date(notes.analysis.generatedAt).toLocaleString('zh-CN')}` : '按钮会调用同源服务端适配器。未配置视觉 / 字幕 / 音频服务时，系统只返回“未接入”，不会生成假报告。'}</p>
+          <p>{notes.analysis ? `来源：${notes.analysis.provider} · 置信度：${notes.analysis.confidence === 'high' ? '高' : notes.analysis.confidence === 'medium' ? '中' : '低'} · ${new Date(notes.analysis.generatedAt).toLocaleString('zh-CN')}` : '默认先分析标题、时长和 YouTube 缩略图；不会把推测写成逐帧、字幕或音频结论。接入独立视频服务后才会升级完整能力。'}</p>
         </div>
         <button type="button" className="primary" onClick={requestAnalysis} disabled={analysisState === 'running' || !selectedVideo.sourceUrl}>{analysisState === 'running' ? '分析中…' : notes.analysis ? '重新分析' : '请求自动分析'}</button>
       </section>
