@@ -48,7 +48,7 @@ const initials = (value: string | null, locale: UiLocale) => {
   return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase();
 };
 
-function RepresentativeVideoRow({ video, locale }: { video: LongformOpportunity['representativeVideos'][number]; locale: UiLocale }) {
+function RepresentativeVideoRow({ video, locale, priority = false }: { video: LongformOpportunity['representativeVideos'][number]; locale: UiLocale; priority?: boolean }) {
   const zh = locale === 'zh';
   const thumbnail = mediaUrl(video.thumbnail);
   const channelAvatar = mediaUrl(video.channelAvatar);
@@ -56,7 +56,7 @@ function RepresentativeVideoRow({ video, locale }: { video: LongformOpportunity[
   const titleZh = zh && video.titleZh && video.titleZh.trim() && video.titleZh.trim() !== video.title.trim() ? video.titleZh.trim() : null;
   const content = <>
     <span className="longform-representative-thumb">
-      {thumbnail ? <img src={thumbnail} alt={zh ? `${video.title} 视频缩略图` : `${video.title} video thumbnail`} width={192} height={108} loading="lazy" decoding="async"/> : <span className="longform-representative-placeholder" aria-hidden="true">▶</span>}
+      {thumbnail ? <img src={thumbnail} alt={zh ? `${video.title} 视频缩略图` : `${video.title} video thumbnail`} width={192} height={108} loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} decoding="async"/> : <span className="longform-representative-placeholder" aria-hidden="true">▶</span>}
       <small className="longform-representative-duration">{formatDuration(video.durationSeconds, locale)}</small>
     </span>
     <span className="longform-representative-copy">
@@ -66,7 +66,7 @@ function RepresentativeVideoRow({ video, locale }: { video: LongformOpportunity[
       </span>
       <span className="longform-representative-meta">
         <span className="longform-representative-avatar" aria-hidden="true">
-          {channelAvatar ? <img src={channelAvatar} alt="" width={32} height={32} loading="lazy" decoding="async"/> : initials(channelTitle, locale)}
+          {channelAvatar ? <img src={channelAvatar} alt="" width={32} height={32} loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} decoding="async"/> : initials(channelTitle, locale)}
         </span>
         <span className="longform-representative-channel" title={channelTitle}>{channelTitle}</span>
         <small className="longform-representative-views">{formatNumber(video.views, locale)} {zh ? '播放' : 'views'}</small>
@@ -89,7 +89,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-score-grid"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral"/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink"/></div>
     <div className="longform-lanes">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
-    <details className="longform-representatives"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map(video => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
+    <details className="longform-representatives"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map((video, index) => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale} priority={index < 2}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
   </article>;
 }
 
