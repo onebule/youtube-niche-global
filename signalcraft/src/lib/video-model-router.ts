@@ -147,7 +147,7 @@ const IMAGE_TO_VIDEO_CAPABILITIES: VideoModelCapability = {
 export const VIDEO_MODEL_REGISTRY: VideoModelDefinition[] = [
   {
     id: 'minimax-h3', label: 'MiniMax H3', provider: 'minimax', adapterStatus: 'ready',
-    capabilities: { ...IMAGE_TO_VIDEO_CAPABILITIES, audio: true },
+    capabilities: { ...IMAGE_TO_VIDEO_CAPABILITIES, referenceVideo: true, audio: true },
     strengths: { character: 86, characterConsistency: 88, motion: 74, expression: 84, camera: 72, physics: 68, realism: 82, reference: 88, audio: 70 },
     limitations: ['输入图片尺寸和画幅受 Provider 规则约束'], duration: { minSeconds: 4, maxSeconds: 15 }, resolutions: ['768P', '2K'], aspectRatios: ['9:16', '16:9', '1:1'],
     pricing: { perSecond: null, resolutionMultipliers: RESOLUTION_MULTIPLIERS, note: '由服务端积分配置提供' }, speed: 72, reliability: 78, qualityFloor: 68,

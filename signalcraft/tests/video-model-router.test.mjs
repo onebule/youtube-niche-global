@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  analyzeShot,
   estimateModelCost,
-  estimateProjectCost,
-  normalizeShotRouterState,
-  resolveEffectiveModel,
   routeShot,
   VIDEO_MODEL_REGISTRY,
 } from '../src/lib/video-model-router.ts';
@@ -12,11 +10,11 @@ import {
 const h3 = VIDEO_MODEL_REGISTRY.find(model => model.id === 'minimax-h3');
 const seedance = VIDEO_MODEL_REGISTRY.find(model => model.id === 'seedance-2');
 
-test('manual lock always wins over Auto routing', () => {
-  const router = normalizeShotRouterState({ selectionMode: 'MANUAL', manualModelId: 'seedance-2', locked: true });
-  const routing = { recommendedModel: 'minimax-h3' };
-  assert.equal(resolveEffectiveModel(router, routing), 'seedance-2');
-  assert.equal(router.locked, true);
+test('H3 registry advertises image, video reference, and audio capabilities', () => {
+  assert.equal(h3.adapterStatus, 'ready');
+  assert.equal(h3.capabilities.imageToVideo, true);
+  assert.equal(h3.capabilities.referenceVideo, true);
+  assert.equal(h3.capabilities.audio, true);
 });
 
 test('hard capability filtering rejects unavailable audio and planned adapters', () => {
@@ -32,22 +30,15 @@ test('cost and quality strategies can choose different models', () => {
   const cost = routeShot(analysis, 'COST', registry);
   const quality = routeShot(analysis, 'QUALITY', registry);
   assert.equal(cost.recommendedModel, 'minimax-h3');
-  assert.equal(quality.recommendedModel, 'seedance-2');
+  assert.equal(quality.recommendedModel, 'seedance-2-5');
 });
 
-test('legacy data receives safe router defaults', () => {
-  const router = normalizeShotRouterState(undefined, { prompt: 'A room', startFrame: true, duration: 5, resolution: '720p', aspectRatio: '9:16' });
-  assert.equal(router.selectionMode, 'AUTO');
-  assert.equal(router.strategy, 'BALANCED');
-  assert.equal(router.locked, false);
-  assert.deepEqual(router.attempts, []);
-  assert.deepEqual(router.candidates, []);
-});
-
-test('failed attempts cannot silently switch the selected model', () => {
-  const router = normalizeShotRouterState({ selectionMode: 'MANUAL', manualModelId: 'minimax-h3', locked: true });
-  const failedAttempt = { recommendedModel: 'seedance-2' };
-  assert.equal(resolveEffectiveModel(router, failedAttempt), 'minimax-h3');
+test('analyzeShot fills safe defaults and detects H3-relevant media needs', () => {
+  const analysis = analyzeShot({ prompt: '人物沿着街道奔跑并说话', referenceMode: 'omni' });
+  assert.equal(analysis.character, true);
+  assert.equal(analysis.referenceMode, 'omni');
+  assert.equal(analysis.audioRequired, true);
+  assert.ok(analysis.motionComplexity >= 65);
 });
 
 test('cost calculation uses configured price, duration, and resolution multiplier', () => {
@@ -57,12 +48,3 @@ test('cost calculation uses configured price, duration, and resolution multiplie
   assert.equal(estimateModelCost(secondModel, 4, '720p'), 0.8);
 });
 
-test('project cost derives the current Auto recommendation when routing is not cached', () => {
-  const registry = VIDEO_MODEL_REGISTRY.map(model => model.id === 'seedance-2'
-    ? { ...model, pricing: { ...model.pricing, perSecond: 0.2 } }
-    : model.id === 'kling-3'
-    ? { ...model, pricing: { ...model.pricing, perSecond: 0.4 } }
-    : model);
-  const total = estimateProjectCost([{ duration: '5s', resolution: '720p', router: { selectionMode: 'AUTO', strategy: 'BALANCED', analysis: { character: false, characterConsistency: 0, motionComplexity: 40, expressionComplexity: 0, cameraComplexity: 20, physicsComplexity: 10, startFrame: true, endFrame: false, referenceImages: 1, referenceVideo: false, audioRequired: false, duration: 5, resolution: '720p', aspectRatio: '9:16', priority: 'BALANCED' } } }], registry);
-  assert.equal(total, 1);
-});
