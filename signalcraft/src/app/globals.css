@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The homepage hero now leads with one clear action and a readable single-column width. */
+section.hero{grid-template-columns:minmax(0,1fr);gap:0}
+
 .locale-toggle{display:inline-flex;align-items:center;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--surface);box-shadow:0 1px 0 color-mix(in srgb,var(--ink) 5%,transparent)}.locale-toggle button{min-width:34px;padding:4px 6px;border-radius:6px;color:var(--muted);font-size:11px;font-weight:800;line-height:1.2}.locale-toggle button.active{background:var(--ink);color:var(--surface)}.locale-toggle button:not(.active):hover{color:var(--ink);background:var(--soft)}
 
 :root{--bg:#f5f7fb;--surface:#fff;--ink:#152033;--muted:#637083;--line:#e1e7ef;--brand:#263a8d;--cyan:#00a6a6;--soft:#edf5f7;--shadow:0 15px 40px rgba(20,31,55,.08)}
