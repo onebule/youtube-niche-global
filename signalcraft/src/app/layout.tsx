@@ -19,7 +19,9 @@ import './site-footer.css';
 import './legal-page.css';
 import SiteFooter from './site-footer';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://niqivo.top';
+const siteUrl = process.env.VERCEL_ENV === 'production'
+  ? 'https://niqivo.top'
+  : process.env.NEXT_PUBLIC_SITE_URL || 'https://niqivo.top';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -28,6 +30,7 @@ export const metadata: Metadata = {
     template: '%s · SignalCraft',
   },
   description: '面向创作者的 YouTube 内容情报与选题决策平台，发现真实趋势、分析频道并沉淀选题。',
+  alternates: { canonical: '/' },
   applicationName: 'SignalCraft',
   keywords: ['YouTube 数据分析', 'YouTube 选题', '频道分析', '视频趋势', '内容情报'],
   authors: [{ name: 'SignalCraft' }],
@@ -40,6 +43,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
+    url: siteUrl,
     siteName: 'SignalCraft',
     title: 'SignalCraft · YouTube 内容情报',
     description: '发现真实趋势、分析频道并沉淀下一条值得制作的内容。',
