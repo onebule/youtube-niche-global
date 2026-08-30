@@ -205,6 +205,8 @@ export function preflightVideoGeneration(input: {
   startFrame: PreflightFrame | null;
   endFrame?: PreflightFrame | null;
   referenceFrames?: PreflightFrame[];
+  referenceVideoCount?: number;
+  referenceAudioCount?: number;
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
@@ -228,14 +230,18 @@ export function preflightVideoGeneration(input: {
   const frames = input.referenceMode === 'omni'
     ? (input.referenceFrames || [])
     : input.referenceMode === 'text' ? [] : [input.startFrame, input.endFrame].filter((frame): frame is PreflightFrame => Boolean(frame));
+  const referenceVideoCount = Math.max(0, Number(input.referenceVideoCount) || 0);
+  const referenceAudioCount = Math.max(0, Number(input.referenceAudioCount) || 0);
 
   if (!input.prompt.trim()) add('error', 'PROMPT_REQUIRED', copy('填写 Motion Prompt 后才能生成。', 'Add a Motion Prompt before generating.'));
   if (input.prompt.length > 1200) add('error', 'PROMPT_TOO_LONG', copy('Motion Prompt 不能超过 1200 个字符。', 'Motion Prompt must be 1,200 characters or fewer.'));
   if (input.model === 'auto') add('error', 'AUTO_MODEL_UNAVAILABLE', copy('Auto 模型推荐尚未开放，请先选择具体模型。', 'Auto model routing is not available yet. Choose a specific model.'));
   if (!input.modelReady) add('error', 'MODEL_NOT_READY', copy('当前模型尚未配置完成，请选择已就绪的模型。', 'This model is not ready. Choose a configured model.'));
   if (input.referenceMode === 'omni') {
-    if (!frames.length) add('error', 'REFERENCE_REQUIRED', copy('全能参考至少需要 1 张图片。', 'Omni reference needs at least one image.'));
+    if (!frames.length && !referenceVideoCount) add('error', 'REFERENCE_REQUIRED', copy('全能参考至少需要 1 张图片或参考视频。', 'Omni reference needs at least one image or reference video.'));
     if (frames.length > 9) add('error', 'REFERENCE_LIMIT', copy('全能参考最多支持 9 张图片。', 'Omni reference supports up to 9 images.'));
+    if (referenceVideoCount > 3) add('error', 'REFERENCE_VIDEO_LIMIT', copy('MiniMax H3 最多支持 3 个参考视频。', 'MiniMax H3 supports up to 3 reference videos.'));
+    if (referenceAudioCount > 3) add('error', 'REFERENCE_AUDIO_LIMIT', copy('MiniMax H3 最多支持 3 个参考音频。', 'MiniMax H3 supports up to 3 reference audio files.'));
   } else if (input.referenceMode !== 'text' && !input.startFrame) {
     add('error', 'START_REQUIRED', copy('首尾帧模式需要 START 图片。', 'Start / end mode needs a START image.'));
   }
@@ -396,6 +402,8 @@ export function buildGenerationSpecV2(input: {
   endImageAssetId?: string | null;
   referenceMode?: 'start-end' | 'omni' | 'text';
   referenceImageAssetIds?: string[];
+  referenceVideoAssetIds?: string[];
+  referenceAudioAssetIds?: string[];
   referenceBindings?: CanvasAssetReference[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
@@ -409,7 +417,7 @@ export function buildGenerationSpecV2(input: {
   const referenceIds = input.referenceMode === 'text'
     ? []
     : input.referenceMode === 'omni'
-      ? Array.from(new Set(input.referenceImageAssetIds || []))
+      ? Array.from(new Set([...(input.referenceImageAssetIds || []), ...(input.referenceVideoAssetIds || []), ...(input.referenceAudioAssetIds || [])]))
       : [input.startImageAssetId, ...(input.endImageAssetId ? [input.endImageAssetId] : [])];
   const references = referenceIds.filter((assetId): assetId is string => Boolean(assetId)).map((assetId, index) => {
     const binding = input.referenceBindings?.find(item => item.assetId === assetId && (!shotId || item.shotId === shotId));
@@ -469,6 +477,8 @@ export async function planVideoGeneration(input: {
   referenceMode: 'start-end' | 'omni' | 'text';
   referenceCount: number;
   referenceImageAssetIds?: string[];
+  referenceVideoAssetIds?: string[];
+  referenceAudioAssetIds?: string[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
@@ -497,18 +507,19 @@ export async function extractScriptText(assetId: string, language: 'zh' | 'en' =
   return payload.ocr;
 }
 
-export async function uploadVideoInput(file: File, dimensions?: { width: number; height: number }) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new VideoGenerationClientError('仅支持 JPG、PNG 或 WEBP 图片。', 422, 'VIDEO_INPUT_TYPE_INVALID');
-  }
-  if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
-    throw new VideoGenerationClientError('图片文件须小于 20 MB。', 422, 'VIDEO_INPUT_TOO_LARGE');
-  }
+export async function uploadVideoInput(file: File, dimensions?: { width: number; height: number }, mediaKind: 'image' | 'video' | 'audio' = 'image') {
+  const rules = mediaKind === 'video'
+    ? { types: ['video/mp4', 'video/quicktime'], maxBytes: 50 * 1024 * 1024, typeMessage: '仅支持 MP4 或 MOV 参考视频。', sizeMessage: '参考视频文件须小于 50 MB。', kind: 'input-video' }
+    : mediaKind === 'audio'
+      ? { types: ['audio/wav', 'audio/x-wav', 'audio/mpeg'], maxBytes: 15 * 1024 * 1024, typeMessage: '仅支持 WAV 或 MP3 参考音频。', sizeMessage: '参考音频文件须小于 15 MB。', kind: 'input-audio' }
+      : { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 20 * 1024 * 1024, typeMessage: '仅支持 JPG、PNG 或 WEBP 图片。', sizeMessage: '图片文件须小于 20 MB。', kind: undefined };
+  if (!rules.types.includes(file.type)) throw new VideoGenerationClientError(rules.typeMessage, 422, 'VIDEO_INPUT_TYPE_INVALID');
+  if (file.size <= 0 || file.size > rules.maxBytes) throw new VideoGenerationClientError(rules.sizeMessage, 422, 'VIDEO_INPUT_TOO_LARGE');
   const intent = await request<{
     upload: { assetId: string; uploadUrl: string; uploadHeaders: Record<string, string> };
   }>('upload-intent', {
     method: 'POST',
-    body: JSON.stringify({ filename: file.name, contentType: file.type, byteSize: file.size, width: dimensions?.width, height: dimensions?.height }),
+    body: JSON.stringify({ filename: file.name, contentType: file.type, byteSize: file.size, width: dimensions?.width, height: dimensions?.height, mediaKind: rules.kind }),
   });
   const uploaded = await fetch(intent.upload.uploadUrl, {
     method: 'PUT',
@@ -526,6 +537,8 @@ export async function createVideoGeneration(input: {
   endImageAssetId?: string | null;
   referenceMode?: 'start-end' | 'omni' | 'text';
   referenceImageAssetIds?: string[];
+  referenceVideoAssetIds?: string[];
+  referenceAudioAssetIds?: string[];
   referenceBindings?: CanvasAssetReference[];
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';

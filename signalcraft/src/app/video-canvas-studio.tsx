@@ -97,6 +97,12 @@ type PromptMentionCandidate = {
   token: string;
   role: CanvasAssetRole;
 };
+type UploadedReferenceMedia = {
+  assetId: string;
+  name: string;
+  kind: 'video' | 'audio';
+  previewUrl: string;
+};
 type SavedCanvas = {
   version: 1 | 2 | 3 | 4 | 5;
   nodes: NodePositions;
@@ -489,7 +495,9 @@ export default function VideoCanvasStudio({
   const [startFrame, setStartFrame] = useState<UploadedFrame | null>(null);
   const [endFrame, setEndFrame] = useState<UploadedFrame | null>(null);
   const [referenceFrames, setReferenceFrames] = useState<UploadedFrame[]>([]);
-  const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | null>(null);
+  const [referenceVideos, setReferenceVideos] = useState<UploadedReferenceMedia[]>([]);
+  const [referenceAudios, setReferenceAudios] = useState<UploadedReferenceMedia[]>([]);
+  const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | 'video-reference' | 'audio-reference' | null>(null);
   const [scriptOcr, setScriptOcr] = useState<ScriptOcrState>({ assetId: null, status: 'idle', text: '', result: null, error: '' });
   const [generation, setGeneration] = useState<VideoGeneration | null>(null);
   const [agentPlan, setAgentPlan] = useState<VideoGenerationPlan | null>(null);
@@ -545,6 +553,8 @@ export default function VideoCanvasStudio({
   const shotDragRef = useRef<{ clientX: number; clientY: number; origin: NodePositions; customOrigin: CanvasCustomNode[] } | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; origin: Point } | null>(null);
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
+  const referenceVideosRef = useRef<UploadedReferenceMedia[]>([]);
+  const referenceAudiosRef = useRef<UploadedReferenceMedia[]>([]);
   // One UUID groups generations created in this canvas session. It is sent as
   // lineage metadata only; the server still validates it and never uses it for
   // routing or billing. A fresh browser session intentionally starts a fresh
@@ -641,12 +651,14 @@ export default function VideoCanvasStudio({
     startFrame: referenceMode === 'start-end' ? Boolean(startFrame) : false,
     endFrame: referenceMode === 'start-end' ? Boolean(endFrame) : false,
     referenceImages: referenceMode === 'omni' ? referenceFrames.length : 0,
+    referenceVideo: referenceMode === 'omni' && referenceVideos.length > 0,
+    audioRequired: referenceAudios.length > 0,
     referenceMode,
     duration: Number.parseInt(duration, 10),
     resolution,
     aspectRatio,
     priority: routingStrategy,
-  }), [aspectRatio, duration, endFrame, prompt, referenceFrames.length, referenceMode, resolution, routingStrategy, startFrame]);
+  }), [aspectRatio, duration, endFrame, prompt, referenceAudios.length, referenceFrames.length, referenceMode, referenceVideos.length, resolution, routingStrategy, startFrame]);
   const routingResult = useMemo(() => routeShot(shotAnalysis, routingStrategy, routingRegistry), [routingRegistry, routingStrategy, shotAnalysis]);
   const effectiveModel = model === 'auto' ? routingResult.recommendedModel : model;
   const selectedModel = useMemo(() => models.find(item => item.id === effectiveModel) || null, [effectiveModel, models]);
@@ -664,7 +676,7 @@ export default function VideoCanvasStudio({
   // briefly actionable composer while the account-loading effect settles.
   const hasAccount = Boolean(account);
   const effectiveAccess = account ? access : 'signed-out';
-  const hasReferenceInput = referenceMode === 'text' || (referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame));
+  const hasReferenceInput = referenceMode === 'text' || (referenceMode === 'omni' ? referenceFrames.length > 0 || referenceVideos.length > 0 : Boolean(startFrame));
   const assetMentionValidation = useMemo(() => validateCanvasAssetMentions(canvasSemantics, prompt), [canvasSemantics, prompt]);
   const activeReferenceBindings = useMemo(() => canvasSemantics.references
     .filter(reference => reference.shotId === canvasSemantics.shot.id)
@@ -733,12 +745,14 @@ export default function VideoCanvasStudio({
     startFrame,
     endFrame,
     referenceFrames,
+    referenceVideoCount: referenceVideos.length,
+    referenceAudioCount: referenceAudios.length,
     duration,
     aspectRatio,
     resolution,
     unboundMentionCount: assetMentionValidation.unbound.length,
     invalidMentionCount: assetMentionValidation.invalid.length,
-  }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, effectiveModel, endFrame, prompt, referenceFrames, referenceMode, resolution, selectedModel?.enabled, startFrame, zh]);
+  }), [aspectRatio, assetMentionValidation.invalid.length, assetMentionValidation.unbound.length, duration, effectiveModel, endFrame, prompt, referenceAudios.length, referenceFrames, referenceMode, referenceVideos.length, resolution, selectedModel?.enabled, startFrame, zh]);
   const h3PromptMode: H3PromptMode = referenceMode === 'omni'
     ? 'Ref2VA'
     : endFrame
@@ -753,7 +767,9 @@ export default function VideoCanvasStudio({
     duration,
     hasStartFrame: referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame),
     hasEndFrame: Boolean(endFrame),
-  }), [duration, endFrame, h3Brief, h3PromptMode, prompt, referenceFrames.length, referenceMode, startFrame]);
+    referenceVideoCount: referenceVideos.length,
+    referenceAudioCount: referenceAudios.length,
+  }), [duration, endFrame, h3Brief, h3PromptMode, prompt, referenceAudios.length, referenceFrames.length, referenceMode, referenceVideos.length, startFrame]);
   const compileH3PromptForCanvas = useCallback(() => {
     const result = compileH3Prompt({
       mode: h3PromptMode,
@@ -761,12 +777,14 @@ export default function VideoCanvasStudio({
       duration,
       hasStartFrame: referenceMode === 'omni' ? referenceFrames.length > 0 : Boolean(startFrame),
       hasEndFrame: Boolean(endFrame),
+      referenceVideoCount: referenceVideos.length,
+      referenceAudioCount: referenceAudios.length,
     });
     setPrompt(result.prompt);
     setAgentPlan(null);
     const firstIssue = result.validation.issues[0];
     if (firstIssue) notify(describeH3PromptIssue(firstIssue, zh ? 'zh' : 'en'));
-  }, [duration, endFrame, h3Brief, h3PromptMode, notify, referenceFrames.length, referenceMode, startFrame, zh]);
+  }, [duration, endFrame, h3Brief, h3PromptMode, notify, referenceAudios.length, referenceFrames.length, referenceMode, referenceVideos.length, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
   const canGenerate = Boolean(effectiveAccess === 'ready' && effectiveModel && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
   const compareModelIsEligible = (candidate: Exclude<VideoModelId, 'auto'>) => {
@@ -1446,6 +1464,14 @@ export default function VideoCanvasStudio({
     });
   }, []);
 
+  useEffect(() => { referenceVideosRef.current = referenceVideos; }, [referenceVideos]);
+  useEffect(() => { referenceAudiosRef.current = referenceAudios; }, [referenceAudios]);
+  useEffect(() => () => {
+    [...referenceVideosRef.current, ...referenceAudiosRef.current].forEach(media => {
+      if (media.previewUrl.startsWith('blob:')) URL.revokeObjectURL(media.previewUrl);
+    });
+  }, []);
+
   const uploadFrame = async (file: File): Promise<UploadedFrame> => {
     const dimensions = await imageDimensions(file);
     const assetId = await uploadVideoInput(file, dimensions);
@@ -1510,6 +1536,45 @@ export default function VideoCanvasStudio({
     } finally {
       setUploading(null);
     }
+  };
+
+  const uploadReferenceMedia = async (kind: 'video' | 'audio', files: File[]) => {
+    const current = kind === 'video' ? referenceVideos : referenceAudios;
+    const capacity = 3 - current.length;
+    if (capacity <= 0) {
+      setError(zh ? `H3 最多支持 3 个参考${kind === 'video' ? '视频' : '音频'}。` : `H3 supports up to 3 reference ${kind}s.`);
+      return;
+    }
+    const selected = files.slice(0, capacity);
+    setUploading(kind === 'video' ? 'video-reference' : 'audio-reference');
+    setError('');
+    try {
+      const settled = await Promise.allSettled(selected.map(async file => ({
+        assetId: await uploadVideoInput(file, undefined, kind),
+        name: file.name,
+        kind,
+        previewUrl: URL.createObjectURL(file),
+      })));
+      const uploaded = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+      const failed = settled.find(result => result.status === 'rejected');
+      if (kind === 'video') setReferenceVideos(value => [...value, ...uploaded].slice(0, 3));
+      else setReferenceAudios(value => [...value, ...uploaded].slice(0, 3));
+      if (uploaded.length) notify(zh ? `已加入 ${uploaded.length} 个 H3 参考${kind === 'video' ? '视频' : '音频'}。` : `Added ${uploaded.length} H3 reference ${kind}s.`);
+      if (failed?.status === 'rejected') setError(clientMessage(failed.reason));
+      if (files.length > capacity) setError(zh ? `H3 最多保留 3 个参考${kind === 'video' ? '视频' : '音频'}，其余已跳过。` : `H3 keeps up to 3 reference ${kind}s; the remaining files were skipped.`);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const removeReferenceMedia = (kind: 'video' | 'audio', index: number) => {
+    const current = kind === 'video' ? referenceVideos : referenceAudios;
+    const target = current[index];
+    if (!target) return;
+    retireAsset(target.assetId);
+    if (target.previewUrl.startsWith('blob:')) URL.revokeObjectURL(target.previewUrl);
+    if (kind === 'video') setReferenceVideos(value => value.filter((_, itemIndex) => itemIndex !== index));
+    else setReferenceAudios(value => value.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const addPromptReferences = (files: File[]) => {
@@ -2051,9 +2116,11 @@ export default function VideoCanvasStudio({
       prompt: prompt.trim(),
       startImageAssetId: referenceMode === 'text' ? null : primaryFrame?.assetId || null,
       endImageAssetId: referenceMode === 'start-end' ? endFrame?.assetId || null : null,
-      referenceMode,
-      referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
-      referenceBindings: canvasSemantics.references,
+       referenceMode,
+       referenceImageAssetIds: referenceMode === 'omni' ? referenceFrames.map(frame => frame.assetId) : [],
+       referenceVideoAssetIds: referenceMode === 'omni' ? referenceVideos.map(media => media.assetId) : [],
+       referenceAudioAssetIds: referenceMode === 'omni' ? referenceAudios.map(media => media.assetId) : [],
+       referenceBindings: canvasSemantics.references,
       duration,
       aspectRatio,
       resolution,
@@ -3049,9 +3116,14 @@ export default function VideoCanvasStudio({
                 const mentionIndex = frameReferenceIndex(frame, index);
                 const binding = referenceBindingForFrame(frame, index, activeReferenceBindings);
                 return <OmniReferenceChip key={frame.assetId} frame={frame} role={binding.role} roleLabel={canvasReferenceRoleLabel(binding.role, zh)} strength={binding.strength} zh={zh} roleOptions={omniReferenceRoleOptions} editable onRoleChange={nextRole => updateReferenceRole(index, nextRole)} onStrengthChange={() => toggleReferenceStrength(index)} onExtractText={() => void extractScript(frame)} extractingText={scriptOcr.status === 'processing' && scriptOcr.assetId === frame.assetId} extractTextLabel={zh ? `提取 ${mentionIndex} 的脚本文字` : `Extract text from ${mentionIndex}`} highlighted={highlightedAssetId === frame.assetId} mentionLabel={zh ? `@图片${mentionIndex}` : `@image${mentionIndex}`} loadingLabel={zh ? '读取中' : 'Loading'} removeLabel={zh ? `移除图片 ${mentionIndex}` : `Remove image ${mentionIndex}`} onMention={() => mentionReference(index)} onRemove={() => removeReference(index)} />;
-              })}
-              {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
-            </>}
+               })}
+               {referenceFrames.length < 9 && <label className="canvas-reference-chip canvas-omni-composer-add"><input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={event => { void uploadReferences(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><span aria-hidden="true">＋</span><b>{zh ? '参考图' : 'Reference'}</b><small>{referenceFrames.length}/9</small></label>}
+               {effectiveModel === 'minimax-h3' && <div className="canvas-h3-media-references">
+                 <div className="canvas-h3-media-row"><span>VIDEO {referenceVideos.length}/3</span>{referenceVideos.map((media, index) => <button type="button" key={media.assetId} className="canvas-h3-media-chip" onClick={() => removeReferenceMedia('video', index)} title={zh ? '移除参考视频' : 'Remove reference video'}><b aria-hidden="true">▣</b><small>{media.name}</small><i aria-hidden="true">×</i></button>)}{referenceVideos.length < 3 && <label className="canvas-h3-media-add"><input type="file" multiple accept="video/mp4,video/quicktime" disabled={Boolean(uploading)} onChange={event => { void uploadReferenceMedia('video', Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><b>＋</b>{uploading === 'video-reference' ? (zh ? '上传中' : 'Uploading') : (zh ? '加视频' : 'Add video')}</label>}</div>
+                 <div className="canvas-h3-media-row"><span>AUDIO {referenceAudios.length}/3</span>{referenceAudios.map((media, index) => <button type="button" key={media.assetId} className="canvas-h3-media-chip" onClick={() => removeReferenceMedia('audio', index)} title={zh ? '移除参考音频' : 'Remove reference audio'}><b aria-hidden="true">♫</b><small>{media.name}</small><i aria-hidden="true">×</i></button>)}{referenceAudios.length < 3 && <label className="canvas-h3-media-add"><input type="file" multiple accept="audio/wav,audio/x-wav,audio/mpeg" disabled={Boolean(uploading)} onChange={event => { void uploadReferenceMedia('audio', Array.from(event.currentTarget.files || [])); event.currentTarget.value = ''; }} /><b>＋</b>{uploading === 'audio-reference' ? (zh ? '上传中' : 'Uploading') : (zh ? '加音频' : 'Add audio')}</label>}</div>
+                 <small className="canvas-h3-media-help">{zh ? 'H3 Ref2VA 支持最多 3 个参考视频和 3 个参考音频，媒体会先存入私有工作区。' : 'H3 Ref2VA supports up to 3 reference videos and 3 reference audio files; media is stored privately before submission.'}</small>
+               </div>}
+             </>}
           </div>
 
            <div className="canvas-composer-main">
