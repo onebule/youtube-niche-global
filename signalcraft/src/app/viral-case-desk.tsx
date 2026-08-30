@@ -6,6 +6,7 @@ import { getOpportunity } from '@/src/lib/mock';
 import {
   createIdeaDraftFromCase,
   emptyViralCaseNotes,
+  applyViralPatternToNotes,
   applyViralCaseAnalysisToNotes,
   createH3BriefFromCase,
   createViralCaseCanvasHandoff,
@@ -18,6 +19,7 @@ import {
   type ViralCaseNotes,
   type ViralCaseStore,
 } from '@/src/lib/viral-case';
+import { getViralPattern, viralPatternLibrary, type ViralPattern } from '@/src/lib/viral-patterns';
 import { requestViralCaseAnalysis } from '@/src/lib/viral-case-analysis';
 import { resolveYouTubeVideo } from '@/src/lib/youtube-video';
 import { compileH3Prompt } from '@/src/lib/h3-prompt-compiler';
@@ -78,6 +80,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
   const [h3Prompt, setH3Prompt] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importState, setImportState] = useState<'idle' | 'loading'>('idle');
+  const [activePatternId, setActivePatternId] = useState(viralPatternLibrary[0]?.id || '');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -100,6 +103,7 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
   const signal = selectedVideo ? getOpportunity(selectedVideo) : null;
   const embedId = selectedVideo ? youtubeVideoId(selectedVideo.sourceUrl) : null;
   const canCreateIdea = Boolean(notes.reusableMechanism.trim());
+  const activePattern = getViralPattern(activePatternId) || viralPatternLibrary[0] || null;
 
   const selectVideo = (selectedVideoId: string) => {
     setStore(current => ({ ...current, selectedVideoId }));
@@ -237,13 +241,58 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
     }
   };
 
+  const applyPattern = (pattern: ViralPattern | null) => {
+    if (!pattern) return;
+    setActivePatternId(pattern.id);
+    if (!selectedVideo) {
+      notify('先导入或保存一个视频，再把参考模式带入拆解卡。');
+      return;
+    }
+    patchNotes(applyViralPatternToNotes(notes, pattern));
+    notify(`已把「${pattern.family}」填入空白观察项；人工内容保持不变。`);
+  };
+
   const importPanel = <form className="viral-case-import" onSubmit={importVideo}>
     <div><span className="eyebrow">DIRECT PUBLIC SOURCE</span><b>粘贴 YouTube 链接，直接建立研究样本</b><small>只读取公开视频元数据、播放量、频道订阅数和原始链接；缺失字段不会用演示值补齐。</small></div>
     <div className="viral-case-import-controls"><input type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." aria-label="YouTube 视频链接" required /><button type="submit" className="primary" disabled={importState === 'loading'}>{importState === 'loading' ? '解析中…' : '解析并加入'}</button></div>
   </form>;
 
+  const patternLibrary = <section className="viral-pattern-library" aria-label="爆款参考模式库">
+    <div className="viral-pattern-library-heading">
+      <div>
+        <span className="eyebrow">REFERENCE PATTERN LIBRARY · 5 CASES</span>
+        <h2>把案例压缩成可调用的创作机制。</h2>
+        <p>参考案例只提供结构启发：先看它怎样抢停留、制造期待、抬高 stakes，再换成自己的角色、场景、道具和结尾。</p>
+      </div>
+      <div className="viral-pattern-count"><b>5</b><span>种观看机制</span></div>
+    </div>
+    <div className="viral-pattern-tabs" role="tablist" aria-label="选择参考模式">
+      {viralPatternLibrary.map((pattern, index) => <button key={pattern.id} type="button" role="tab" aria-selected={activePattern?.id === pattern.id} className={activePattern?.id === pattern.id ? 'active' : ''} onClick={() => setActivePatternId(pattern.id)}>
+        <span>{String(index + 1).padStart(2, '0')}</span><b>{pattern.title}</b><small>{pattern.family}</small>
+      </button>)}
+    </div>
+    {activePattern && <article className="viral-pattern-detail">
+      <div className="viral-pattern-detail-main">
+        <div className="viral-pattern-meta"><span>{activePattern.family}</span>{activePattern.tags.map(tag => <i key={tag}>{tag}</i>)}</div>
+        <h3>{activePattern.title}</h3>
+        <p className="viral-pattern-formula">{activePattern.formula}</p>
+        <div className="viral-pattern-columns">
+          <div><span>核心机制</span><p>{activePattern.coreMechanism}</p></div>
+          <div><span>观众期待</span><p>{activePattern.tension}</p></div>
+          <div><span>结尾 payoff</span><p>{activePattern.payoff}</p></div>
+        </div>
+      </div>
+      <aside className="viral-pattern-detail-side">
+        <div><span>四拍结构</span>{activePattern.beats.map((beat, index) => <p key={beat}><b>{activePattern.beatTimestamps[index]}</b>{beat}</p>)}</div>
+        <div className="viral-pattern-adaptation"><span>原创改写提示</span><p>{activePattern.adaptationPrompt}</p></div>
+        <div className="viral-pattern-source"><span>参考来源</span><a href={activePattern.sourceUrl} target="_blank" rel="noreferrer">案例 {activePattern.sourceCaseId} · 查看原拆解 ↗</a><button type="button" onClick={() => applyPattern(activePattern)} disabled={!selectedVideo}>带入当前拆解卡</button></div>
+      </aside>
+    </article>}
+  </section>;
+
   if (!videos.length) {
     return <main className="app-page viral-case-page">
+      {patternLibrary}
       <section className="viral-case-empty">
         <span>✦</span>
         <p className="eyebrow">VIRAL CASE DESK</p>
@@ -260,13 +309,14 @@ export default function ViralCaseDesk({ videos, locale, onCreateIdea, onOpenVide
       <div>
         <p className="eyebrow">VIRAL CASE DESK · PUBLIC BETA</p>
         <h1>把“看过”变成可验证、<em>可改写</em>的创作机制。</h1>
-        <p>SignalCraft 将公开表现信号与创作者逐帧观察分开保存：数据告诉你什么值得研究，笔记告诉你下一条该怎么做。</p>
+      <p>SignalCraft 将公开表现信号与创作者逐帧观察分开保存：数据告诉你什么值得研究，笔记告诉你下一条该怎么做。</p>
       </div>
       <aside>
         <b>证据 ≠ 结论</b>
         <span>播放、频道规模与发布时间来自公开数据；Hook、镜头与情绪曲线需要在原视频中核对后记录。</span>
       </aside>
     </section>
+    {patternLibrary}
 
     <section className="viral-case-selector" aria-label="选择研究样本">
       <div>

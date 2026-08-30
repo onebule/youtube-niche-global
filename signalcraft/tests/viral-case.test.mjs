@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyViralCaseAnalysisToNotes, createH3BriefFromCase, createIdeaDraftFromCase, createViralCaseCanvasHandoff, formatViralCaseReport, normalizeViralCaseAnalysis, normalizeViralCaseCanvasHandoff, normalizeViralCaseStore } from '../src/lib/viral-case.ts';
+import { applyViralCaseAnalysisToNotes, applyViralPatternToNotes, createH3BriefFromCase, createIdeaDraftFromCase, createViralCaseCanvasHandoff, formatViralCaseReport, normalizeViralCaseAnalysis, normalizeViralCaseCanvasHandoff, normalizeViralCaseStore } from '../src/lib/viral-case.ts';
+import { viralPatternLibrary } from '../src/lib/viral-patterns.ts';
 import { parseYouTubeVideoId } from '../src/lib/youtube-video-url.ts';
 
 const video = {
@@ -32,6 +33,24 @@ test('provider reports are normalized and incomplete reports are rejected', () =
   assert.equal(report?.confidence, 'high');
   assert.deepEqual(report?.beats, ['先展示', '第一次模仿', '继续加码', '滚动收口']);
   assert.equal(normalizeViralCaseAnalysis({ provider: 'bad-provider', beats: ['只有一部分'] }), null);
+});
+
+test('reference pattern cards seed only blank observations and keep provenance', () => {
+  const notes = normalizeViralCaseStore({ notesByVideoId: { 'yt-example': {
+    hook: '人工确认的开头', beats: ['', '人工第二拍', '', ''], reusableMechanism: '', adaptation: '',
+  } } }).notesByVideoId['yt-example'];
+  const patch = applyViralPatternToNotes(notes, viralPatternLibrary[1]);
+  assert.equal(patch.referencePatternId, 'pet-rule-loophole');
+  assert.equal(patch.hook, '人工确认的开头');
+  assert.equal(patch.beats[1], '人工第二拍');
+  assert.equal(patch.beats[0], viralPatternLibrary[1].beats[0]);
+  assert.equal(patch.reusableMechanism, viralPatternLibrary[1].coreMechanism);
+});
+
+test('the supplied reference set remains a five-case, source-linked library', () => {
+  assert.deepEqual(viralPatternLibrary.map(pattern => pattern.sourceCaseId), ['04170013', '04170012', '04170003', '04150005', '04140039']);
+  assert.equal(new Set(viralPatternLibrary.map(pattern => pattern.id)).size, 5);
+  assert.ok(viralPatternLibrary.every(pattern => /^https:\/\/lulujai\.com\//.test(pattern.sourceUrl)));
 });
 
 test('analysis can seed only blank observation fields and export a traceable report', () => {
