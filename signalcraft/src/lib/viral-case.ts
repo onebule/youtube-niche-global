@@ -3,8 +3,17 @@ import type { ViralPattern } from './viral-patterns';
 import type { ViralCaseCorpusCard } from './viral-case-corpus';
 
 export const VIRAL_CASE_STORAGE_KEY = 'signalcraft-viral-case-desk-v1';
-export const VIRAL_CASE_STORAGE_VERSION = 1;
+export const VIRAL_CASE_STORAGE_VERSION = 2;
 export const VIRAL_CASE_CANVAS_HANDOFF_KEY = 'signalcraft-viral-case-canvas-handoff-v1';
+
+export type ViralCaseAnalysisModelId = 'gpt-5.6-luna' | 'kimi-k3' | 'claude-opus-5';
+
+export const DEFAULT_VIRAL_CASE_ANALYSIS_MODEL: ViralCaseAnalysisModelId = 'gpt-5.6-luna';
+export const VIRAL_CASE_ANALYSIS_MODELS: Array<{ id: ViralCaseAnalysisModelId; label: string; provider: string; requirement: string }> = [
+  { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', provider: 'OpenAI', requirement: 'OPENAI_API_KEY' },
+  { id: 'kimi-k3', label: 'Kimi K3', provider: 'Moonshot', requirement: 'MOONSHOT_API_KEY' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', provider: 'Anthropic', requirement: 'ANTHROPIC_API_KEY' },
+];
 
 export type ViralCaseAnalysisConfidence = 'low' | 'medium' | 'high';
 
@@ -40,6 +49,7 @@ export type ViralCaseNotes = {
 
 export type ViralCaseStore = {
   version: number;
+  analysisModel: ViralCaseAnalysisModelId;
   selectedVideoId: string | null;
   notesByVideoId: Record<string, ViralCaseNotes>;
 };
@@ -60,6 +70,12 @@ export type ViralCaseCanvasHandoff = {
 };
 
 const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+export function normalizeViralCaseAnalysisModel(value: unknown): ViralCaseAnalysisModelId {
+  return value === 'kimi-k3' || value === 'claude-opus-5' || value === 'gpt-5.6-luna'
+    ? value
+    : DEFAULT_VIRAL_CASE_ANALYSIS_MODEL;
+}
 
 const confidence = (value: unknown): ViralCaseAnalysisConfidence => value === 'high' || value === 'medium' ? value : 'low';
 
@@ -167,7 +183,7 @@ export function createViralCaseCorpusBrief(card: ViralCaseCorpusCard): string {
 
 export function normalizeViralCaseStore(value: unknown): ViralCaseStore {
   if (!value || typeof value !== 'object') {
-    return { version: VIRAL_CASE_STORAGE_VERSION, selectedVideoId: null, notesByVideoId: {} };
+    return { version: VIRAL_CASE_STORAGE_VERSION, analysisModel: DEFAULT_VIRAL_CASE_ANALYSIS_MODEL, selectedVideoId: null, notesByVideoId: {} };
   }
 
   const raw = value as Partial<ViralCaseStore>;
@@ -178,6 +194,7 @@ export function normalizeViralCaseStore(value: unknown): ViralCaseStore {
 
   return {
     version: VIRAL_CASE_STORAGE_VERSION,
+    analysisModel: normalizeViralCaseAnalysisModel(raw.analysisModel),
     selectedVideoId: typeof raw.selectedVideoId === 'string' ? raw.selectedVideoId : null,
     notesByVideoId,
   };

@@ -1,7 +1,12 @@
 import type { Video } from './types';
 import { authHeaders } from './auth';
 import { clientErrorMessage } from './client-error';
-import { normalizeViralCaseAnalysis, type ViralCaseAnalysis } from './viral-case';
+import {
+  DEFAULT_VIRAL_CASE_ANALYSIS_MODEL,
+  normalizeViralCaseAnalysis,
+  type ViralCaseAnalysis,
+  type ViralCaseAnalysisModelId,
+} from './viral-case';
 
 export type ViralCaseAnalysisResponse = {
   analysis: ViralCaseAnalysis;
@@ -12,7 +17,7 @@ export type ViralCaseAnalysisResponse = {
  * Calls our same-origin adapter. The browser never receives provider secrets;
  * the adapter also refuses to invent a report when no provider is configured.
  */
-export async function requestViralCaseAnalysis(video: Video): Promise<ViralCaseAnalysisResponse> {
+export async function requestViralCaseAnalysis(video: Video, model: ViralCaseAnalysisModelId = DEFAULT_VIRAL_CASE_ANALYSIS_MODEL): Promise<ViralCaseAnalysisResponse> {
   const response = await fetch('/api/viral-case-analysis', {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
@@ -21,6 +26,7 @@ export async function requestViralCaseAnalysis(video: Video): Promise<ViralCaseA
       sourceUrl: video.sourceUrl,
       title: video.title,
       durationSeconds: video.durationSeconds,
+      model,
     }),
   });
   const payload = await response.json().catch(() => null) as { analysis?: unknown; source?: unknown; error?: unknown } | null;
