@@ -84,9 +84,11 @@ import {
   routeShot,
   type ModelRoutingStrategy,
 } from '@/src/lib/video-model-router';
+import { normalizeVideoGenerationJob, resolveCanvasModelMode, type CanvasModelMode } from '@/src/lib/canvas-generation';
 import { compileH3Prompt, describeH3PromptIssue, validateH3Prompt, type H3PromptMode } from '@/src/lib/h3-prompt-compiler';
 import { VIRAL_CASE_CANVAS_HANDOFF_KEY, normalizeViralCaseCanvasHandoff } from '@/src/lib/viral-case';
 import ImageGenerationPanel from './image-generation-panel';
+import CanvasInspector from './canvas-inspector';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
@@ -110,6 +112,7 @@ type SavedCanvas = {
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
+  modelMode?: CanvasModelMode;
   routingStrategy?: ModelRoutingStrategy;
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
@@ -491,6 +494,7 @@ export default function VideoCanvasStudio({
   const [prompt, setPrompt] = useState('');
   const [h3Brief, setH3Brief] = useState('');
   const [model, setModel] = useState<VideoModelId>('seedance-2');
+  const [modelMode, setModelMode] = useState<CanvasModelMode>('CUSTOM');
   const [routingStrategy, setRoutingStrategy] = useState<ModelRoutingStrategy>('BALANCED');
   const [duration, setDuration] = useState('5s');
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16');
@@ -566,6 +570,7 @@ export default function VideoCanvasStudio({
   // generation group.
   const generationGroupIdRef = useRef<string | null>(null);
   const generationContextRef = useRef<VideoGeneration | null>(null);
+  const manualModelRef = useRef<Exclude<VideoModelId, 'auto'>>('seedance-2');
   const historyRestoreRequestRef = useRef(0);
   const fullscreenFallbackRef = useRef(false);
 
@@ -618,6 +623,8 @@ export default function VideoCanvasStudio({
     setNodes({ ...snapshot.nodes });
     setPrompt(snapshot.prompt);
     setModel(snapshot.model);
+    if (snapshot.model !== 'auto') manualModelRef.current = snapshot.model;
+    setModelMode(snapshot.model === 'auto' ? 'AUTO' : 'CUSTOM');
     setRoutingStrategy(snapshot.routingStrategy || 'BALANCED');
     setDuration(normalizeVideoDuration(snapshot.model, snapshot.duration));
     setAspectRatio(snapshot.aspectRatio);
@@ -1220,6 +1227,8 @@ export default function VideoCanvasStudio({
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
           setModel(restoredModel);
+          if (restoredModel !== 'auto') manualModelRef.current = restoredModel;
+          setModelMode(saved.modelMode || (restoredModel === 'auto' ? 'AUTO' : 'CUSTOM'));
           setRoutingStrategy(saved.routingStrategy || 'BALANCED');
           setDuration(normalizeVideoDuration(restoredModel, saved.duration || '5s'));
           setAspectRatio(saved.aspectRatio || '9:16');
@@ -1292,6 +1301,7 @@ export default function VideoCanvasStudio({
       nodes,
       prompt,
       model,
+      modelMode,
       routingStrategy,
       duration,
       aspectRatio,
@@ -1311,7 +1321,7 @@ export default function VideoCanvasStudio({
       customEdges: customEdges.map(edge => ({ ...edge })),
     };
     localStorage.setItem(canvasStorageKey, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, modelMode, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1825,10 +1835,12 @@ export default function VideoCanvasStudio({
     }
   };
 
-  const selectModel = (next: VideoModelId) => {
+  const selectModel = (next: VideoModelId, modeOverride?: CanvasModelMode) => {
     // MiniMax H3 supports both FL2VA (start/end) and Ref2VA (multi-reference)
     // inputs. Keep the model selectable in either reference mode.
     setModel(next);
+    if (next !== 'auto') manualModelRef.current = next;
+    setModelMode(modeOverride || (next === 'auto' ? 'AUTO' : 'CUSTOM'));
     patchSemanticNode('task', { model: next, provider: next === 'minimax-h3' ? 'minimax' : next === 'auto' ? null : next === 'kling-3' ? 'kling' : next === 'veo-3.1-lite' ? 'veo' : 'seedance' });
     setDuration(current => normalizeVideoDuration(next, current));
     if (next === 'minimax-h3') setResolution('768P');
@@ -2370,6 +2382,68 @@ export default function VideoCanvasStudio({
     }
   };
 
+  const changeCanvasModelMode = (next: CanvasModelMode) => {
+    const resolved = resolveCanvasModelMode(next, manualModelRef.current);
+    setModelMode(next);
+    if (resolved.strategy) setRoutingStrategy(resolved.strategy);
+    if (next === 'CUSTOM') {
+      selectModel((resolved.model || manualModelRef.current) as VideoModelId, 'CUSTOM');
+      return;
+    }
+    selectModel('auto', next);
+  };
+
+  /** Prepare a selected canvas image as a shot boundary. This is deliberately
+   * a draft-only action: it reuses the uploaded private asset and opens the
+   * existing composer, but never submits or charges a generation by itself. */
+  const prepareSelectedImageFrame = async (slot: 'start' | 'end') => {
+    const node = selectedCanvasImageNode;
+    if (!node?.assetId) {
+      notify(zh ? '这个图片节点还没有绑定可用素材。' : 'This image node is not bound to an available asset yet.');
+      return;
+    }
+    try {
+      const asset = await loadVideoAsset(node.assetId);
+      const frame: UploadedFrame = {
+        assetId: node.assetId,
+        name: node.body || (zh ? `画布图片 · ${slot === 'start' ? 'START' : 'END'}` : `Canvas image · ${slot.toUpperCase()}`),
+        previewUrl: asset.url,
+        width: asset.width || 0,
+        height: asset.height || 0,
+      };
+      if (slot === 'start') {
+        if (startFrame && startFrame.assetId !== frame.assetId) retireAsset(startFrame.assetId);
+        setStartFrame(frame);
+        rememberImageAsset(frame, 'start_frame');
+      } else {
+        if (endFrame && endFrame.assetId !== frame.assetId) retireAsset(endFrame.assetId);
+        setEndFrame(frame);
+        rememberImageAsset(frame, 'end_frame');
+      }
+      setReferenceMode('start-end');
+      patchSemanticNode('source', { role: 'reference', assetId: frame.assetId, status: 'draft' });
+      setSelectedNodeId('task');
+      setSelectedCustomNodeId(null);
+      setPreferencesOpen(true);
+      setImageGenerationOpen(false);
+      notify(zh ? `已将图片设为 ${slot === 'start' ? 'START' : 'END'}，请在生成台确认参数。` : `Image set as ${slot.toUpperCase()}; review the composer before submitting.`);
+    } catch (cause) {
+      setError(clientMessage(cause));
+    }
+  };
+
+  const prepareVideoFromSelection = () => {
+    if (selectedCanvasImageNode) {
+      void prepareSelectedImageFrame('start');
+      return;
+    }
+    setSelectedNodeId('task');
+    setSelectedCustomNodeId(null);
+    setPreferencesOpen(true);
+    setImageGenerationOpen(false);
+    notify(zh ? '已打开当前镜头的视频生成设置；提交前仍可修改参数。' : 'Video generation settings are open for this shot; review before submitting.');
+  };
+
   const addGeneratedImageToReferences = (assetId: string, previewUrl: string) => {
     if (!assetId || !previewUrl) return;
     if (referenceFrames.some(frame => frame.assetId === assetId)) {
@@ -2394,6 +2468,11 @@ export default function VideoCanvasStudio({
       height: 1024,
       referenceIndex,
     };
+    const imageNode = createCustomNode('image', 'result', zh ? 'GPT-Image-2 图片' : 'GPT-Image-2 image');
+    if (imageNode) {
+      setCustomNodes(current => current.map(node => node.id === imageNode.id ? { ...node, assetId, body: zh ? 'GPT-Image-2 图片' : 'GPT-Image-2 image' } : node));
+      setCustomNodePreviewUrls(current => ({ ...current, [imageNode.id]: previewUrl }));
+    }
     setReferenceMode('omni');
     setReferenceFrames(current => [...current, frame].slice(0, 9));
     rememberImageAsset(frame, 'reference');
@@ -2401,8 +2480,10 @@ export default function VideoCanvasStudio({
     setPrompt(current => current.includes(mention) ? current : `${current.trim()} ${mention}`.trim());
     setAgentPlan(null);
     setImageGenerationOpen(false);
-    setSelectedNodeId('source');
-    setSelectedCustomNodeId(null);
+    if (!imageNode) {
+      setSelectedNodeId('source');
+      setSelectedCustomNodeId(null);
+    }
     setHighlightedAssetId(assetId);
     notify(zh ? `已把 GPT-Image-2 结果加入全能参考，并插入 ${mention}。` : `GPT-Image-2 result added to omni references as ${mention}.`);
   };
@@ -2748,6 +2829,12 @@ export default function VideoCanvasStudio({
       top: clamp(selectedCanvasImageNode.y * viewport.scale + viewport.y - 64, 56, Math.max(56, height - 68)),
     };
   })() : null;
+  const inspectorSelection = selectedCanvasImageNode
+    ? { kind: 'image' as const, node: selectedCanvasImageNode, previewUrl: customNodePreviewUrls[selectedCanvasImageNode.id] || '' }
+    : selectedNodeId
+      ? { kind: 'fixed' as const, id: selectedNodeId, label: selectedCanvasNodeLabel }
+      : null;
+  const inspectorJob = generation ? normalizeVideoGenerationJob(generation) : null;
 
   const selectCanvasNode = (id: string) => {
     if ((Object.keys(nodes) as NodeId[]).includes(id as NodeId)) {
@@ -2841,7 +2928,7 @@ export default function VideoCanvasStudio({
         onWheel={wheel}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) {
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar, .canvas-inspector')) {
             setSelectedNodeId(null);
             setSelectedCustomNodeId(null);
           }
@@ -2901,8 +2988,34 @@ export default function VideoCanvasStudio({
           <span className="canvas-selected-asset-toolbar-label"><span aria-hidden="true">▧</span><b>{zh ? '图片节点' : 'IMAGE NODE'}</b></span>
           <button type="button" onClick={openSelectedImagePreview} disabled={!customNodePreviewUrls[selectedCanvasImageNode.id]}>{zh ? '高清查看' : 'View HD'}</button>
           <button type="button" onClick={() => void addSelectedImageToReferences()} disabled={!selectedCanvasImageNode.assetId}>{zh ? '加入参考' : 'Add reference'}</button>
+          <button type="button" onClick={prepareVideoFromSelection} disabled={!selectedCanvasImageNode.assetId}>{zh ? '带入视频' : 'Use for video'}</button>
           <button type="button" onClick={() => removeCustomNode(selectedCanvasImageNode.id)}>{zh ? '删除' : 'Delete'}</button>
         </div>}
+        <CanvasInspector
+          zh={zh}
+          selection={inspectorSelection}
+          shotNumber={shot}
+          shotDuration={duration}
+          aspectRatio={aspectRatio}
+          resolution={resolution}
+          modelLabel={modelName(model)}
+          generationStatus={inspectorJob?.status}
+          generationError={generation?.errorMessage}
+          versionLabel={currentVersion ? `V${currentVersion.number}${currentVersion.bestTake ? (zh ? ' · 最佳' : ' · Best') : ''}` : undefined}
+          canGenerate={canGenerate}
+          generationBlockedReason={generationBlockedReason}
+          onClose={() => { setSelectedNodeId(null); setSelectedCustomNodeId(null); }}
+          onFocus={focusSelectedCanvasNode}
+          onGenerateImage={openImageGeneration}
+          onGenerateVideo={prepareVideoFromSelection}
+          onUseAsReference={selectedCanvasImageNode ? () => void addSelectedImageToReferences() : undefined}
+          onSetStart={selectedCanvasImageNode ? () => void prepareSelectedImageFrame('start') : undefined}
+          onSetEnd={selectedCanvasImageNode ? () => void prepareSelectedImageFrame('end') : undefined}
+          onPreview={selectedCanvasImageNode ? openSelectedImagePreview : undefined}
+          onDelete={selectedCanvasImageNode ? () => removeCustomNode(selectedCanvasImageNode.id) : undefined}
+          onRetry={generation?.status === 'failed' ? () => void generate() : undefined}
+          onSelectBest={generation?.status === 'completed' && generation.id ? () => markBestTake(generation.id) : undefined}
+        />
         <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')', '--canvas-zoom': viewport.scale } as CSSProperties}>
           <div
             className={'canvas-shot-container ' + (canvasSemantics.shot.collapsed ? 'is-collapsed' : '')}
@@ -3269,6 +3382,7 @@ export default function VideoCanvasStudio({
                   </div>
                   {model === 'auto' && <div className="canvas-router-summary"><strong>{zh ? '本镜头推荐' : 'Recommended for this shot'}：{routingResult.recommendedModel ? modelName(routingResult.recommendedModel) : '—'}</strong><p>{routingResult.reason.slice(0, 3).join(' · ')}</p><div>{routingResult.alternatives.slice(0, 3).map(item => <span key={item.modelId}>{modelName(item.modelId as VideoModelId)} {item.score}</span>)}</div></div>}
                   <div className="canvas-preferences-grid">
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '路由模式' : 'Routing mode'}</span><select value={modelMode} onChange={event => changeCanvasModelMode(event.target.value as CanvasModelMode)}><option value="AUTO">AUTO · {zh ? '智能推荐' : 'Smart routing'}</option><option value="FAST">FAST · {zh ? '快速优先' : 'Fast first'}</option><option value="QUALITY">QUALITY · {zh ? '质量优先' : 'Quality first'}</option><option value="CHEAPEST">CHEAPEST · {zh ? '成本优先' : 'Lowest cost'}</option><option value="CUSTOM">CUSTOM · {zh ? '手动锁定' : 'Manual lock'}</option></select></label>
                     <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型模式' : 'Model mode'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto">Auto · {zh ? '智能推荐' : 'Smart routing'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
                     <fieldset className="canvas-preference-field canvas-preference-compare-field"><legend>{zh ? 'Compare Models · 最多 3 个' : 'Compare models · up to 3'}</legend><div className="canvas-compare-model-options">{models.filter(item => item.id !== 'auto').map(item => {
                       const candidate = item.id as Exclude<VideoModelId, 'auto'>;
