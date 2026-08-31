@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
+import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -111,6 +112,40 @@ function summaryMetric(value: number | null | undefined, locale: UiLocale) {
   return value === null || value === undefined || !Number.isFinite(value) ? (locale === 'zh' ? '数据不足' : 'N/A') : String(Math.round(value));
 }
 
+const evidenceSignalLabels: Record<LongformEvidenceSignal['source'], { zh: string; en: string }> = {
+  growth_proxy: { zh: '近期样本增长代理', en: 'Recent-sample growth proxy' },
+  competition_proxy: { zh: '竞争开放度代理', en: 'Competition openness proxy' },
+  small_creator_proxy: { zh: '小频道表现代理', en: 'Small-creator performance proxy' },
+  creator_diversity_proxy: { zh: '频道多样性代理', en: 'Creator diversity proxy' },
+};
+
+const riskFlagLabels: Record<LongformRiskFlag, { zh: string; en: string }> = {
+  SMALL_SAMPLE: { zh: '样本少于 5 条', en: 'Fewer than 5 samples' },
+  NARROW_CREATOR_BASE: { zh: '频道覆盖少于 3 个', en: 'Fewer than 3 creators' },
+  LOW_CONFIDENCE: { zh: '置信度偏低', en: 'Low confidence' },
+  NO_REPRESENTATIVE_EVIDENCE: { zh: '暂无代表视频证据', en: 'No representative video evidence' },
+  AVOID_RECOMMENDATION: { zh: '当前建议不要直接进入', en: 'Current recommendation is not to enter directly' },
+};
+
+function LongformEvidenceLayer({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const layer = buildLongformEvidenceLayer(opportunity);
+  const signals = [
+    { key: 'demand', label: zh ? '需求趋势' : 'Demand trend', signal: layer.signals.demand, note: zh ? '只能作为公开增长代理' : 'Public growth proxy only' },
+    { key: 'supply', label: zh ? '供给空位' : 'Supply gap', signal: layer.signals.supply, note: zh ? '不是完整的市场供给量' : 'Not total market supply' },
+    { key: 'smallCreator', label: zh ? '小频道机会' : 'Small-creator access', signal: layer.signals.smallCreator, note: zh ? '用于判断是否只由大频道占据' : 'Checks whether large channels dominate' },
+    { key: 'diversity', label: zh ? '创作者多样性' : 'Creator diversity', signal: layer.signals.diversity, note: zh ? '用于确认跨频道重复出现' : 'Cross-channel confirmation' },
+  ];
+  return <section className="longform-evidence-layer" aria-label={zh ? '长视频机会证据层' : 'Long-form opportunity evidence layer'}>
+    <div className="longform-evidence-layer-head"><div><span className="longform-kicker">P1 · EVIDENCE LAYER</span><b>{zh ? '供需、竞争与收益边界' : 'Demand, competition and revenue boundaries'}</b><small>{zh ? '代理指标用于解释排序，不等于完整业务事实。' : 'Proxy metrics explain ranking; they are not complete business facts.'}</small></div><span>{zh ? '只读真实字段' : 'Observed fields only'}</span></div>
+    <div className="longform-evidence-layer-grid">
+      {signals.map(({ key, label, signal, note }) => <article key={key}><div><span>{label}</span><em>{signal.value === null ? 'UNKNOWN' : `${Math.round(signal.value)}/100`}</em></div><small>{signal.value === null ? (zh ? '当前样本没有可用代理' : 'No usable proxy in this sample') : note}</small><i>{zh ? evidenceSignalLabels[signal.source].zh : evidenceSignalLabels[signal.source].en}</i></article>)}
+      <article className="unknown"><div><span>{zh ? 'RPM / 收益潜力' : 'RPM / revenue potential'}</span><em>UNKNOWN</em></div><small>{zh ? '公开视频不包含频道收益、RPM、CPM 或留存。' : 'Public videos do not expose revenue, RPM, CPM or retention.'}</small><i>{zh ? '需要创作者 Studio 或一方数据' : 'Requires Creator Studio or first-party data'}</i></article>
+    </div>
+    {layer.riskFlags.length ? <div className="longform-risk-strip"><b>{zh ? '进入前风险' : 'Before entering'}</b>{layer.riskFlags.map(flag => <span key={flag}>{zh ? riskFlagLabels[flag].zh : riskFlagLabels[flag].en}</span>)}</div> : <div className="longform-risk-strip clear"><b>{zh ? '进入前风险' : 'Before entering'}</b><span>{zh ? '当前样本没有触发稀疏证据警报，但仍需先做小规模验证。' : 'No sparse-evidence alert fired, but validate with a small test first.'}</span></div>}
+  </section>;
+}
+
 function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportunity | null; locale: UiLocale }) {
   const zh = locale === 'zh';
   const recommendation = recommendationFor(opportunity, locale);
@@ -147,6 +182,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${opportunity.confidenceLabel.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '需求强度与供给空位' : 'Demand and supply gap'}/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit} hint={zh ? '结构是否容易复用' : 'Repeatable production fit'}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink" hint={zh ? '综合验证优先级' : 'Combined validation priority'}/></div>
+    <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
     <div className="longform-lanes" id="research-pattern">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence" id="research-competition"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
     <details className="longform-representatives" id="research-evidence"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map((video, index) => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale} priority={index < 2}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>

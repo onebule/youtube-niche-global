@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/scoring.test.mjs tests/filter-state.test.mjs tests/video-model-router.test.mjs tests/h3-prompt-compiler.test.mjs tests/viral-case.test.mjs tests/account-storage.test.mjs tests/canvas-generation.test.mjs",
+    "test": "node --experimental-strip-types --test tests/scoring.test.mjs tests/filter-state.test.mjs tests/video-model-router.test.mjs tests/h3-prompt-compiler.test.mjs tests/viral-case.test.mjs tests/account-storage.test.mjs tests/canvas-generation.test.mjs tests/longform-intelligence.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
