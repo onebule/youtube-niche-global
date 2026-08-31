@@ -69,7 +69,15 @@ export type ViralCaseCanvasHandoff = {
   createdAt: string;
 };
 
-const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+const text = (value: unknown) => {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  for (const key of ['text', 'description', 'summary', 'action', 'shot', 'content', 'value']) {
+    if (typeof record[key] === 'string') return record[key].trim();
+  }
+  return '';
+};
 
 export function normalizeViralCaseAnalysisModel(value: unknown): ViralCaseAnalysisModelId {
   return value === 'kimi-k3' || value === 'claude-opus-5' || value === 'gpt-5.6-luna'
