@@ -70,7 +70,10 @@ export type ViralCaseCanvasHandoff = {
 };
 
 const text = (value: unknown) => {
-  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized === '[object Object]' ? '' : normalized;
+  }
   if (!value || typeof value !== 'object') return '';
   const record = value as Record<string, unknown>;
   for (const key of ['text', 'description', 'summary', 'action', 'shot', 'content', 'value', 'title', 'label', 'detail', 'reason']) {
