@@ -1,3 +1,5 @@
+import type { ChannelDiagnosis } from './channel-diagnostic-engine';
+
 export type DoctorStatus = 'healthy' | 'warning' | 'critical' | 'insufficient_data';
 
 export type DoctorFinding = {
@@ -27,6 +29,7 @@ export type ChannelDoctorReport = {
   videos:{id:string;title:string;titleZh?:string|null;publishedAt:string;views:number;likes:number;comments:number;durationSeconds:number;format:'short'|'long'|'unknown';formatConfidence?:'high'|'medium'|'low';formatSource?:string;formatVersion?:number;formatSignals?:string[];thumbnail?:string;url?:string;baselineViews?:number;deviation?:number;status?:'excellent'|'normal'|'abnormal'|'critical'}[];
   dataLimitations:string[];
   oauthAvailable:boolean;
+  diagnosisV3?: ChannelDiagnosis;
 };
 
 declare global { interface Window { YOUTUBE_ANALYZER_API_URL?:string } }
@@ -35,9 +38,9 @@ function endpoint(){
   const configured=typeof window==='undefined'?'':window.YOUTUBE_ANALYZER_API_URL;
   if(configured?.includes('/api/youtube-signals')) return configured.replace('/api/youtube-signals','/api/channel-doctor');
   const configuredDoctor=process.env.NEXT_PUBLIC_CHANNEL_DOCTOR_URL;
-  return configuredDoctor&&!/youtube-niche-global-api\.vercel\.app/i.test(configuredDoctor)
-    ?configuredDoctor
-    :'https://youtube-niche-global-api.vercel.app/api/channel-doctor';
+  if (configuredDoctor && !/youtube-niche-global-api\.vercel\.app/i.test(configuredDoctor)) return configuredDoctor;
+  if (typeof window !== 'undefined') return `${window.location.origin}/api/channel-doctor`;
+  return 'https://youtube-niche-global-api.vercel.app/api/channel-doctor';
 }
 
 export async function diagnoseChannel(channel:string,limit=20,locale:'zh'|'en'='en'):Promise<ChannelDoctorReport>{
