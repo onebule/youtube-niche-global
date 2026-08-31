@@ -73,9 +73,11 @@ const text = (value: unknown) => {
   if (typeof value === 'string') return value.trim();
   if (!value || typeof value !== 'object') return '';
   const record = value as Record<string, unknown>;
-  for (const key of ['text', 'description', 'summary', 'action', 'shot', 'content', 'value']) {
+  for (const key of ['text', 'description', 'summary', 'action', 'shot', 'content', 'value', 'title', 'label', 'detail', 'reason']) {
     if (typeof record[key] === 'string') return record[key].trim();
   }
+  const stringValues = Object.values(record).filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+  if (stringValues.length) return stringValues.join(' · ').trim();
   return '';
 };
 
