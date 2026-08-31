@@ -16,6 +16,7 @@ import './image-to-video-studio.css';
 import './video-canvas-studio.css';
 import './longform-opportunities.css';
 import './opportunity-radar.css';
+import './opportunity-radar-history.css';
 import './site-footer.css';
 import './legal-page.css';
 import SiteFooter from './site-footer';

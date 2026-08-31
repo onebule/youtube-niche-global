@@ -26,6 +26,12 @@ export type OpportunityRadarEvent = {
   creatorConcentration: number | null;
   firstDetectedAt: string;
   lastUpdatedAt: string;
+  lifecycleHistory?: Array<{
+    previousState: RadarLifecycle | null;
+    newState: RadarLifecycle;
+    changedAt: string | null;
+    reason: string | null;
+  }>;
   evidenceVideoIds: string[];
   evidenceChannelIds: string[];
   weakEvidenceVideoIds: string[];
