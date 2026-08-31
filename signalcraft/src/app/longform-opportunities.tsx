@@ -273,12 +273,6 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const laneOptions = useMemo(() => [{ key: 'ALL', label: zh ? '全部机会' : 'All opportunities' }, { key: 'BREAKOUT', label: zh ? '爆发信号' : 'Breakout' }, { key: 'UNDERSERVED', label: zh ? '低粉机会' : 'Underserved' }, { key: 'EVERGREEN', label: zh ? '长期需求' : 'Evergreen' }, { key: 'FORMAT_GAP', label: zh ? '形态空位' : 'Format gaps' }], [zh]);
   const opportunities = (data?.opportunities || []).filter(item => lane === 'ALL' || item.lanes.includes(lane));
   const leadOpportunity = opportunities[0] || null;
-  const firstOpportunityKey = opportunities[0]?.key || null;
-  const opportunityKeysSignature = opportunities.map(item => item.key).join('|');
-  useEffect(() => {
-    if (!firstOpportunityKey) { setSelectedOpportunityKey(null); return; }
-    if (!selectedOpportunityKey || !opportunities.some(item => item.key === selectedOpportunityKey)) setSelectedOpportunityKey(firstOpportunityKey);
-  }, [firstOpportunityKey, opportunityKeysSignature, selectedOpportunityKey, lane]);
   const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || leadOpportunity;
   const heroWindow = windowLabels[window] || windowLabels['28d'];
   const Container = embedded ? 'section' : 'main';
@@ -290,7 +284,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
     {data && <DataBoundary data={data} locale={locale} />}
     <DecisionSummary opportunity={selectedOpportunity} locale={locale} />
     <section className="longform-reading-guide" aria-label={zh ? '机会台读法' : 'How to read the opportunity desk'}><div className="longform-reading-guide-title"><span className="longform-kicker">HOW TO READ</span><b>{zh ? '三步判断，不把一个分数当结论' : 'Three checks before treating a score as a decision'}</b><small>{zh ? '分数用于排序，证据用于确认。' : 'Scores sort the list; evidence confirms the decision.'}</small></div><ol><li><b>01</b><span>{zh ? '先看市场机会' : 'Market first'}</span><small>{zh ? '需求与供给' : 'Demand and supply'}</small></li><li><b>02</b><span>{zh ? '再看执行适配' : 'Then execution'}</span><small>{zh ? '制作是否可复用' : 'Repeatable format'}</small></li><li><b>03</b><span>{zh ? '最后看代表证据' : 'Then evidence'}</span><small>{zh ? '样本、时间、置信度' : 'Sample, recency, confidence'}</small></li></ol></section>
-    <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => setLane(item.key)}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}<span className="longform-lane-note">{opportunities.length ? (zh ? `当前显示 ${opportunities.length} 个方向 · 按进入分排序，置信度辅助判断` : `${opportunities.length} directions · sorted by entry score, with confidence as a guide`) : (zh ? '当前筛选暂无方向' : 'No directions match this filter')}</span></nav>
+    <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => { setLane(item.key); setSelectedOpportunityKey(null); }}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}<span className="longform-lane-note">{opportunities.length ? (zh ? `当前显示 ${opportunities.length} 个方向 · 按进入分排序，置信度辅助判断` : `${opportunities.length} directions · sorted by entry score, with confidence as a guide`) : (zh ? '当前筛选暂无方向' : 'No directions match this filter')}</span></nav>
     {error ? <div className="longform-state error"><b>{zh ? '暂时无法读取长视频数据' : 'Long-form data is unavailable'}</b><p>{error}</p><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="longform-state"><b>{zh ? '正在整理公开长视频样本…' : 'Preparing public long-form samples…'}</b></div> : opportunities.length ? <>
       <nav className="longform-research-navigation" aria-label={zh ? '赛道研究导航' : 'Niche research navigation'}>
         <span className="longform-kicker">RESEARCH WORKSPACE</span>
