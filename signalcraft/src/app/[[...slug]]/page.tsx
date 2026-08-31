@@ -16,11 +16,11 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
   },
   '/radar': {
     title: 'YouTube 长视频机会台',
-    description: '在同一研究台查看长视频长期机会与近期变化雷达；两套评分和证据链保持独立。',
+    description: '在同一研究台查看长视频长期机会与长视频近期变化雷达；两套评分和证据链保持独立。',
   },
   '/longform': {
     title: 'YouTube 长视频机会台',
-    description: '在同一研究台查看长视频长期机会与近期变化雷达；两套评分和证据链保持独立。',
+    description: '在同一研究台查看长视频长期机会与长视频近期变化雷达；两套评分和证据链保持独立。',
   },
   '/doctor': {
     title: 'YouTube 频道诊断',

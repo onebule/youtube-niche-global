@@ -37,9 +37,9 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
     </header>
     <nav className="longform-research-tabs" aria-label={zh ? '长视频研究视角' : 'Long-form research views'}>
       <button type="button" role="tab" className={view === 'opportunities' ? 'active' : ''} aria-selected={view === 'opportunities'} onClick={() => chooseView('opportunities')}><span>{zh ? '长视频机会' : 'Long-form Opportunities'}</span><small>{zh ? '看整体是否值得做' : 'Durable direction'}</small></button>
-      <button type="button" role="tab" className={view === 'radar' ? 'active' : ''} aria-selected={view === 'radar'} onClick={() => chooseView('radar')}><span>{zh ? '机会雷达' : 'Opportunity Radar'}</span><small>{zh ? '看最近发生了什么' : 'Recent change'}</small></button>
+      <button type="button" role="tab" className={view === 'radar' ? 'active' : ''} aria-selected={view === 'radar'} onClick={() => chooseView('radar')}><span>{zh ? '长视频机会雷达' : 'Long-form Opportunity Radar'}</span><small>{zh ? '看最近长视频发生了什么' : 'Recent long-form change'}</small></button>
     </nav>
-    <div className="longform-research-boundary"><span>{zh ? '同一张研究桌 · 两条判断链' : 'ONE DESK · TWO DECISION CHAINS'}</span><p>{view === 'opportunities' ? (zh ? '当前视角：长期机会。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current view: durable opportunity. Market, execution, and entry scores answer long-term making value.') : (zh ? '当前视角：近期雷达。Why Now、历史基线和跨频道证据只回答最近变化。' : 'Current view: recent radar. Why Now, historical baselines, and cross-channel proof answer recent change.')}</p></div>
+    <div className="longform-research-boundary"><span>{zh ? '同一张研究桌 · 两条判断链' : 'ONE DESK · TWO DECISION CHAINS'}</span><p>{view === 'opportunities' ? (zh ? '当前视角：长期机会。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current view: durable opportunity. Market, execution, and entry scores answer long-term making value.') : (zh ? '当前视角：长视频机会雷达。Why Now、历史基线和跨频道证据只回答长视频最近变化。' : 'Current view: long-form opportunity radar. Why Now, historical baselines, and cross-channel proof answer recent long-form change.')}</p></div>
     <section className="longform-research-content" aria-live="polite">
       {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} />}
     </section>
