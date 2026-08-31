@@ -14,6 +14,7 @@ import { hasOwnerAccess } from '@/src/lib/owner-admin';
 import { getRecordedGrowth } from '@/src/lib/growth';
 import { createMonitorRule, loadMonitorRules, updateMonitorRule } from '@/src/lib/monitoring';
 import type { OpportunityRadarEvent } from '@/src/lib/opportunity-radar';
+import { buildNicheEvaluationHref, saveNicheAnalysisContext, type RadarReturnState } from '@/src/lib/niche-analysis-context';
 import UpgradeModal, { type UpgradePlan } from './upgrade-modal';
 import RankingDataScope from './ranking-data-scope';
 
@@ -520,19 +521,28 @@ export default function SignalCraftApp() {
     notify('已创建行动草稿，可在“选题”中查看');
   };
 
-  const researchRadarEvent = (event: OpportunityRadarEvent) => {
-    const query = new URLSearchParams({
-      opportunityId: event.id,
-      topic: event.topic,
+  const researchRadarEvent = (event: OpportunityRadarEvent, returnState?: RadarReturnState) => {
+    const context = {
+      nicheId: event.id,
+      nicheName: event.topic || event.title,
+      topicName: event.topic || event.title,
+      contentType: 'LONG_FORM',
+      platformType: 'YOUTUBE',
       format: event.format,
-      signalType: event.eventType,
-      window: `${event.baseline.windowDays}d`,
+      timeWindow: `${event.baseline.windowDays}d`,
+      filters: { market: returnState?.filters?.market || 'all', window: returnState?.filters?.window || `${event.baseline.windowDays}d` },
+      sort: returnState?.sort || 'whyNowScore',
+      trendSignals: { eventType: event.eventType, lifecycle: event.lifecycle, whyNowScore: event.whyNowScore, creatorConcentrationTop3: event.creatorConcentrationTop3 ?? null, facts: event.facts.slice(0, 3) },
+      breakoutSignals: { count: event.smallCreatorBreakoutCount, acceleration: event.vpdAcceleration },
+      smallCreatorSignals: { count: event.smallCreatorBreakoutCount, signal: event.metrics.smallCreatorSignal ?? null },
+      representativeVideos: event.representativeVideos.slice(0, 8),
+      representativeChannels: event.evidenceChannelIds.slice(0, 8),
       confidence: event.confidence,
-      videoIds: event.evidenceVideoIds.slice(0, 8).join(','),
-      channelIds: event.evidenceChannelIds.slice(0, 8).join(','),
-      reason: event.facts.slice(0, 2).join(' '),
-    });
-    navigate(`/longform?${query.toString()}`);
+      source: 'TREND_RADAR' as const,
+      returnState: returnState || { scrollPosition: typeof window === 'undefined' ? 0 : window.scrollY, activeTab: 'ALL', filters: { market: 'all', window: `${event.baseline.windowDays}d` } },
+    };
+    saveNicheAnalysisContext(context);
+    navigate(buildNicheEvaluationHref(context));
     notify('已带入趋势证据，正在打开长视频赛道评估');
   };
 

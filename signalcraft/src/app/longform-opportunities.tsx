@@ -8,6 +8,7 @@ import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
 import { buildRpmPublicContext, getRpmBenchmarkForTopic, type RpmBenchmarkResult, type RpmPublicContext } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
+import { buildTrendRadarHref, contextFromQuery, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 
 const formatNumber = (value: number | null, locale: UiLocale) => {
   if (value === null || !Number.isFinite(value)) return locale === 'zh' ? '未知' : 'Unknown';
@@ -130,6 +131,30 @@ const riskFlagLabels: Record<LongformRiskFlag, { zh: string; en: string }> = {
   AVOID_RECOMMENDATION: { zh: '当前建议不要直接进入', en: 'Current recommendation is not to enter directly' },
 };
 
+const evaluationWindows = new Set(['7d', '28d', '90d', '365d']);
+const normalizeEvaluationWindow = (value: string | undefined) => value && evaluationWindows.has(value) ? value : '28d';
+const normalizedText = (value: string | null | undefined) => String(value || '').trim().toLocaleLowerCase();
+const trendStateLabels: Record<string, { zh: string; en: string }> = {
+  EMERGING: { zh: '早期机会', en: 'Emerging' },
+  CONFIRMED: { zh: '持续增长', en: 'Sustained growth' },
+  CROWDED: { zh: '竞争拥挤', en: 'Crowded' },
+  SATURATING: { zh: '趋于饱和', en: 'Saturating' },
+  DECLINING: { zh: '正在降温', en: 'Cooling' },
+  SMALL_CREATOR_BREAKOUT: { zh: '小频道突破', en: 'Small-creator breakout' },
+  EMERGING_TOPIC: { zh: '新兴主题', en: 'Emerging topic' },
+  SUPPLY_GAP: { zh: '供给缺口', en: 'Supply gap' },
+  FORMAT_MIGRATION: { zh: '格式迁移', en: 'Format migration' },
+  SATURATION_WARNING: { zh: '饱和预警', en: 'Saturation warning' },
+};
+const trendStateLabel = (value: unknown, locale: UiLocale) => trendStateLabels[String(value || '')]?.[locale === 'zh' ? 'zh' : 'en'] || String(value || '—');
+
+function routeNavigate(path: string) {
+  if (typeof window === 'undefined') return;
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new Event('signalcraft:navigate'));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function LongformEvidenceLayer({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const layer = buildLongformEvidenceLayer(opportunity);
@@ -239,6 +264,19 @@ function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportu
   return <section className={`longform-decision-summary ${recommendation.key}`}><div className="longform-decision-summary-head"><div><span className="longform-kicker">DECISION SUMMARY · {zh ? '当前研究方向' : 'CURRENT RESEARCH SUBJECT'}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2><p>{opportunity.topic} · {zh ? '由左侧方向索引选择，可随时切换' : 'selected from the direction index and switchable at any time'}</p></div><span className={`longform-recommendation ${recommendation.key}`}>{recommendation.label}</span></div><div className="longform-decision-summary-grid"><div className="longform-summary-verdict"><small>{zh ? '为什么现在判断' : 'WHY THIS DECISION'}</small><b>{why}</b><span>{zh ? `置信度 ${opportunity.confidence} · ${opportunity.sampleSize} 条样本 · ${opportunity.channelCount} 个频道` : `${opportunity.confidence} confidence · ${opportunity.sampleSize} samples · ${opportunity.channelCount} channels`}</span></div><div className="longform-summary-score"><small>{zh ? '市场机会' : 'MARKET OPPORTUNITY'}</small><strong>{score(opportunity.marketOpportunity)}</strong><span>{zh ? '需求、供给空位与多样性' : 'Demand, supply gap and diversity'}</span></div><div className="longform-summary-score execution"><small>{zh ? '执行适配' : 'EXECUTION FIT'}</small><strong>{score(opportunity.executionFit)}</strong><span>{zh ? '可复用制作结构' : 'Repeatable production fit'}</span></div></div><div className="longform-demand-supply"><div><small>{zh ? '需求趋势代理' : 'DEMAND TREND PROXY'}</small><b>{summaryMetric(growth, locale)}<em>{growth === null ? '' : '/100'}</em></b><span>{growth === null ? (zh ? '公开增长代理不可用' : 'Public growth proxy unavailable') : (zh ? '由近期增长与样本推断' : 'Derived from recent growth and samples')}</span></div><div><small>{zh ? '供给空位代理' : 'SUPPLY GAP PROXY'}</small><b>{summaryMetric(supplyProxy, locale)}<em>{supplyProxy === null ? '' : '/100'}</em></b><span>{supplyProxy === null ? (zh ? '竞争代理不可用' : 'Competition proxy unavailable') : (zh ? '分数越高表示相对更开放' : 'Higher means relatively more open')}</span></div><div><small>{zh ? '创作者多样性' : 'CREATOR DIVERSITY'}</small><b>{summaryMetric(diversity, locale)}<em>{diversity === null ? '' : '/100'}</em></b><span>{diversity === null ? (zh ? '频道覆盖不足' : 'Channel coverage unavailable') : (zh ? '跨频道确认程度' : 'Cross-channel confirmation')}</span></div></div></section>;
 }
 
+function TrendRadarConnection({ context, opportunity, locale, onReturn, onOpenRadar }: { context: NicheAnalysisContext | null; opportunity: LongformOpportunity | null; locale: UiLocale; onReturn: () => void; onOpenRadar: (lane?: string) => void }) {
+  const zh = locale === 'zh';
+  const signals = context?.trendSignals && typeof context.trendSignals === 'object' ? context.trendSignals as Record<string, unknown> : null;
+  const breakout = context?.breakoutSignals && typeof context.breakoutSignals === 'object' ? context.breakoutSignals as Record<string, unknown> : null;
+  const smallCreator = context?.smallCreatorSignals && typeof context.smallCreatorSignals === 'object' ? context.smallCreatorSignals as Record<string, unknown> : null;
+  if (!context && !opportunity) return null;
+  return <section className="longform-trend-connection" aria-label={zh ? '趋势雷达联动' : 'Trend Radar connection'}>
+    <div className="longform-trend-connection-copy"><span className="longform-kicker">{context ? 'TREND RADAR DISCOVERY' : 'CONTINUE EXPLORING'}</span><b>{context ? (zh ? '这条赛道为什么进入评估？' : 'Why this niche reached evaluation') : (zh ? '评估完成后继续寻找' : 'Keep exploring after evaluation')}</b><small>{context ? (zh ? '趋势信号只作为发现入口；赛道评估仍独立判断长期制作价值。' : 'Trend signals are a discovery input; evaluation independently judges durable making value.') : (zh ? '回到趋势雷达，可按当前方向定位相关趋势事件。' : 'Return to Trend Radar to locate related trend events for this direction.')}</small>{context && Array.isArray(signals?.facts) && signals.facts[0] ? <small className="longform-trend-why">{zh ? 'Why：' : 'Why: '}{String(signals.facts[0])}</small> : null}</div>
+    {context ? <div className="longform-trend-connection-facts"><span><small>{zh ? '趋势状态' : 'Trend state'}</small><b>{trendStateLabel(signals?.lifecycle || signals?.eventType, locale)}</b></span><span><small>{zh ? '窗口' : 'Window'}</small><b>{context.timeWindow || '—'}</b></span><span><small>{zh ? '小频道突破' : 'Small creator breakouts'}</small><b>{String(breakout?.count ?? smallCreator?.count ?? '—')}</b></span><span><small>{zh ? '置信度' : 'Confidence'}</small><b>{String(context.confidence || '—')}</b></span></div> : null}
+    <div className="longform-trend-connection-actions">{context ? <button type="button" onClick={onReturn}>{zh ? '← 返回趋势雷达' : '← Back to Trend Radar'}</button> : null}<button type="button" className="primary" onClick={() => onOpenRadar()}>{zh ? '在趋势雷达中查看 →' : 'View in Trend Radar →'}</button><button type="button" onClick={() => onOpenRadar('SUPPLY_GAP')}>{zh ? '找更低竞争方向' : 'Find lower competition'}</button><button type="button" onClick={() => onOpenRadar('SMALL_CREATOR')}>{zh ? '找小频道突破' : 'Find creator breakouts'}</button></div>
+  </section>;
+}
+
 function DataBoundary({ data, locale }: { data: LongformResponse; locale: UiLocale }) {
   const zh = locale === 'zh';
   const fields = data.availabilityAudit.fields;
@@ -279,7 +317,8 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const [data, setData] = useState<LongformResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [researchContext, setResearchContext] = useState<{ opportunityId: string; topic: string; format: string; signalType: string; window: string; confidence: string; videoIds: string[]; channelIds: string[]; reason: string } | null>(null);
+  const [researchContext, setResearchContext] = useState<NicheAnalysisContext | null>(null);
+  const [contextReady, setContextReady] = useState(false);
   const [selectedOpportunityKey, setSelectedOpportunityKey] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
@@ -299,33 +338,69 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
       if (sequence === requestSequence.current) setLoading(false);
     }
   }, [market, window, locale, zh]);
-  useEffect(() => { const timer = setTimeout(() => { void load(); }, 0); return () => clearTimeout(timer); }, [load]);
-  useEffect(() => () => requestRef.current?.abort(), []);
   useEffect(() => {
     const syncContext = () => {
       const params = new URLSearchParams(globalThis.window.location.search);
-      const opportunityId = params.get('opportunityId');
-      if (!opportunityId) { setResearchContext(null); return; }
-      setResearchContext({ opportunityId, topic: params.get('topic') || '', format: params.get('format') || '', signalType: params.get('signalType') || '', window: params.get('window') || '', confidence: params.get('confidence') || '', videoIds: (params.get('videoIds') || '').split(',').filter(Boolean), channelIds: (params.get('channelIds') || '').split(',').filter(Boolean), reason: params.get('reason') || '' });
+      const context = contextFromQuery(params);
+      setResearchContext(context);
+      if (context) {
+        setWindow(normalizeEvaluationWindow(context.timeWindow));
+        const contextMarket = context.filters && typeof context.filters.market === 'string' ? context.filters.market : undefined;
+        if (contextMarket) setMarket(contextMarket);
+      }
+      setContextReady(true);
     };
     syncContext();
     globalThis.window.addEventListener('popstate', syncContext);
     globalThis.window.addEventListener('signalcraft:navigate', syncContext);
     return () => { globalThis.window.removeEventListener('popstate', syncContext); globalThis.window.removeEventListener('signalcraft:navigate', syncContext); };
   }, []);
+  useEffect(() => { if (!contextReady) return; const timer = setTimeout(() => { void load(); }, 0); return () => clearTimeout(timer); }, [contextReady, load]);
+  useEffect(() => () => requestRef.current?.abort(), []);
   const laneOptions = useMemo(() => [{ key: 'ALL', label: zh ? '全部机会' : 'All opportunities' }, { key: 'BREAKOUT', label: zh ? '爆发信号' : 'Breakout' }, { key: 'UNDERSERVED', label: zh ? '低粉机会' : 'Underserved' }, { key: 'EVERGREEN', label: zh ? '长期需求' : 'Evergreen' }, { key: 'FORMAT_GAP', label: zh ? '形态空位' : 'Format gaps' }], [zh]);
   const opportunities = (data?.opportunities || []).filter(item => lane === 'ALL' || item.lanes.includes(lane));
   const leadOpportunity = opportunities[0] || null;
-  const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || leadOpportunity;
+  const contextOpportunity = useMemo(() => {
+    if (!researchContext || !data) return null;
+    const target = normalizedText(researchContext.nicheName || researchContext.topicName);
+    if (!target) return null;
+    return data.opportunities.find(item => {
+      const values = [item.key, item.topic, item.mechanism, `${item.mechanism} · ${item.productionType}`].map(normalizedText);
+      return values.some(value => value === target || value.includes(target) || target.includes(value));
+    }) || null;
+  }, [data, researchContext]);
+  const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || contextOpportunity || leadOpportunity;
   const heroWindow = windowLabels[window] || windowLabels['28d'];
+  const contextTrendSignals = researchContext?.trendSignals && typeof researchContext.trendSignals === 'object' ? researchContext.trendSignals as Record<string, unknown> : null;
+  const contextBreakoutSignals = researchContext?.breakoutSignals && typeof researchContext.breakoutSignals === 'object' ? researchContext.breakoutSignals as Record<string, unknown> : null;
+  const contextSmallCreatorSignals = researchContext?.smallCreatorSignals && typeof researchContext.smallCreatorSignals === 'object' ? researchContext.smallCreatorSignals as Record<string, unknown> : null;
+  const returnToRadar = () => {
+    if (!researchContext) return;
+    saveNicheAnalysisContext(researchContext);
+    routeNavigate(buildTrendRadarHref(researchContext, true));
+  };
+  const openRelatedRadar = (lane?: string) => {
+    const context: NicheAnalysisContext = researchContext || {
+      nicheName: selectedOpportunity?.topic || '',
+      topicName: selectedOpportunity?.topic,
+      contentType: 'LONG_FORM',
+      platformType: 'YOUTUBE',
+      timeWindow: window,
+      source: 'NICHE_EVALUATION',
+    };
+    if (!context.nicheName) return;
+    saveNicheAnalysisContext({ ...context, source: 'NICHE_EVALUATION' });
+    routeNavigate(buildTrendRadarHref({ ...context, source: 'NICHE_EVALUATION' }, false, lane));
+  };
   const Container = embedded ? 'section' : 'main';
   return <Container className="longform-page">
     <section className="longform-hero"><div><span className="longform-kicker">LONG-FORM DISCOVERY ENGINE</span><h1>{zh ? '找到值得长期制作的长视频方向。' : 'Find long-form directions worth making.'}</h1><p>{zh ? '市场机会与执行适配分开计算。每个结论都回到公开样本、采集时间和置信度，不把不可见的 CTR、留存或收益伪装成事实。' : 'Market opportunity and execution fit stay separate. Every conclusion points back to public samples, capture time, and confidence.'}</p></div><div className="longform-hero-mark"><span>{heroWindow.value}</span><small>{zh ? heroWindow.zh : heroWindow.en}</small><i /></div></section>
-    {researchContext && <section className="longform-research-context" aria-label={zh ? '趋势雷达评估上下文' : 'Trend Radar evaluation context'}><div><span className="longform-kicker">TREND → EVALUATION</span><b>{zh ? '已带入长视频趋势证据' : 'Long-form trend evidence loaded'}</b><small>{researchContext.topic || (zh ? '未命名主题' : 'Untitled topic')} · {researchContext.format || (zh ? '未识别形态' : 'Format unavailable')} · {researchContext.signalType || '—'}</small>{researchContext.reason ? <small>{researchContext.reason}</small> : null}</div><div><span>{zh ? '事件 ID' : 'Event ID'} <b>{researchContext.opportunityId}</b></span><span>{zh ? '窗口' : 'Window'} <b>{researchContext.window || '—'}</b></span><span>{zh ? '置信度' : 'Confidence'} <b>{researchContext.confidence || '—'}</b></span><span>{zh ? '证据' : 'Proof'} <b>{researchContext.videoIds.length}V · {researchContext.channelIds.length}C</b></span></div></section>}
+    {researchContext && <section className="longform-research-context" aria-label={zh ? '趋势雷达评估上下文' : 'Trend Radar evaluation context'}><div><span className="longform-kicker">TREND → EVALUATION</span><b>{zh ? '趋势雷达发现 · 已自动带入' : 'Found by Trend Radar · loaded automatically'}</b><small>{researchContext.nicheName} · {researchContext.contentType || 'LONG_FORM'} · {researchContext.format || (zh ? '未识别形态' : 'Format unavailable')} · {researchContext.topicName || (zh ? '未识别主题' : 'Topic unavailable')}</small><small>{Array.isArray(researchContext.representativeVideos) ? `${researchContext.representativeVideos.length}${zh ? ' 条代表视频证据' : ' representative videos'}` : (zh ? '代表视频未提供' : 'Representative videos unavailable')}</small></div><div><span>{zh ? '趋势状态' : 'Trend state'} <b>{trendStateLabel(contextTrendSignals?.lifecycle || contextTrendSignals?.eventType, locale)}</b></span><span>{zh ? '窗口' : 'Window'} <b>{researchContext.timeWindow || '—'}</b></span><span>{zh ? '小频道突破' : 'Small creators'} <b>{String(contextBreakoutSignals?.count ?? contextSmallCreatorSignals?.count ?? '—')}</b></span><span>{zh ? '置信度' : 'Confidence'} <b>{String(researchContext.confidence || '—')}</b></span><button type="button" onClick={returnToRadar}>{zh ? '← 返回趋势雷达' : '← Back to Trend Radar'}</button></div></section>}
     <section className="longform-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => setWindow(event.target.value)}><option value="7d">{zh ? '近 7 天' : '7 days'}</option><option value="28d">{zh ? '近 28 天' : '28 days'}</option><option value="90d">{zh ? '近 90 天' : '90 days'}</option><option value="365d">{zh ? '近 1 年' : '1 year'}</option></select></label><button type="button" className="longform-refresh" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '更新中…' : 'Refreshing…') : (zh ? '更新数据' : 'Refresh')}</button></section>
     {data && <section className="longform-scope"><div className="longform-scope-copy"><span className="longform-kicker">DATA SCOPE</span><b>{zh ? '这次判断基于哪一批公开样本？' : 'Which public sample powers this view?'}</b><small>{data.dataScope.source === 'longform_video_features' ? (zh ? '独立长视频候选池 · 不与 Shorts 共用排名样本' : 'Independent long-form pool · isolated from Shorts ranking samples') : (zh ? '兼容读取现有公开信号池 · 独立采集尚未启用' : 'Compatibility read from the existing public signal pool · independent collector not enabled')}</small><small>{data.dataScope.latestCapturedAt ? `${zh ? '最近采集' : 'Latest capture'} ${new Date(data.dataScope.latestCapturedAt).toLocaleString()}` : (zh ? '尚无采集时间' : 'No capture timestamp')}</small>{data.dataScope.marketSampleLimit ? <small>{zh ? `按市场分层取样：每个市场最多 ${data.dataScope.marketSampleLimit} 条` : `Market-stratified pool: up to ${data.dataScope.marketSampleLimit} rows per market`}</small> : null}{data.dataScope.failedMarkets?.length ? <small className="longform-partial-warning">{zh ? `部分市场读取失败：${data.dataScope.failedMarkets.join('、')}` : `Partial market read failure: ${data.dataScope.failedMarkets.join(', ')}`}</small> : null}</div><div className="longform-scope-facts"><span><small>{zh ? '长视频候选' : 'Long-form pool'}</small><b>{data.dataScope.longformRows}</b></span><span><small>{zh ? '已采集样本' : 'Collected rows'}</small><b>{data.dataScope.collectedRows}</b></span><span><small>{zh ? '覆盖市场' : 'Markets'}</small><b>{data.dataScope.markets.length || '—'}</b></span></div><div className="longform-coverage"><b>{data.availabilityAudit.coverage}%</b><small>{zh ? '字段可用率' : 'field availability'}</small></div></section>}
     {data && <DataBoundary data={data} locale={locale} />}
     <DecisionSummary opportunity={selectedOpportunity} locale={locale} />
+    <TrendRadarConnection context={researchContext} opportunity={selectedOpportunity} locale={locale} onReturn={returnToRadar} onOpenRadar={openRelatedRadar} />
     <section className="longform-reading-guide" aria-label={zh ? '机会台读法' : 'How to read the opportunity desk'}><div className="longform-reading-guide-title"><span className="longform-kicker">HOW TO READ</span><b>{zh ? '三步判断，不把一个分数当结论' : 'Three checks before treating a score as a decision'}</b><small>{zh ? '分数用于排序，证据用于确认。' : 'Scores sort the list; evidence confirms the decision.'}</small></div><ol><li><b>01</b><span>{zh ? '先看市场机会' : 'Market first'}</span><small>{zh ? '需求与供给' : 'Demand and supply'}</small></li><li><b>02</b><span>{zh ? '再看执行适配' : 'Then execution'}</span><small>{zh ? '制作是否可复用' : 'Repeatable format'}</small></li><li><b>03</b><span>{zh ? '最后看代表证据' : 'Then evidence'}</span><small>{zh ? '样本、时间、置信度' : 'Sample, recency, confidence'}</small></li></ol></section>
     <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => { setLane(item.key); setSelectedOpportunityKey(null); }}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}<span className="longform-lane-note">{opportunities.length ? (zh ? `当前显示 ${opportunities.length} 个方向 · 按进入分排序，置信度辅助判断` : `${opportunities.length} directions · sorted by entry score, with confidence as a guide`) : (zh ? '当前筛选暂无方向' : 'No directions match this filter')}</span></nav>
     {error ? <div className="longform-state error"><b>{zh ? '暂时无法读取长视频数据' : 'Long-form data is unavailable'}</b><p>{error}</p><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="longform-state"><b>{zh ? '正在整理公开长视频样本…' : 'Preparing public long-form samples…'}</b></div> : opportunities.length ? <>
