@@ -100,7 +100,7 @@ export default function CanvasInspector({
         {generationError && <p className="canvas-inspector-error">{generationError}</p>}
         <div className="canvas-inspector-actions">
           <button type="button" onClick={onFocus}>{zh ? '定位节点' : 'Focus node'}</button>
-          <button type="button" className="is-primary" onClick={onGenerateVideo} disabled={!canGenerate && !isResult} title={!canGenerate && !isResult ? generationBlockedReason : undefined}>{isResult && generationStatus === 'SUCCESS' ? (zh ? '再次生成' : 'Generate another') : (zh ? '打开视频生成' : 'Open video generator')}</button>
+          <button type="button" className="is-primary" onClick={onGenerateVideo}>{isResult && generationStatus === 'SUCCESS' ? (zh ? '再次生成' : 'Generate another') : (zh ? '打开视频生成' : 'Open video generator')}</button>
           {onRetry && generationStatus === 'FAILED' && <button type="button" onClick={onRetry} disabled={!canGenerate} title={!canGenerate ? generationBlockedReason : undefined}>{zh ? '重试此任务' : 'Retry this task'}</button>}
           {onSelectBest && isResult && generationStatus === 'SUCCESS' && <button type="button" onClick={onSelectBest}>{zh ? '设为最佳镜头' : 'Set as Best Take'}</button>}
         </div>
