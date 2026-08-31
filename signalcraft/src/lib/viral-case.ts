@@ -11,8 +11,8 @@ export type ViralCaseAnalysisModelId = 'gpt-5.6-luna' | 'kimi-k3' | 'claude-opus
 export const DEFAULT_VIRAL_CASE_ANALYSIS_MODEL: ViralCaseAnalysisModelId = 'gpt-5.6-luna';
 export const VIRAL_CASE_ANALYSIS_MODELS: Array<{ id: ViralCaseAnalysisModelId; label: string; provider: string; requirement: string }> = [
   { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', provider: 'OpenAI', requirement: 'OPENAI_API_KEY' },
-  { id: 'kimi-k3', label: 'Kimi K3', provider: 'Moonshot', requirement: 'MOONSHOT_API_KEY' },
-  { id: 'claude-opus-5', label: 'Claude Opus 5', provider: 'Anthropic', requirement: 'ANTHROPIC_API_KEY' },
+  { id: 'kimi-k3', label: 'Kimi K3', provider: 'Moonshot', requirement: 'MOONSHOT_API_KEY / KIMI_K3_API_KEY / APIMART_API_KEY' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', provider: 'Anthropic', requirement: 'ANTHROPIC_API_KEY / CLAUDE_OPUS_5_API_KEY / APIMART_API_KEY' },
 ];
 
 export type ViralCaseAnalysisConfidence = 'low' | 'medium' | 'high';

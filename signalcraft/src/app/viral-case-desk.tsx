@@ -90,6 +90,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   });
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [analysisState, setAnalysisState] = useState<'idle' | 'running'>('idle');
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [h3Prompt, setH3Prompt] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importState, setImportState] = useState<'idle' | 'loading'>('idle');
@@ -174,6 +175,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       notify('该样本没有公开原视频地址，暂不能请求自动分析。');
       return;
     }
+    setAnalysisError(null);
     setAnalysisState('running');
     try {
       const result = await requestViralCaseAnalysis(selectedVideo, store.analysisModel);
@@ -190,7 +192,9 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       });
       notify('自动分析已返回，请逐项对照原视频确认。');
     } catch (error) {
-      notify(error instanceof Error ? error.message : '自动视频分析暂不可用。');
+      const message = error instanceof Error ? error.message : '自动视频分析暂不可用。';
+      setAnalysisError(message);
+      notify(message);
     } finally {
       setAnalysisState('idle');
     }
@@ -445,9 +449,10 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
           <p>{notes.analysis ? `来源：${notes.analysis.provider} · 置信度：${notes.analysis.confidence === 'high' ? '高' : notes.analysis.confidence === 'medium' ? '中' : '低'} · ${new Date(notes.analysis.generatedAt).toLocaleString('zh-CN')}` : '默认先分析标题、时长和 YouTube 缩略图；不会把推测写成逐帧、字幕或音频结论。接入独立视频服务后才会升级完整能力。'}</p>
         </div>
         <div className="viral-case-analysis-controls">
-          <label><span>分析模型</span><select aria-label="自动分析模型" value={store.analysisModel} onChange={event => setStore(current => ({ ...current, analysisModel: event.target.value as ViralCaseAnalysisModelId }))}>{VIRAL_CASE_ANALYSIS_MODELS.map(model => <option key={model.id} value={model.id}>{model.label} · {model.provider}</option>)}</select><small>需配置对应服务端 Key；不会自动切换模型。</small></label>
+          <label><span>分析模型</span><select aria-label="自动分析模型" value={store.analysisModel} onChange={event => { setAnalysisError(null); setStore(current => ({ ...current, analysisModel: event.target.value as ViralCaseAnalysisModelId })); }}>{VIRAL_CASE_ANALYSIS_MODELS.map(model => <option key={model.id} value={model.id}>{model.label} · {model.provider}</option>)}</select><small>服务端会按所选模型调用对应 Key；失败不会自动切换模型。</small></label>
           <button type="button" className="primary" onClick={requestAnalysis} disabled={analysisState === 'running' || !selectedVideo.sourceUrl}>{analysisState === 'running' ? '分析中…' : notes.analysis ? '重新分析' : '请求自动分析'}</button>
         </div>
+        {analysisError && <p className="viral-case-analysis-error" role="alert">分析失败：{analysisError}</p>}
       </section>
 
       {notes.analysis && <section className="viral-case-analysis-report" aria-label="自动分析报告">
