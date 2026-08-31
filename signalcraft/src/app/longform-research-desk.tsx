@@ -40,7 +40,7 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
         ? [['先看市场', '需求与供给是否匹配'], ['再看执行', '制作难度与进入门槛'], ['最后判断', '证据覆盖是否足够']]
         : [['Start with market', 'Demand and supply fit'], ['Then execution', 'Production difficulty and entry bar'], ['Then decide', 'Evidence coverage']];
 
-  return <main className="longform-research-desk">
+  return <main className={`longform-research-desk ${view === 'radar' ? 'radar-desk-shell' : view === 'opportunities' ? 'research-desk-shell' : 'short-radar-desk-shell'}`}>
     <header className="longform-research-header">
       <div>
         <span className="longform-research-kicker">{shortRadar ? 'SHORT-FORM OPPORTUNITY DESK' : view === 'radar' ? 'OPPORTUNITY RADAR' : 'TRACK RESEARCH'}</span>
@@ -54,8 +54,8 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
       <button type="button" role="tab" className={view === 'radar' ? 'active' : ''} aria-selected={view === 'radar'} onClick={() => chooseView('radar')}><span>{zh ? '机会雷达' : 'Opportunity Radar'}</span><small>{zh ? '看最近发生了什么变化' : 'Recent change'}</small></button>
       <button type="button" role="tab" className={view === 'short-radar' ? 'active' : ''} aria-selected={view === 'short-radar'} onClick={() => chooseView('short-radar')}><span>{zh ? '短视频机会雷达' : 'Short-form Opportunity Radar'}</span><small>{zh ? 'Shorts 独立引擎' : 'Shorts-only engine'}</small></button>
     </nav>
-    <div className="longform-research-boundary"><span>{zh ? '同一张研究桌 · 三条判断链' : 'ONE DESK · THREE DECISION CHAINS'}</span><p>{view === 'opportunities' ? (zh ? '当前视角：赛道研究。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current view: Track Research. Market, execution, and entry scores answer long-term making value.') : view === 'radar' ? (zh ? '当前视角：机会雷达。Why Now、历史基线和跨频道证据只回答长视频最近变化。' : 'Current view: Opportunity Radar. Why Now, historical baselines, and cross-channel proof answer recent long-form change.') : (zh ? '当前视角：短视频机会雷达。只读取 Shorts 样本，独立计算跨频道扩散、突破和供给变化；原有 Shorts 产品保持不变。' : 'Current view: short-form opportunity radar. It reads Shorts samples only and computes spread, breakout and supply signals independently; the existing Shorts product is unchanged.')}</p></div>
-    <div className="research-lens-grid" aria-label={zh ? '当前视角的判断顺序' : 'Decision order for this view'}>{decisionLenses.map(([label, body]) => <article key={label}><span>{label}</span><b>{body}</b></article>)}</div>
+    {view !== 'radar' && <div className="longform-research-boundary"><span>{zh ? '同一张研究桌 · 三条判断链' : 'ONE DESK · THREE DECISION CHAINS'}</span><p>{view === 'opportunities' ? (zh ? '当前视角：赛道研究。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current view: Track Research. Market, execution, and entry scores answer long-term making value.') : (zh ? '当前视角：短视频机会雷达。只读取 Shorts 样本，独立计算跨频道扩散、突破和供给变化；原有 Shorts 产品保持不变。' : 'Current view: short-form opportunity radar. It reads Shorts samples only and computes spread, breakout and supply signals independently; the existing Shorts product is unchanged.')}</p></div>}
+    {view !== 'radar' && <div className="research-lens-grid" aria-label={zh ? '当前视角的判断顺序' : 'Decision order for this view'}>{decisionLenses.map(([label, body]) => <article key={label}><span>{label}</span><b>{body}</b></article>)}</div>}
     <section className="longform-research-content" aria-live="polite">
       {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : view === 'radar' ? <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} /> : <ShortformOpportunityRadar locale={locale} embedded />}
     </section>
