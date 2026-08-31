@@ -14,6 +14,7 @@ export type LongformOpportunity = {
   entryScore: number | null;
   confidence: number;
   confidenceLabel: 'HIGH' | 'MEDIUM' | 'LOW';
+  recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;
   execution: { score: number | null; coverage: number; rationale: string };

@@ -90,6 +90,17 @@ function decisionFor(opportunity: LongformOpportunity, locale: UiLocale) {
 
 function recommendationFor(opportunity: LongformOpportunity | null, locale: UiLocale) {
   if (!opportunity) return { key: 'insufficient', label: locale === 'zh' ? '数据不足' : 'INSUFFICIENT DATA' };
+  if (opportunity.recommendation) {
+    const labels: Record<NonNullable<LongformOpportunity['recommendation']>, { key: string; zh: string; en: string }> = {
+      BUILD: { key: 'build', zh: '可以建设', en: 'BUILD' },
+      TEST: { key: 'test', zh: '值得测试', en: 'TEST' },
+      WATCH: { key: 'watch', zh: '谨慎测试', en: 'WATCH' },
+      AVOID: { key: 'avoid', zh: '暂不建议', en: 'AVOID' },
+      INSUFFICIENT_DATA: { key: 'insufficient', zh: '数据不足', en: 'INSUFFICIENT DATA' },
+    };
+    const remote = labels[opportunity.recommendation];
+    return { key: remote.key, label: locale === 'zh' ? remote.zh : remote.en };
+  }
   const decision = decisionFor(opportunity, locale);
   if (decision.key === 'priority') return { key: 'test', label: locale === 'zh' ? '值得测试' : 'TEST' };
   if (decision.key === 'watch') return { key: 'watch', label: locale === 'zh' ? '谨慎测试' : 'WATCH' };
@@ -109,7 +120,7 @@ function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyProxy = opportunity.metrics?.lowCompetition ?? null;
   const diversity = opportunity.metrics?.creatorDiversity ?? null;
   const why = opportunity.sampleSize && opportunity.channelCount
-    ? (zh ? `当前方向由 ${opportunity.sampleSize} 条视频、${opportunity.channelCount} 个频道支持，${decision.key === 'priority' ? '市场机会与执行适配都达到优先验证门槛。' : '证据仍适合先做小规模验证。'}` : `${opportunity.sampleSize} videos across ${opportunity.channelCount} channels support this direction; ${decision.key === 'priority' ? 'market and execution both clear the validation bar.' : 'evidence still calls for a small validation test.'}`)
+    ? (zh ? `当前方向由 ${opportunity.sampleSize} 条视频、${opportunity.channelCount} 个频道支持，${recommendation.key === 'build' ? '市场机会与执行适配都达到建设门槛。' : recommendation.key === 'avoid' ? '市场机会或竞争条件不足，不建议直接投入。' : '证据仍适合先做小规模验证。'}` : `${opportunity.sampleSize} videos across ${opportunity.channelCount} channels support this direction; ${recommendation.key === 'build' ? 'market and execution both clear the build bar.' : recommendation.key === 'avoid' ? 'market or competition conditions are not strong enough for direct investment.' : 'evidence still calls for a small validation test.'}`)
     : (zh ? '样本或频道覆盖不足，暂不把分数解释为确定性机会。' : 'Sample or channel coverage is incomplete, so the score is not treated as a certain opportunity.');
   return <section className={`longform-decision-summary ${recommendation.key}`}><div className="longform-decision-summary-head"><div><span className="longform-kicker">DECISION SUMMARY · {zh ? '当前首要方向' : 'CURRENT LEAD'}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2><p>{opportunity.topic} · {zh ? '以当前筛选结果中进入分最高者为代表' : 'represented by the highest entry score in the current filter'}</p></div><span className={`longform-recommendation ${recommendation.key}`}>{recommendation.label}</span></div><div className="longform-decision-summary-grid"><div className="longform-summary-verdict"><small>{zh ? '为什么现在判断' : 'WHY THIS DECISION'}</small><b>{why}</b><span>{zh ? `置信度 ${opportunity.confidence} · ${opportunity.sampleSize} 条样本 · ${opportunity.channelCount} 个频道` : `${opportunity.confidence} confidence · ${opportunity.sampleSize} samples · ${opportunity.channelCount} channels`}</span></div><div className="longform-summary-score"><small>{zh ? '市场机会' : 'MARKET OPPORTUNITY'}</small><strong>{score(opportunity.marketOpportunity)}</strong><span>{zh ? '需求、供给空位与多样性' : 'Demand, supply gap and diversity'}</span></div><div className="longform-summary-score execution"><small>{zh ? '执行适配' : 'EXECUTION FIT'}</small><strong>{score(opportunity.executionFit)}</strong><span>{zh ? '可复用制作结构' : 'Repeatable production fit'}</span></div></div><div className="longform-demand-supply"><div><small>{zh ? '需求趋势代理' : 'DEMAND TREND PROXY'}</small><b>{summaryMetric(growth, locale)}<em>{growth === null ? '' : '/100'}</em></b><span>{growth === null ? (zh ? '公开增长代理不可用' : 'Public growth proxy unavailable') : (zh ? '由近期增长与样本推断' : 'Derived from recent growth and samples')}</span></div><div><small>{zh ? '供给空位代理' : 'SUPPLY GAP PROXY'}</small><b>{summaryMetric(supplyProxy, locale)}<em>{supplyProxy === null ? '' : '/100'}</em></b><span>{supplyProxy === null ? (zh ? '竞争代理不可用' : 'Competition proxy unavailable') : (zh ? '分数越高表示相对更开放' : 'Higher means relatively more open')}</span></div><div><small>{zh ? '创作者多样性' : 'CREATOR DIVERSITY'}</small><b>{summaryMetric(diversity, locale)}<em>{diversity === null ? '' : '/100'}</em></b><span>{diversity === null ? (zh ? '频道覆盖不足' : 'Channel coverage unavailable') : (zh ? '跨频道确认程度' : 'Cross-channel confirmation')}</span></div></div></section>;
 }
