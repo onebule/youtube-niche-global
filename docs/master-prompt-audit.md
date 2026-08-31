@@ -70,4 +70,3 @@ Radar 与 Research 已使用不同的子页面：Radar 是事件流和证据抽�
 - `AllOpportunityRadar`：并排展示两个独立 Discovery Feed。
 - `SignalSparkline`：只绘制真实的历史/当前样本对照，不制造时间序列。
 - Research 的数据边界区块，提前说明目前不能回答的收益、生产经济性和个性化问题。
-
