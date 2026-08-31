@@ -2835,6 +2835,15 @@ export default function VideoCanvasStudio({
       ? { kind: 'fixed' as const, id: selectedNodeId, label: selectedCanvasNodeLabel }
       : null;
   const inspectorJob = generation ? normalizeVideoGenerationJob(generation) : null;
+  const inspectorVersions = shotVersions.map(({ version, generation: item }) => ({
+    id: version.id,
+    number: version.number,
+    generationId: version.generationId,
+    status: item ? normalizeVideoGenerationJob(item).status : null,
+    bestTake: version.bestTake,
+    current: generation?.id === version.generationId,
+    available: Boolean(item),
+  }));
 
   const selectCanvasNode = (id: string) => {
     if ((Object.keys(nodes) as NodeId[]).includes(id as NodeId)) {
@@ -3002,6 +3011,7 @@ export default function VideoCanvasStudio({
           generationStatus={inspectorJob?.status}
           generationError={generation?.errorMessage}
           versionLabel={currentVersion ? `V${currentVersion.number}${currentVersion.bestTake ? (zh ? ' · 最佳' : ' · Best') : ''}` : undefined}
+          versions={inspectorVersions}
           canGenerate={canGenerate}
           generationBlockedReason={generationBlockedReason}
           onClose={() => { setSelectedNodeId(null); setSelectedCustomNodeId(null); }}
@@ -3015,6 +3025,10 @@ export default function VideoCanvasStudio({
           onDelete={selectedCanvasImageNode ? () => removeCustomNode(selectedCanvasImageNode.id) : undefined}
           onRetry={generation?.status === 'failed' ? () => void generate() : undefined}
           onSelectBest={generation?.status === 'completed' && generation.id ? () => markBestTake(generation.id) : undefined}
+          onSelectVersion={generationId => {
+            const item = history.find(candidate => candidate.id === generationId);
+            if (item) void selectGenerationAsCurrent(item);
+          }}
         />
         <div className={'video-canvas-stage ' + (canvasSemantics.shot.collapsed ? 'is-shot-collapsed ' : '') + (customLayoutMode ? 'is-custom-layout-mode' : '')} style={{ width: STAGE_SIZE.width, height: STAGE_SIZE.height, transform: 'translate(' + viewport.x + 'px,' + viewport.y + 'px) scale(' + viewport.scale + ')', '--canvas-zoom': viewport.scale } as CSSProperties}>
           <div

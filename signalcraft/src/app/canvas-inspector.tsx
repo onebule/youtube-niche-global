@@ -19,6 +19,7 @@ export type CanvasInspectorProps = {
   generationStatus?: CanvasGenerationStatus | null;
   generationError?: string | null;
   versionLabel?: string;
+  versions?: Array<{ id: string; number: number; generationId: string; status: CanvasGenerationStatus | null; bestTake: boolean; current: boolean; available: boolean }>;
   canGenerate: boolean;
   generationBlockedReason?: string;
   onClose: () => void;
@@ -32,6 +33,7 @@ export type CanvasInspectorProps = {
   onDelete?: () => void;
   onRetry?: () => void;
   onSelectBest?: () => void;
+  onSelectVersion?: (generationId: string) => void;
 };
 
 function statusCopy(status: CanvasGenerationStatus | null | undefined, zh: boolean) {
@@ -53,6 +55,7 @@ export default function CanvasInspector({
   generationStatus,
   generationError,
   versionLabel,
+  versions = [],
   canGenerate,
   generationBlockedReason,
   onClose,
@@ -66,6 +69,7 @@ export default function CanvasInspector({
   onDelete,
   onRetry,
   onSelectBest,
+  onSelectVersion,
 }: CanvasInspectorProps) {
   if (!selection) return null;
   const isImage = selection.kind === 'image';
@@ -97,6 +101,7 @@ export default function CanvasInspector({
       {!isImage && <>
         <div className="canvas-inspector-shot-summary"><div><span>{zh ? '当前镜头' : 'CURRENT SHOT'}</span><b>{String(shotNumber).padStart(2, '0')}</b></div><div><span>{zh ? '状态' : 'STATUS'}</span><strong data-status={generationStatus || 'draft'}>{statusCopy(generationStatus, zh)}</strong></div></div>
         <dl className="canvas-inspector-specs"><div><dt>{zh ? '模型' : 'Model'}</dt><dd>{modelLabel}</dd></div><div><dt>{zh ? '规格' : 'Format'}</dt><dd>{shotDuration} · {aspectRatio} · {resolution}</dd></div>{versionLabel && <div><dt>{zh ? '版本' : 'Version'}</dt><dd>{versionLabel}</dd></div>}</dl>
+        {versions.length > 0 && <div className="canvas-inspector-versions"><div className="canvas-inspector-section-label"><span>{zh ? '当前镜头版本' : 'SHOT VERSIONS'}</span><small>{zh ? '保留全部结果，仅切换当前显示' : 'All results stay saved; switch the active view'}</small></div><div className="canvas-inspector-version-list">{versions.map(version => <button type="button" key={version.id} className={version.current ? 'is-current' : ''} disabled={!onSelectVersion || !version.available} title={!version.available ? (zh ? '载入历史后可切换此版本' : 'Load history before switching to this version') : undefined} onClick={() => version.available && onSelectVersion?.(version.generationId)}><b>V{version.number}</b><span>{statusCopy(version.status, zh)}</span>{version.bestTake && <strong>{zh ? '最佳' : 'BEST'}</strong>}</button>)}</div></div>}
         {generationError && <p className="canvas-inspector-error">{generationError}</p>}
         <div className="canvas-inspector-actions">
           <button type="button" onClick={onFocus}>{zh ? '定位节点' : 'Focus node'}</button>
