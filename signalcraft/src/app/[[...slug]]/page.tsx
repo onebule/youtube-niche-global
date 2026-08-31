@@ -22,6 +22,10 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     title: 'YouTube 长视频机会台',
     description: '在同一研究台查看长视频长期机会与长视频近期变化雷达；两套评分和证据链保持独立。',
   },
+  '/short-radar': {
+    title: 'YouTube 短视频机会雷达',
+    description: '用独立的 Shorts 机会雷达查看跨频道扩散、中小频道突破与供给变化；不改变现有短视频榜单。',
+  },
   '/doctor': {
     title: 'YouTube 频道诊断',
     description: '输入公开频道链接，检查频道结构、内容节奏与可验证的增长信号。',

@@ -447,8 +447,8 @@ export default function SignalCraftApp() {
       ? <Discovery mode="discover" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
-    : path === '/radar' || path === '/longform'
-      ? <LongformResearchDesk locale={locale} initialView={path === '/radar' ? 'radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} />
+    : path === '/radar' || path === '/longform' || path === '/short-radar'
+      ? <LongformResearchDesk locale={locale} initialView={path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} />
       : path === '/doctor' || path === '/app/doctor'
             ? <ChannelDoctor locale={locale} />
             : path === '/methodology'

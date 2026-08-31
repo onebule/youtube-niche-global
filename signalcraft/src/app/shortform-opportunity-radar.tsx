@@ -1,0 +1,75 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { clientErrorMessage } from '@/src/lib/client-error';
+import { fetchShortformOpportunityRadar, type ShortformRadarEvent, type ShortformRadarResponse } from '@/src/lib/shortform-opportunity-radar';
+import type { UiLocale } from '@/src/lib/ui-language';
+
+const compact = (value: number | null, locale: UiLocale) => value === null || !Number.isFinite(value)
+  ? '—'
+  : new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+const mediaUrl = (value: string | null | undefined) => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+const eventLabels: Record<ShortformRadarEvent['eventType'], { zh: string; en: string }> = {
+  SHORTS_BREAKOUT: { zh: '中小频道突破', en: 'Creator breakout' },
+  SHORTS_EMERGING: { zh: '短视频形式形成中', en: 'Emerging short-form' },
+  SHORTS_CROWDED: { zh: '供给拥挤预警', en: 'Crowding warning' },
+};
+const confidenceLabels: Record<ShortformRadarEvent['confidence'], { zh: string; en: string }> = {
+  LOW: { zh: '低置信度', en: 'Low confidence' }, MEDIUM: { zh: '中置信度', en: 'Medium confidence' }, HIGH: { zh: '高置信度', en: 'High confidence' },
+};
+const lifecycleLabels: Record<ShortformRadarEvent['lifecycle'], { zh: string; en: string }> = {
+  WATCH: { zh: '观察', en: 'Watch' }, EMERGING: { zh: '形成中', en: 'Emerging' }, CONFIRMED: { zh: '已验证', en: 'Confirmed' }, CROWDED: { zh: '拥挤', en: 'Crowded' },
+};
+
+function ShortformVideo({ video, locale }: { video: ShortformRadarEvent['representativeVideos'][number]; locale: UiLocale }) {
+  const thumbnail = mediaUrl(video.thumbnail);
+  const avatar = mediaUrl(video.channelAvatar);
+  const content = <>
+    <span className="shortform-radar-video-thumb">{thumbnail ? <img src={thumbnail} alt="" width={152} height={86} loading="lazy"/> : <i aria-hidden="true">▶</i>}{video.isBreakout ? <em>{locale === 'zh' ? '突破' : 'Breakout'}</em> : null}</span>
+    <span className="shortform-radar-video-copy"><strong>{video.title || (locale === 'zh' ? '未命名短视频' : 'Untitled short')}</strong><small><span className="shortform-radar-avatar">{avatar ? <img src={avatar} alt="" width={20} height={20}/> : 'CH'}</span>{video.channelTitle || (locale === 'zh' ? '公开频道' : 'Public channel')} · {compact(video.views, locale)} {locale === 'zh' ? '播放' : 'views'}</small></span>
+  </>;
+  return video.sourceUrl ? <a className="shortform-radar-video" href={video.sourceUrl} target="_blank" rel="noreferrer">{content}</a> : <div className="shortform-radar-video">{content}</div>;
+}
+
+function RadarCard({ event, locale }: { event: ShortformRadarEvent; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const label = eventLabels[event.eventType];
+  const confidence = confidenceLabels[event.confidence];
+  const lifecycle = lifecycleLabels[event.lifecycle];
+  return <article className="shortform-radar-card">
+    <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts only</p></div><span className={`shortform-radar-lifecycle ${event.lifecycle.toLowerCase()}`}>{lifecycle[zh ? 'zh' : 'en']}</span></header>
+    <div className="shortform-radar-score"><div><small>{zh ? '机会分' : 'OPPORTUNITY'}</small><strong>{event.opportunityScore}</strong><span>{event.whyNowLevel.replace('_', ' ')}</span></div><div><small>{zh ? '置信度' : 'CONFIDENCE'}</small><b className={`shortform-radar-confidence ${event.confidence.toLowerCase()}`}>{confidence[zh ? 'zh' : 'en']}</b><span>{event.dataQuality}</span></div><div><small>{zh ? '对照窗口' : 'BASELINE'}</small><b>{event.baseline.windowDays}D</b><span>{event.sampleVideoCount} {zh ? '条短视频' : 'shorts'}</span></div></div>
+    <div className="shortform-radar-metrics"><div><small>{zh ? '独立频道' : 'Channels'}</small><b>{event.independentChannelCount}</b></div><div><small>{zh ? '突破候选' : 'Breakouts'}</small><b>{event.breakoutCount}</b></div><div><small>{zh ? '中位播放' : 'Median views'}</small><b>{compact(event.medianViews, locale)}</b></div><div><small>{zh ? '播放/订阅' : 'Median VPD'}</small><b>{event.medianVpd === null ? '—' : `${event.medianVpd.toFixed(1)}×`}</b></div><div><small>{zh ? '需求代理' : 'Demand proxy'}</small><b>{event.metrics.demandProxyGrowth === null ? '—' : `${event.metrics.demandProxyGrowth >= 0 ? '+' : ''}${event.metrics.demandProxyGrowth}%`}</b></div><div><small>{zh ? '新鲜度' : 'Freshness'}</small><b>{event.metrics.freshness}%</b></div></div>
+    <section className="shortform-radar-changed"><small>{zh ? '为什么现在看' : 'WHY NOW'}</small><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="shortform-radar-note">{event.confidenceNote}</p></section>
+    <div className="shortform-radar-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.metrics.breakoutDensity}% {zh ? '突破密度' : 'breakout density'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条普通证据' : 'standard examples'}</span></div>
+    <details className="shortform-radar-details"><summary>{zh ? '查看证据与代表视频' : 'View evidence and representative videos'}</summary><div className="shortform-radar-facts"><div><h3>{zh ? '可验证事实' : 'FACTS'}</h3>{event.facts.map(fact => <p key={fact}>{fact}</p>)}</div><div><h3>{zh ? '推断' : 'INFERENCE'}</h3>{event.inferences.length ? event.inferences.map(item => <p key={item}>{item}</p>) : <p>{zh ? '暂无额外推断。' : 'No additional inference.'}</p>}</div></div><div className="shortform-radar-video-list">{event.representativeVideos.map(video => <ShortformVideo key={video.videoId} video={video} locale={locale}/>)}</div><p className="shortform-radar-provenance">{event.evidence.provenance}</p></details>
+  </article>;
+}
+
+export default function ShortformOpportunityRadar({ locale, embedded = false }: { locale: UiLocale; embedded?: boolean }) {
+  const zh = locale === 'zh';
+  const [window, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
+  const [market, setMarket] = useState('all');
+  const [data, setData] = useState<ShortformRadarResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const load = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController(); requestRef.current = controller;
+    setLoading(true); setError(null);
+    try { setData(await fetchShortformOpportunityRadar({ market, window, limit: 500 }, { signal: controller.signal })); }
+    catch (reason) { if (!controller.signal.aborted) setError(clientErrorMessage(reason, zh ? '短视频机会雷达数据暂时不可用。' : 'Short-form radar is temporarily unavailable.')); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
+  }, [market, window, zh]);
+  useEffect(() => { const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [load]);
+  useEffect(() => () => requestRef.current?.abort(), []);
+  const Container = embedded ? 'section' : 'main';
+  return <Container className="shortform-radar-page">
+    <section className="shortform-radar-hero"><div><span className="shortform-radar-kicker">SHORT-FORM OPPORTUNITY RADAR</span><h1>{zh ? '发现短视频正在形成的机会。' : 'Find short-form opportunities while they are forming.'}</h1><p>{zh ? '独立读取 Shorts 数据，按跨频道扩散、中小频道突破和供给变化排序。这里是新增研究引擎，不会改变现有 Shorts 榜单、筛选、历史数据或评分。' : 'A separate Shorts-only engine ranked by cross-channel spread, creator breakouts and supply change. Existing Shorts rankings, filters, history and scoring remain untouched.'}</p></div><div className="shortform-radar-stamp"><strong>SHORTS</strong><span>{zh ? '独立数据范围' : 'isolated data scope'}</span><i/></div></section>
+    <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}><label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部市场' : 'All markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="IN">IN</option><option value="BR">BR</option><option value="JP">JP</option></select></label><label><span>{zh ? '时间窗口' : 'Window'}</span><select value={window} onChange={event => setWindow(event.target.value as '7d' | '14d' | '30d')}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label><div className="shortform-radar-scope"><b>{data?.dataScope.currentRows ?? '—'}</b><span>{zh ? '当前短视频样本' : 'current Shorts sample'}</span></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button></section>
+    <div className="shortform-radar-boundary"><span>{zh ? '边界明确' : 'BOUNDARY'}</span><p>{zh ? '短视频机会雷达只回答“Shorts 最近发生了什么”，与长视频机会台使用不同事件和指标；现有 Shorts 产品行为保持不变。' : 'This radar answers what changed recently in Shorts. Its events and metrics are separate from the long-form desk, while the existing Shorts product stays unchanged.'}</p></div>
+    {error ? <div className="shortform-radar-state"><b>{error}</b><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="shortform-radar-state"><b>{zh ? '正在读取短视频跨频道变化…' : 'Reading cross-channel Shorts changes…'}</b></div> : data?.events.length ? <div className="shortform-radar-grid">{data.events.map(event => <RadarCard key={event.id} event={event} locale={locale}/>)}</div> : <div className="shortform-radar-state"><b>{zh ? '当前窗口没有足够强的短视频机会事件' : 'No strong short-form events for this window'}</b><p>{zh ? '请扩大市场或时间窗口，等待更多 Shorts 快照。' : 'Expand the market or window and wait for more Shorts snapshots.'}</p></div>}
+    {data?.gaps?.length ? <section className="shortform-radar-gaps"><h2>{zh ? '数据边界' : 'Data boundaries'}</h2>{data.gaps.map(gap => <p key={gap}>→ {gap}</p>)}</section> : null}
+  </Container>;
+}
