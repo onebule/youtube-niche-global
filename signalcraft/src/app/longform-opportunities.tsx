@@ -184,10 +184,11 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const opportunities = (data?.opportunities || []).filter(item => lane === 'ALL' || item.lanes.includes(lane));
   const leadOpportunity = opportunities[0] || null;
   const firstOpportunityKey = opportunities[0]?.key || null;
+  const opportunityKeysSignature = opportunities.map(item => item.key).join('|');
   useEffect(() => {
     if (!firstOpportunityKey) { setSelectedOpportunityKey(null); return; }
     if (!selectedOpportunityKey || !opportunities.some(item => item.key === selectedOpportunityKey)) setSelectedOpportunityKey(firstOpportunityKey);
-  }, [data, firstOpportunityKey, selectedOpportunityKey, lane]);
+  }, [firstOpportunityKey, opportunityKeysSignature, selectedOpportunityKey, lane]);
   const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || leadOpportunity;
   const heroWindow = windowLabels[window] || windowLabels['28d'];
   const Container = embedded ? 'section' : 'main';
