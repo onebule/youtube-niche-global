@@ -24,6 +24,8 @@ export type OpportunityRadarEvent = {
   outlierDensity: number | null;
   vpdAcceleration: number | null;
   creatorConcentration: number | null;
+  creatorConcentrationTop3?: number | null;
+  creatorConcentrationTop5?: number | null;
   firstDetectedAt: string;
   lastUpdatedAt: string;
   lifecycleHistory?: Array<{
@@ -41,6 +43,8 @@ export type OpportunityRadarEvent = {
   baseline: { windowDays: number; previousSampleCount: number; label: string; multiWindow: boolean };
   metrics: Record<string, number | null>;
   evidence: { successfulVideoIds: string[]; independentWinnerVideoIds: string[]; weakVideoIds: string[]; provenance: string };
+  migration?: { fromTopic: string; toTopic: string; format: string; stage: string; sourceSampleCount: number; targetSampleCount: number };
+  debug?: { rulesFired: string[]; scoreContributors: Record<string, number | null>; scoreDraggers: string[]; baseline: Record<string, unknown> };
   representativeVideos: Array<{
     videoId: string;
     title: string;
