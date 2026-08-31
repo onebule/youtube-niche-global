@@ -15,12 +15,12 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     description: '查看近期公开视频和频道的播放表现、增长信号与内容形态。',
   },
   '/radar': {
-    title: 'YouTube 机会雷达',
-    description: '从公开数据中筛选低粉高播、快速增长和值得验证的 YouTube 内容机会。',
+    title: 'YouTube 长视频机会台',
+    description: '在同一研究台查看长视频长期机会与近期变化雷达；两套评分和证据链保持独立。',
   },
   '/longform': {
-    title: 'YouTube 长视频机会发现',
-    description: '基于公开采集样本，分开评估长视频市场机会、执行适配和进入信号。',
+    title: 'YouTube 长视频机会台',
+    description: '在同一研究台查看长视频长期机会与近期变化雷达；两套评分和证据链保持独立。',
   },
   '/doctor': {
     title: 'YouTube 频道诊断',
@@ -41,11 +41,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
   const path = `/${segments.join('/')}` || '/';
   const publicPage = publicMetadata[path] ?? publicMetadata['/'];
   const isPrivate = path.startsWith('/app') || path === '/owner';
+  const canonicalPath = path === '/radar' ? '/longform' : path;
 
   return {
     title: publicPage.title,
     description: publicPage.description,
-    alternates: { canonical: path },
+    alternates: { canonical: canonicalPath },
     robots: isPrivate ? { index: false, follow: false } : { index: true, follow: true },
   };
 }
