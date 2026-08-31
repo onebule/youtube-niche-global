@@ -30,6 +30,17 @@ export type RpmBenchmarkResult = {
   confidence: 'UNKNOWN' | 'LOW' | 'MEDIUM';
   status: 'BENCHMARK' | 'UNKNOWN';
   spreadPct: number | null;
+  overlapLowUsd: number | null;
+  overlapHighUsd: number | null;
+};
+
+export type RpmPublicContext = {
+  videoCount: number;
+  durationKnownCount: number;
+  midrollEligibleCount: number;
+  midrollEligibleShare: number | null;
+  marketKnownCount: number;
+  sourceMarkets: string[];
 };
 
 export const RPM_BENCHMARK_SOURCES: RpmBenchmarkSource[] = [
@@ -65,8 +76,8 @@ const BENCHMARK_SPECS: BenchmarkSpec[] = [
   { niche: 'Finance / investing', aliases: ['finance', '金融', '投资', '理财', '股票', 'credit card', '信用卡', 'insurance', '保险', 'tax', '税务'], vidiq: [4, 12], rpmMeter: [8, 30] },
   { niche: 'Business / marketing', aliases: ['business', '商业', 'marketing', '营销', '创业', '生产力', 'productivity', 'b2b'], vidiq: [4, 9], rpmMeter: [6, 26] },
   { niche: 'AI / software', aliases: ['ai', '人工智能', '软件', 'software', 'saas', 'automation', '自动化', 'prompt', '提示词'], vidiq: [4, 10], rpmMeter: [5, 25] },
-  { niche: 'Technology', aliases: ['technology', 'tech', '科技', '数码', '开发者', 'developer', '编程', 'gadget'], vidiq: [4, 10], rpmMeter: [4, 18] },
-  { niche: 'Education / how-to', aliases: ['education', '教育', '教程', 'how-to', 'how to', '技能', 'career', '职业', '语言学习'], vidiq: [2, 6], rpmMeter: [3, 12] },
+  { niche: 'Technology', aliases: ['technology', 'tech', '科技', '技术', '科学', '数码', '开发者', 'developer', '编程', 'gadget'], vidiq: [4, 10], rpmMeter: [4, 18] },
+  { niche: 'Education / how-to', aliases: ['education', '教育', '教程', 'how-to', 'how to', '生活技巧', '技能', 'career', '职业', '语言学习'], vidiq: [2, 6], rpmMeter: [3, 12] },
   { niche: 'Health / fitness', aliases: ['health', '健康', 'fitness', '健身', 'wellness', '营养'], vidiq: [2, 5], rpmMeter: [4, 16] },
   { niche: 'Food / cooking', aliases: ['food', '食物', '烹饪', '料理', 'cooking', 'recipe', '美食'], vidiq: [2, 5], rpmMeter: null },
   { niche: 'Travel', aliases: ['travel', '旅行', '旅游', '出行'], vidiq: [2, 4], rpmMeter: null },
@@ -110,14 +121,17 @@ export function findRpmBenchmarkRows(topic: string | null | undefined): RpmBench
 }
 
 export function combineRpmBenchmarks(rows: RpmBenchmarkRow[]): RpmBenchmarkResult {
-  const validRows = rows.filter(row => Number.isFinite(row.lowUsd) && Number.isFinite(row.highUsd) && row.lowUsd > 0 && row.highUsd >= row.lowUsd);
-  if (!validRows.length) return { matchedNiche: null, rows: [], lowUsd: null, highUsd: null, midpointUsd: null, sourceCount: 0, confidence: 'UNKNOWN', status: 'UNKNOWN', spreadPct: null };
+  const validRows = rows.filter(row => Number.isFinite(row.lowUsd) && Number.isFinite(row.highUsd) && Number.isFinite(row.midpointUsd) && row.lowUsd > 0 && row.highUsd >= row.lowUsd && row.midpointUsd > 0);
+  if (!validRows.length) return { matchedNiche: null, rows: [], lowUsd: null, highUsd: null, midpointUsd: null, sourceCount: 0, confidence: 'UNKNOWN', status: 'UNKNOWN', spreadPct: null, overlapLowUsd: null, overlapHighUsd: null };
   const midpoint = median(validRows.map(row => row.midpointUsd));
   const lowUsd = Math.min(...validRows.map(row => row.lowUsd));
   const highUsd = Math.max(...validRows.map(row => row.highUsd));
   const rowMidpoints = validRows.map(row => row.midpointUsd);
   const spreadPct = midpoint > 0 ? (Math.max(...rowMidpoints) - Math.min(...rowMidpoints)) / midpoint : null;
   const sourceCount = new Set(validRows.map(row => row.sourceId)).size;
+  const overlapLow = Math.max(...validRows.map(row => row.lowUsd));
+  const overlapHigh = Math.min(...validRows.map(row => row.highUsd));
+  const hasConsensusOverlap = sourceCount >= 2 && overlapLow <= overlapHigh;
   return {
     matchedNiche: validRows[0].niche,
     rows: validRows,
@@ -125,9 +139,11 @@ export function combineRpmBenchmarks(rows: RpmBenchmarkRow[]): RpmBenchmarkResul
     highUsd,
     midpointUsd: Number(midpoint.toFixed(2)),
     sourceCount,
-    confidence: sourceCount >= 2 ? 'MEDIUM' : 'LOW',
+    confidence: sourceCount >= 2 && spreadPct !== null && spreadPct <= 0.5 ? 'MEDIUM' : 'LOW',
     status: 'BENCHMARK',
     spreadPct,
+    overlapLowUsd: hasConsensusOverlap ? overlapLow : null,
+    overlapHighUsd: hasConsensusOverlap ? overlapHigh : null,
   };
 }
 
@@ -136,4 +152,30 @@ export function getRpmBenchmarkForTopic(topic: string | null | undefined): RpmBe
   const result = combineRpmBenchmarks(rows);
   if (!result.rows.length) return result;
   return { ...result, matchedNiche: result.matchedNiche || rows[0].niche };
+}
+
+export function buildRpmPublicContext(videos: Array<{ durationSeconds: number | null; sourceMarket: string | null }>): RpmPublicContext {
+  let durationKnownCount = 0;
+  let midrollEligibleCount = 0;
+  let marketKnownCount = 0;
+  const sourceMarkets = new Set<string>();
+  for (const video of videos) {
+    if (typeof video.durationSeconds === 'number' && Number.isFinite(video.durationSeconds) && video.durationSeconds >= 0) {
+      durationKnownCount += 1;
+      if (video.durationSeconds >= 480) midrollEligibleCount += 1;
+    }
+    const sourceMarket = String(video.sourceMarket || '').trim().toUpperCase();
+    if (sourceMarket) {
+      marketKnownCount += 1;
+      sourceMarkets.add(sourceMarket);
+    }
+  }
+  return {
+    videoCount: videos.length,
+    durationKnownCount,
+    midrollEligibleCount,
+    midrollEligibleShare: durationKnownCount ? midrollEligibleCount / durationKnownCount : null,
+    marketKnownCount,
+    sourceMarkets: Array.from(sourceMarkets).sort(),
+  };
 }

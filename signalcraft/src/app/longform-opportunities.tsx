@@ -5,7 +5,7 @@ import { fetchLongformOpportunities, type LongformOpportunity, type LongformResp
 import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
 import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
 import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
-import { getRpmBenchmarkForTopic, type RpmBenchmarkResult } from '@/src/lib/rpm-benchmarks';
+import { buildRpmPublicContext, getRpmBenchmarkForTopic, type RpmBenchmarkResult, type RpmPublicContext } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -159,7 +159,11 @@ function rpmLabel(value: number | null) {
   return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
 }
 
-function RpmBenchmarkPanel({ benchmark, locale, mode, onModeChange }: { benchmark: RpmBenchmarkResult; locale: UiLocale; mode: 'market' | 'manual'; onModeChange: (mode: 'market' | 'manual') => void }) {
+function percentLabel(value: number | null) {
+  return value === null || !Number.isFinite(value) ? 'UNKNOWN' : `${Math.round(value * 100)}%`;
+}
+
+function RpmBenchmarkPanel({ benchmark, context, locale, mode, onModeChange }: { benchmark: RpmBenchmarkResult; context: RpmPublicContext; locale: UiLocale; mode: 'market' | 'manual'; onModeChange: (mode: 'market' | 'manual') => void }) {
   const zh = locale === 'zh';
   const hasBenchmark = benchmark.status === 'BENCHMARK' && benchmark.lowUsd !== null && benchmark.highUsd !== null;
   return <div className="longform-rpm-benchmark" aria-label={zh ? '市场工具 RPM 基准' : 'Market-tool RPM benchmark'}>
@@ -168,8 +172,14 @@ function RpmBenchmarkPanel({ benchmark, locale, mode, onModeChange }: { benchmar
       <div className="longform-rpm-benchmark-summary"><strong>{rpmLabel(benchmark.lowUsd)} – {rpmLabel(benchmark.highUsd)}</strong><span>{zh ? `合并中位 ${rpmLabel(benchmark.midpointUsd)} / 1,000 播放` : `Combined midpoint ${rpmLabel(benchmark.midpointUsd)} / 1,000 views`}</span><small>{zh ? `${benchmark.sourceCount} 个公开工具来源；区间取来源外包络，中心值取中位数。快照 ${benchmark.rows[0]?.capturedAt || '未知'}` : `${benchmark.sourceCount} public tool sources; envelope of ranges with median midpoint. Snapshot ${benchmark.rows[0]?.capturedAt || 'unknown'}`}</small></div>
       <div className="longform-rpm-source-grid">{benchmark.rows.map(row => <article key={row.sourceId}><div><b>{row.sourceName}</b><span>{rpmLabel(row.lowUsd)} – {rpmLabel(row.highUsd)}</span></div><small>{row.note}</small><a href={row.sourceUrl} target="_blank" rel="noreferrer">{zh ? '查看来源 ↗' : 'View source ↗'}</a></article>)}</div>
       <div className="longform-rpm-mode" role="group" aria-label={zh ? 'RPM 规划来源' : 'RPM planning source'}><button type="button" className={mode === 'market' ? 'active' : ''} aria-pressed={mode === 'market'} onClick={() => onModeChange('market')}>{zh ? '使用市场基准' : 'Use market benchmark'}</button><button type="button" className={mode === 'manual' ? 'active' : ''} aria-pressed={mode === 'manual'} onClick={() => onModeChange('manual')}>{zh ? '改用自定义 RPM' : 'Use custom RPM'}</button></div>
-    </> : <div className="longform-rpm-empty"><b>{zh ? '该方向暂无可匹配的公开区间' : 'No public range matches this direction yet'}</b><small>{zh ? '请切换到“自定义 RPM”，或先从 Studio / 市场工具取得区间后再填写。' : 'Switch to custom RPM, or collect a range from Studio / market tools before entering it.'}</small></div>}
-    <div className="longform-rpm-references">{zh ? '校准参考：' : 'Calibration references: '}<a href="https://support.google.com/youtube/answer/9314357?hl=en-6" target="_blank" rel="noreferrer">YouTube RPM 定义</a><span>·</span><a href="https://www.tubebuddy.com/youtube-monetization-calculator/" target="_blank" rel="noreferrer">TubeBuddy 分类计算器</a><span>·</span><a href="https://www.tubeanalytics.net/blog/youtube-rpm-benchmarks-by-niche" target="_blank" rel="noreferrer">TubeAnalytics Studio 校准说明</a></div>
+    </> : <div className="longform-rpm-empty"><b>{zh ? '该方向暂无可匹配的公开区间' : 'No public range matches this direction yet'}</b><small>{zh ? '可在下方直接填写 Studio / 自定义 RPM；系统不会拿其他赛道强行补齐。' : 'Enter a Studio / custom RPM below; the system will not force a range from another niche.'}</small></div>}
+    <div className="longform-rpm-context-grid">
+      <article><span>{zh ? '赛道匹配' : 'Niche match'}</span><b>{benchmark.matchedNiche || 'UNKNOWN'}</b><small>{zh ? '只按公开基准中可识别的赛道映射' : 'Mapped only to a recognizable public benchmark niche'}</small></article>
+      <article><span>{zh ? '来源共识' : 'Source consensus'}</span><b>{benchmark.overlapLowUsd !== null ? `${rpmLabel(benchmark.overlapLowUsd)} – ${rpmLabel(benchmark.overlapHighUsd)}` : 'UNKNOWN'}</b><small>{benchmark.spreadPct === null ? (zh ? '不足两个数值来源' : 'Fewer than two numeric sources') : (zh ? `来源中点分歧 ${percentLabel(benchmark.spreadPct)}` : `Source-midpoint spread ${percentLabel(benchmark.spreadPct)}`)}</small></article>
+      <article><span>{zh ? '8 分钟以上覆盖' : '8+ minute coverage'}</span><b>{context.durationKnownCount ? `${context.midrollEligibleCount}/${context.durationKnownCount}` : 'UNKNOWN'}</b><small>{context.midrollEligibleShare === null ? (zh ? '没有可用时长' : 'No usable duration') : (zh ? `${percentLabel(context.midrollEligibleShare)} 样本具备中贴片资格代理；不代表广告填充` : `${percentLabel(context.midrollEligibleShare)} of samples meet a mid-roll eligibility proxy; not ad fill`)}</small></article>
+      <article><span>{zh ? '采集市场' : 'Collection markets'}</span><b>{context.sourceMarkets.length ? context.sourceMarkets.join(' · ') : 'UNKNOWN'}</b><small>{context.videoCount ? (zh ? `${context.marketKnownCount}/${context.videoCount} 条带市场标签；不是观众国家，不调整 RPM` : `${context.marketKnownCount}/${context.videoCount} carry a market label; not viewer geography or an RPM adjustment`) : (zh ? '没有代表视频' : 'No representative videos')}</small></article>
+    </div>
+    <div className="longform-rpm-references">{zh ? '校准参考：' : 'Calibration references: '}<a href="https://support.google.com/youtube/answer/9314357?hl=en-6" target="_blank" rel="noreferrer">{zh ? 'YouTube RPM 定义' : 'YouTube RPM definition'}</a><span>·</span><a href="https://www.tubebuddy.com/youtube-monetization-calculator/" target="_blank" rel="noreferrer">{zh ? 'TubeBuddy 分类计算器' : 'TubeBuddy category calculator'}</a><span>·</span><a href="https://www.tubeanalytics.net/blog/youtube-rpm-benchmarks-by-niche" target="_blank" rel="noreferrer">{zh ? 'TubeAnalytics Studio 校准说明' : 'TubeAnalytics Studio calibration'}</a></div>
   </div>;
 }
 
@@ -181,6 +191,7 @@ function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformO
   const [rpmMode, setRpmMode] = useState<'market' | 'manual'>('market');
   const [videosPerMonth, setVideosPerMonth] = useState(4);
   const benchmark = useMemo(() => getRpmBenchmarkForTopic(opportunity.topic), [opportunity.topic]);
+  const publicContext = useMemo(() => buildRpmPublicContext(opportunity.representativeVideos), [opportunity.representativeVideos]);
   const useMarketBenchmark = rpmMode === 'market' && benchmark.status === 'BENCHMARK';
   const effectiveRpmLow = useMarketBenchmark ? benchmark.lowUsd : rpmLowInput ? Number(rpmLowInput) : null;
   const effectiveRpmHigh = useMarketBenchmark ? benchmark.highUsd : rpmHighInput ? Number(rpmHighInput) : null;
@@ -188,9 +199,10 @@ function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformO
   const monthlyViews = scenario.monthlyViewsLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.monthlyViewsLow, locale)} – ${plannerNumber(scenario.monthlyViewsHigh, locale)}`;
   const viewsPerVideo = scenario.viewsPerVideoLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.viewsPerVideoLow, locale)} – ${plannerNumber(scenario.viewsPerVideoHigh, locale)}`;
   const baselineVideos = scenario.baselineVideosLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.baselineVideosLow, locale)} – ${plannerNumber(scenario.baselineVideosHigh, locale)}`;
+  const baselineRevenue = scenario.baselineRevenueLowUsd === null ? 'UNKNOWN' : `${rpmLabel(scenario.baselineRevenueLowUsd)} – ${rpmLabel(scenario.baselineRevenueHighUsd)}`;
   return <section className="longform-planning-panel" aria-label={zh ? '长视频目标收益规划与 AI 生产边界' : 'Long-form income planner and AI production boundaries'}>
     <div className="longform-planning-head"><div><span className="longform-kicker">P2 · SCENARIO PLANNER</span><b>{zh ? '目标收益规划（仅作场景推演）' : 'Target income planner (scenario only)'}</b><small>{zh ? 'RPM 优先采用公开市场工具的区间基准，也可切换为你输入的 Studio / 自定义区间。' : 'RPM uses a public market-tool range by default, or your Studio / custom range after switching.'}</small></div><span>{zh ? '不写入账号' : 'Not saved to account'}</span></div>
-    <RpmBenchmarkPanel benchmark={benchmark} locale={locale} mode={rpmMode} onModeChange={setRpmMode}/>
+    <RpmBenchmarkPanel benchmark={benchmark} context={publicContext} locale={locale} mode={rpmMode} onModeChange={setRpmMode}/>
     <div className="longform-planning-inputs">
       <label><span>{zh ? '月目标' : 'Monthly target'}</span><select value={targetUsd} onChange={event => setTargetUsd(Number(event.target.value))}>{[500, 1000, 3000, 5000, 10000].map(value => <option key={value} value={value}>${value.toLocaleString()} / mo</option>)}</select></label>
       <label><span>{zh ? 'RPM 下限假设' : 'RPM low assumption'}</span><input className={useMarketBenchmark ? 'is-derived' : ''} type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 4' : 'e.g. 4'} value={rpmLowInput} onChange={event => setRpmLowInput(event.target.value)} disabled={useMarketBenchmark}/><small>{useMarketBenchmark ? (zh ? `市场基准 ${rpmLabel(benchmark.lowUsd)}` : `Market ${rpmLabel(benchmark.lowUsd)}`) : (zh ? 'Studio 或自定义输入' : 'Studio or custom input')}</small></label>
@@ -201,6 +213,7 @@ function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformO
       <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '需要月播放' : 'Required monthly views'}</span><b>{monthlyViews}</b><small>{scenario.isScenario ? `${rpmLabel(scenario.rpmLowUsd)} – ${rpmLabel(scenario.rpmHighUsd)} RPM · ${useMarketBenchmark ? (zh ? '市场基准' : 'market benchmark') : (zh ? '用户假设' : 'user assumption')}` : (zh ? '填写 RPM 区间后计算' : 'Enter an RPM range to calculate')}</small></article>
       <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '每条视频目标播放' : 'Views per video'}</span><b>{viewsPerVideo}</b><small>{zh ? '按月计划产量均摊，不代表成功率' : 'Distributed across planned output; not a success rate'}</small></article>
       <article className={scenario.baselineVideosLow === null ? 'unknown' : ''}><span>{zh ? '按样本中位播放需多少条' : 'Videos at sample median'}</span><b>{baselineVideos}</b><small>{opportunity.medianViews === null ? (zh ? '当前方向没有中位播放数据' : 'No median-view data for this direction') : (zh ? `以样本中位 ${formatNumber(opportunity.medianViews, locale)} 播放作参考` : `Using sample median of ${formatNumber(opportunity.medianViews, locale)} views`)}</small></article>
+      <article className={scenario.baselineRevenueLowUsd === null ? 'unknown' : ''}><span>{zh ? '样本中位情景月收入' : 'Revenue at sample median'}</span><b>{baselineRevenue}</b><small>{scenario.baselineMonthlyViews === null ? (zh ? '缺少样本中位播放或计划产量' : 'Missing median views or planned output') : (zh ? `假设每条都达到样本中位，共 ${formatNumber(scenario.baselineMonthlyViews, locale)} 月播放` : `Assumes every video reaches the sample median: ${formatNumber(scenario.baselineMonthlyViews, locale)} monthly views`)}</small></article>
     </div>
     <div className="longform-production-boundary"><div className="longform-planning-head"><div><span className="longform-kicker">AI PRODUCTION</span><b>{zh ? '生产可行性边界' : 'Production feasibility boundary'}</b><small>{zh ? '当前接口没有重试率、延迟、质量或真实制作成本，以下结论保持未知。' : 'The current API has no retry, latency, quality or real production-cost evidence, so these stay unknown.'}</small></div></div><div className="longform-production-grid">{[zh ? 'AI 适配性' : 'AI suitability', zh ? 'AI 可规模化' : 'AI scalability', zh ? '制作成本' : 'Production cost', zh ? '返工 / 重试风险' : 'Rework / retry risk'].map(label => <article key={label}><span>{label}</span><b>UNKNOWN</b></article>)}</div><p>{zh ? `已知制作形式：${opportunity.productionType}；公开执行适配分：${score(opportunity.execution.score)}。这不等同于 AI 成本或规模化结论。` : `Observed production type: ${opportunity.productionType}; public execution-fit score: ${score(opportunity.execution.score)}. This is not an AI cost or scalability conclusion.`}</p></div>
   </section>;

@@ -18,6 +18,9 @@ test('income planner returns a range and scales it by monthly output', () => {
   assert.equal(result.viewsPerVideoHigh, 62500);
   assert.equal(result.baselineVideosLow, 12.5);
   assert.equal(result.baselineVideosHigh, 25);
+  assert.equal(result.baselineMonthlyViews, 40000);
+  assert.equal(result.baselineRevenueLowUsd, 160);
+  assert.equal(result.baselineRevenueHighUsd, 320);
 });
 
 test('reversed RPM inputs are normalized and invalid capacity remains unknown', () => {
@@ -26,4 +29,6 @@ test('reversed RPM inputs are normalized and invalid capacity remains unknown', 
   assert.equal(result.rpmHighUsd, 10);
   assert.equal(result.viewsPerVideoLow, null);
   assert.equal(result.baselineVideosHigh, null);
+  assert.equal(result.baselineMonthlyViews, null);
+  assert.equal(result.baselineRevenueLowUsd, null);
 });
