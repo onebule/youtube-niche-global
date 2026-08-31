@@ -2844,6 +2844,9 @@ export default function VideoCanvasStudio({
     current: generation?.id === version.generationId,
     available: Boolean(item),
   }));
+  const inspectorReferenceSummary = referenceMode === 'omni'
+    ? (zh ? `全能参考 ${referenceFrames.length}/9 张` : `Omni references ${referenceFrames.length}/9`)
+    : [startFrame ? 'START' : '', endFrame ? 'END' : ''].filter(Boolean).join(' · ') || (zh ? '未绑定 START / END' : 'No START / END bound');
 
   const selectCanvasNode = (id: string) => {
     if ((Object.keys(nodes) as NodeId[]).includes(id as NodeId)) {
@@ -3004,6 +3007,9 @@ export default function VideoCanvasStudio({
           zh={zh}
           selection={inspectorSelection}
           shotNumber={shot}
+          shotTitle={canvasSemantics.shot.title}
+          shotPrompt={prompt}
+          referenceSummary={inspectorReferenceSummary}
           shotDuration={duration}
           aspectRatio={aspectRatio}
           resolution={resolution}
@@ -3016,6 +3022,7 @@ export default function VideoCanvasStudio({
           generationBlockedReason={generationBlockedReason}
           onClose={() => { setSelectedNodeId(null); setSelectedCustomNodeId(null); }}
           onFocus={focusSelectedCanvasNode}
+          onEditPrompt={focusMotionPrompt}
           onGenerateImage={openImageGeneration}
           onGenerateVideo={prepareVideoFromSelection}
           onUseAsReference={selectedCanvasImageNode ? () => void addSelectedImageToReferences() : undefined}

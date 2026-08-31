@@ -12,6 +12,9 @@ export type CanvasInspectorProps = {
   zh: boolean;
   selection: InspectorSelection | null;
   shotNumber: number;
+  shotTitle?: string;
+  shotPrompt?: string;
+  referenceSummary?: string;
   shotDuration: string;
   aspectRatio: string;
   resolution: string;
@@ -24,6 +27,7 @@ export type CanvasInspectorProps = {
   generationBlockedReason?: string;
   onClose: () => void;
   onFocus: () => void;
+  onEditPrompt?: () => void;
   onGenerateImage: () => void;
   onGenerateVideo: () => void;
   onUseAsReference?: () => void;
@@ -48,6 +52,9 @@ export default function CanvasInspector({
   zh,
   selection,
   shotNumber,
+  shotTitle,
+  shotPrompt,
+  referenceSummary,
   shotDuration,
   aspectRatio,
   resolution,
@@ -60,6 +67,7 @@ export default function CanvasInspector({
   generationBlockedReason,
   onClose,
   onFocus,
+  onEditPrompt,
   onGenerateImage,
   onGenerateVideo,
   onUseAsReference,
@@ -100,6 +108,7 @@ export default function CanvasInspector({
 
       {!isImage && <>
         <div className="canvas-inspector-shot-summary"><div><span>{zh ? '当前镜头' : 'CURRENT SHOT'}</span><b>{String(shotNumber).padStart(2, '0')}</b></div><div><span>{zh ? '状态' : 'STATUS'}</span><strong data-status={generationStatus || 'draft'}>{statusCopy(generationStatus, zh)}</strong></div></div>
+        {(shotTitle || shotPrompt || referenceSummary) && <div className="canvas-inspector-shot-context"><div className="canvas-inspector-context-head"><div><span>{zh ? 'SHOT 上下文' : 'SHOT CONTEXT'}</span><b>{shotTitle || (zh ? `镜头 ${String(shotNumber).padStart(2, '0')}` : `Shot ${String(shotNumber).padStart(2, '0')}`)}</b></div>{onEditPrompt && <button type="button" onClick={onEditPrompt}>{zh ? '编辑 Prompt' : 'Edit prompt'}</button>}</div>{shotPrompt ? <p>{shotPrompt}</p> : <p className="is-empty">{zh ? '还没有 Motion Prompt' : 'No Motion Prompt yet'}</p>}{referenceSummary && <small>{referenceSummary}</small>}</div>}
         <dl className="canvas-inspector-specs"><div><dt>{zh ? '模型' : 'Model'}</dt><dd>{modelLabel}</dd></div><div><dt>{zh ? '规格' : 'Format'}</dt><dd>{shotDuration} · {aspectRatio} · {resolution}</dd></div>{versionLabel && <div><dt>{zh ? '版本' : 'Version'}</dt><dd>{versionLabel}</dd></div>}</dl>
         {versions.length > 0 && <div className="canvas-inspector-versions"><div className="canvas-inspector-section-label"><span>{zh ? '当前镜头版本' : 'SHOT VERSIONS'}</span><small>{zh ? '保留全部结果，仅切换当前显示' : 'All results stay saved; switch the active view'}</small></div><div className="canvas-inspector-version-list">{versions.map(version => <button type="button" key={version.id} className={version.current ? 'is-current' : ''} disabled={!onSelectVersion || !version.available} title={!version.available ? (zh ? '载入历史后可切换此版本' : 'Load history before switching to this version') : undefined} onClick={() => version.available && onSelectVersion?.(version.generationId)}><b>V{version.number}</b><span>{statusCopy(version.status, zh)}</span>{version.bestTake && <strong>{zh ? '最佳' : 'BEST'}</strong>}</button>)}</div></div>}
         {generationError && <p className="canvas-inspector-error">{generationError}</p>}
