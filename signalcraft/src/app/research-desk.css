@@ -192,10 +192,10 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 .watchlists-page .page-intro{max-width:900px;margin-bottom:21px}
 .watchlists-status{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;margin:0 0 17px;padding:13px 16px;border:1px solid var(--desk-line);border-left:4px solid var(--desk-moss);background:#f7f3ed}
 .watchlists-status.is-syncing{border-left-color:var(--desk-orange)}
-.watchlists-status.is-fallback{border-left-color:var(--desk-red);background:#fff3f0}
+.watchlists-status.is-fallback{border-left-color:var(--desk-orange);background:#fbf5e8}
 .watchlists-status-mark{display:grid;place-items:center;width:27px;height:27px;border:1px solid currentColor;border-radius:50%;color:var(--desk-moss);font:800 15px/1 ui-monospace,"Cascadia Mono",monospace}
 .watchlists-status.is-syncing .watchlists-status-mark{color:#b2762d;animation:watchlists-spin 1.2s linear infinite}
-.watchlists-status.is-fallback .watchlists-status-mark{color:var(--desk-red)}
+.watchlists-status.is-fallback .watchlists-status-mark{color:#b2762d}
 .watchlists-status>div{min-width:0}
 .watchlists-status b{display:block;color:var(--desk-ink);font-size:13px}
 .watchlists-status p{margin:3px 0 0;color:var(--desk-muted);font-size:11px;line-height:1.45}
@@ -228,7 +228,7 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @keyframes watchlists-spin{to{transform:rotate(360deg)}}
 [data-theme="dark"] .watchlists-status,[data-theme="dark"] .watchlists-form,[data-theme="dark"] .watchlists-empty,[data-theme="dark"] .watchlists-rules .watch-card{background:var(--desk-paper);border-color:var(--desk-line)}
-[data-theme="dark"] .watchlists-status.is-fallback{background:#30211e}
+[data-theme="dark"] .watchlists-status.is-fallback{background:#302920}
 [data-theme="dark"] .watchlists-form-note{border-color:var(--desk-line)}
 [data-theme="dark"] .watchlists-field input,[data-theme="dark"] .watchlists-field select{border-color:#51463d;background:#171412;color:var(--desk-ink)}
 @media(max-width:980px){.watchlists-page{max-width:none}.watchlists-form-grid{grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(110px,.7fr)) auto}}

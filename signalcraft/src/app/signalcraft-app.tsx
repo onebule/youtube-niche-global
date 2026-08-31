@@ -380,8 +380,8 @@ function PersistentWatchlists({state,setState,toast,account}:{state:Persisted;se
     }
   };
   const status=account?.accessToken?syncState:'idle';
-  const statusTitle=status==='syncing'?'正在同步当前账号':status==='synced'?'已同步当前账号规则':status==='fallback'?'云端暂不可用，已切换本地模式':'本地规则模式';
-  const statusBody=status==='syncing'?'读取云端规则，页面不会替换本账号的本地资产。':status==='synced'?`共 ${state.rules.length} 条规则 · 云端数据已就绪`:status==='fallback'?'规则仍保留在当前账号；服务恢复后可重新同步。':'未登录时规则只保存在此设备；登录后可同步到当前账号。';
+  const statusTitle=status==='syncing'?'正在同步当前账号':status==='synced'?'已同步当前账号规则':status==='fallback'?'当前使用本地规则':'本地规则模式';
+  const statusBody=status==='syncing'?'读取云端规则，页面不会替换本账号的本地资产。':status==='synced'?`共 ${state.rules.length} 条规则 · 云端数据已就绪`:status==='fallback'?'云端同步暂不可用；规则仍保留在当前账号，服务恢复后可重新同步。':'未登录时规则只保存在此设备；登录后可同步到当前账号。';
   return <main className="app-page watchlists-page">
     <PageIntro label="视频警报" title="让值得研究的异常自己来找你。" body="为关键词、频道或赛道设置最低信号分数与检查频率。登录后会同步到当前账号；未登录时仍保留本地规则。"/>
     <section className={cn('watchlists-status',`is-${status}`)} role="status" aria-live="polite">
