@@ -123,7 +123,8 @@ export function buildNicheEvaluationHref(context: NicheAnalysisContext) {
   if (context.format) query.set('format', context.format);
   if (context.timeWindow) query.set('window', context.timeWindow);
   query.set('source', 'trend-radar');
-  return `/longform?${query.toString()}`;
+  const isShortForm = context.contentType?.toLowerCase().includes('short');
+  return `${isShortForm ? '/shortform-evaluation' : '/longform'}?${query.toString()}`;
 }
 
 /** Build a focused radar URL, restoring the previous scan when requested. */
@@ -141,7 +142,8 @@ export function buildTrendRadarHref(context: NicheAnalysisContext, restore = fal
     if (context.timeWindow) query.set('window', context.timeWindow);
   }
   if (lane) query.set('lane', lane);
-  return `/radar?${query.toString()}`;
+  const isShortForm = context.contentType?.toLowerCase().includes('short');
+  return `${isShortForm ? '/short-radar' : '/radar'}?${query.toString()}`;
 }
 
 export function contextFromQuery(params: URLSearchParams) {

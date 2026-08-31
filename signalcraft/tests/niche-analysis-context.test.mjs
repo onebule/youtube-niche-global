@@ -50,3 +50,23 @@ test('query context is normalized as a trend-radar source', () => {
   assert.equal(context?.contentType, 'long');
   assert.equal(context?.timeWindow, '30d');
 });
+
+test('Shorts radar hand-off uses the isolated Shorts evaluation and return routes', () => {
+  const context = {
+    nicheId: 'short-event-7',
+    nicheName: 'Cat rescue reactions',
+    topicName: 'Cat rescue reactions',
+    contentType: 'SHORT_FORM',
+    format: 'SHORT_FORM',
+    timeWindow: '14d',
+    source: 'TREND_RADAR',
+    returnState: { scrollPosition: 420, filters: { market: 'US', window: '14d' } },
+  };
+  const evaluationHref = buildNicheEvaluationHref(context);
+  assert.match(evaluationHref, /^\/shortform-evaluation\?/);
+  assert.match(evaluationHref, /type=short/);
+  assert.match(buildTrendRadarHref(context, true), /^\/short-radar\?/);
+  assert.match(buildTrendRadarHref(context, true), /restore=1/);
+  const parsed = contextFromQuery(new URLSearchParams('nicheName=Cat%20rescue%20reactions&type=short&source=trend-radar'));
+  assert.equal(parsed?.contentType, 'short');
+});

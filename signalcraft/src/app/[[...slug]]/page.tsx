@@ -30,6 +30,10 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     title: 'YouTube Shorts 趋势雷达',
     description: '用独立的 Shorts 趋势雷达查看跨频道扩散、中小频道突破与供给变化；不改变现有短视频榜单。',
   },
+  '/shortform-evaluation': {
+    title: 'YouTube Shorts 赛道评估',
+    description: '承接 Shorts 趋势雷达的公开证据，判断下一轮验证动作；不复用长视频评分或候选池。',
+  },
   '/doctor': {
     title: 'YouTube 频道诊断',
     description: '输入公开频道链接，检查频道结构、内容节奏与可验证的增长信号。',

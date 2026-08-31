@@ -14,6 +14,7 @@ import { hasOwnerAccess } from '@/src/lib/owner-admin';
 import { getRecordedGrowth } from '@/src/lib/growth';
 import { createMonitorRule, loadMonitorRules, updateMonitorRule } from '@/src/lib/monitoring';
 import type { OpportunityRadarEvent } from '@/src/lib/opportunity-radar';
+import type { ShortformRadarEvent } from '@/src/lib/shortform-opportunity-radar';
 import { buildNicheEvaluationHref, saveNicheAnalysisContext, type RadarReturnState } from '@/src/lib/niche-analysis-context';
 import UpgradeModal, { type UpgradePlan } from './upgrade-modal';
 import RankingDataScope from './ranking-data-scope';
@@ -24,6 +25,7 @@ const OwnerConsole = dynamic(() => import('./owner-console'), { loading: RouteLo
 const ImageToVideoStudio = dynamic(() => import('./image-to-video-studio'), { loading: RouteLoading });
 const VideoCanvasStudio = dynamic(() => import('./video-canvas-studio'), { loading: RouteLoading });
 const LongformResearchDesk = dynamic(() => import('./longform-research-desk'), { loading: RouteLoading });
+const ShortformNicheEvaluation = dynamic(() => import('./shortform-niche-evaluation'), { loading: RouteLoading });
 const ViralCaseDesk = dynamic(() => import('./viral-case-desk'), { loading: RouteLoading });
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || 'SignalCraft';
@@ -546,6 +548,31 @@ export default function SignalCraftApp() {
     notify('已带入趋势证据，正在打开长视频赛道评估');
   };
 
+  const researchShortformEvent = (event: ShortformRadarEvent, returnState?: RadarReturnState) => {
+    const context = {
+      nicheId: event.id,
+      nicheName: event.topic || event.title,
+      topicName: event.topic || event.title,
+      contentType: 'SHORT_FORM',
+      platformType: 'YOUTUBE',
+      format: event.format,
+      timeWindow: `${event.baseline.windowDays}d`,
+      filters: { market: returnState?.filters?.market || 'all', window: returnState?.filters?.window || `${event.baseline.windowDays}d` },
+      sort: returnState?.sort || 'opportunityScore',
+      trendSignals: { eventType: event.eventType, lifecycle: event.lifecycle, whyNowScore: event.whyNowScore, creatorConcentrationTop3: event.creatorConcentrationTop3 ?? null, sampleVideoCount: event.sampleVideoCount, independentChannelCount: event.independentChannelCount, demandProxyGrowth: event.metrics.demandProxyGrowth, dataQuality: event.dataQuality, facts: event.facts.slice(0, 3) },
+      breakoutSignals: { count: event.breakoutCount, acceleration: event.vpdAcceleration },
+      smallCreatorSignals: { count: event.breakoutCount, signal: event.metrics.breakoutDensity },
+      representativeVideos: event.representativeVideos.slice(0, 8),
+      representativeChannels: event.evidenceChannelIds.slice(0, 8),
+      confidence: event.confidence,
+      source: 'TREND_RADAR' as const,
+      returnState: returnState || { scrollPosition: typeof window === 'undefined' ? 0 : window.scrollY, activeTab: 'ALL', filters: { market: 'all', window: `${event.baseline.windowDays}d` } },
+    };
+    saveNicheAnalysisContext(context);
+    navigate(buildNicheEvaluationHref(context));
+    notify('已带入 Shorts 趋势证据，正在打开 Shorts 赛道评估');
+  };
+
   const content = path === '/'
     ? <Home locale={locale} />
     : path === '/discover'
@@ -553,7 +580,9 @@ export default function SignalCraftApp() {
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
     : path === '/radar' || path === '/radar/all' || path === '/longform' || path === '/short-radar'
-      ? <LongformResearchDesk locale={locale} initialView={path === '/radar/all' ? 'all-radar' : path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} onResearch={researchRadarEvent} />
+      ? <LongformResearchDesk locale={locale} initialView={path === '/radar/all' ? 'all-radar' : path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} onResearch={researchRadarEvent} onShortResearch={researchShortformEvent} />
+      : path === '/shortform-evaluation'
+        ? <ShortformNicheEvaluation locale={locale} />
       : path === '/doctor' || path === '/app/doctor'
             ? <ChannelDoctor locale={locale} />
             : path === '/methodology'
