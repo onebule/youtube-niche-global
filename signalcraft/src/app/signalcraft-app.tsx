@@ -21,6 +21,7 @@ const OwnerConsole = dynamic(() => import('./owner-console'), { loading: RouteLo
 const ImageToVideoStudio = dynamic(() => import('./image-to-video-studio'), { loading: RouteLoading });
 const VideoCanvasStudio = dynamic(() => import('./video-canvas-studio'), { loading: RouteLoading });
 const LongformOpportunities = dynamic(() => import('./longform-opportunities'), { loading: RouteLoading });
+const OpportunityRadar = dynamic(() => import('./opportunity-radar'), { loading: RouteLoading });
 const ViralCaseDesk = dynamic(() => import('./viral-case-desk'), { loading: RouteLoading });
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || 'SignalCraft';
@@ -394,7 +395,7 @@ export default function SignalCraftApp() {
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
     : path === '/radar'
-      ? <Discovery mode="radar" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
+      ? <OpportunityRadar locale={locale} />
       : path === '/longform'
         ? <LongformOpportunities locale={locale} />
       : path === '/doctor' || path === '/app/doctor'
