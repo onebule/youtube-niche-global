@@ -5,6 +5,7 @@ import { fetchLongformOpportunities, type LongformOpportunity, type LongformResp
 import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
 import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
 import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
+import { getRpmBenchmarkForTopic, type RpmBenchmarkResult } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -158,26 +159,46 @@ function rpmLabel(value: number | null) {
   return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
 }
 
+function RpmBenchmarkPanel({ benchmark, locale, mode, onModeChange }: { benchmark: RpmBenchmarkResult; locale: UiLocale; mode: 'market' | 'manual'; onModeChange: (mode: 'market' | 'manual') => void }) {
+  const zh = locale === 'zh';
+  const hasBenchmark = benchmark.status === 'BENCHMARK' && benchmark.lowUsd !== null && benchmark.highUsd !== null;
+  return <div className="longform-rpm-benchmark" aria-label={zh ? '市场工具 RPM 基准' : 'Market-tool RPM benchmark'}>
+    <div className="longform-rpm-benchmark-head"><div><span className="longform-kicker">MARKET BENCHMARK · RPM</span><b>{zh ? '市场工具区间预估' : 'Market-tool range estimate'}</b><small>{zh ? '这是规划基准，不是频道真实收益；真实 RPM 以 YouTube Studio 为准。' : 'Planning benchmark, not channel revenue; YouTube Studio remains the source of truth.'}</small></div><span className={`longform-rpm-confidence ${benchmark.confidence.toLowerCase()}`}>{hasBenchmark ? `${benchmark.confidence} ${zh ? '置信度' : 'confidence'}` : 'UNKNOWN'}</span></div>
+    {hasBenchmark ? <>
+      <div className="longform-rpm-benchmark-summary"><strong>{rpmLabel(benchmark.lowUsd)} – {rpmLabel(benchmark.highUsd)}</strong><span>{zh ? `合并中位 ${rpmLabel(benchmark.midpointUsd)} / 1,000 播放` : `Combined midpoint ${rpmLabel(benchmark.midpointUsd)} / 1,000 views`}</span><small>{zh ? `${benchmark.sourceCount} 个公开工具来源；区间取来源外包络，中心值取中位数。快照 ${benchmark.rows[0]?.capturedAt || '未知'}` : `${benchmark.sourceCount} public tool sources; envelope of ranges with median midpoint. Snapshot ${benchmark.rows[0]?.capturedAt || 'unknown'}`}</small></div>
+      <div className="longform-rpm-source-grid">{benchmark.rows.map(row => <article key={row.sourceId}><div><b>{row.sourceName}</b><span>{rpmLabel(row.lowUsd)} – {rpmLabel(row.highUsd)}</span></div><small>{row.note}</small><a href={row.sourceUrl} target="_blank" rel="noreferrer">{zh ? '查看来源 ↗' : 'View source ↗'}</a></article>)}</div>
+      <div className="longform-rpm-mode" role="group" aria-label={zh ? 'RPM 规划来源' : 'RPM planning source'}><button type="button" className={mode === 'market' ? 'active' : ''} aria-pressed={mode === 'market'} onClick={() => onModeChange('market')}>{zh ? '使用市场基准' : 'Use market benchmark'}</button><button type="button" className={mode === 'manual' ? 'active' : ''} aria-pressed={mode === 'manual'} onClick={() => onModeChange('manual')}>{zh ? '改用自定义 RPM' : 'Use custom RPM'}</button></div>
+    </> : <div className="longform-rpm-empty"><b>{zh ? '该方向暂无可匹配的公开区间' : 'No public range matches this direction yet'}</b><small>{zh ? '请切换到“自定义 RPM”，或先从 Studio / 市场工具取得区间后再填写。' : 'Switch to custom RPM, or collect a range from Studio / market tools before entering it.'}</small></div>}
+    <div className="longform-rpm-references">{zh ? '校准参考：' : 'Calibration references: '}<a href="https://support.google.com/youtube/answer/9314357?hl=en-6" target="_blank" rel="noreferrer">YouTube RPM 定义</a><span>·</span><a href="https://www.tubebuddy.com/youtube-monetization-calculator/" target="_blank" rel="noreferrer">TubeBuddy 分类计算器</a><span>·</span><a href="https://www.tubeanalytics.net/blog/youtube-rpm-benchmarks-by-niche" target="_blank" rel="noreferrer">TubeAnalytics Studio 校准说明</a></div>
+  </div>;
+}
+
 function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const [targetUsd, setTargetUsd] = useState(1000);
   const [rpmLowInput, setRpmLowInput] = useState('');
   const [rpmHighInput, setRpmHighInput] = useState('');
+  const [rpmMode, setRpmMode] = useState<'market' | 'manual'>('market');
   const [videosPerMonth, setVideosPerMonth] = useState(4);
-  const scenario = calculateLongformIncomeScenario({ targetUsd, rpmLowUsd: rpmLowInput ? Number(rpmLowInput) : null, rpmHighUsd: rpmHighInput ? Number(rpmHighInput) : null, videosPerMonth, baselineViewsPerVideo: opportunity.medianViews });
+  const benchmark = useMemo(() => getRpmBenchmarkForTopic(opportunity.topic), [opportunity.topic]);
+  const useMarketBenchmark = rpmMode === 'market' && benchmark.status === 'BENCHMARK';
+  const effectiveRpmLow = useMarketBenchmark ? benchmark.lowUsd : rpmLowInput ? Number(rpmLowInput) : null;
+  const effectiveRpmHigh = useMarketBenchmark ? benchmark.highUsd : rpmHighInput ? Number(rpmHighInput) : null;
+  const scenario = calculateLongformIncomeScenario({ targetUsd, rpmLowUsd: effectiveRpmLow, rpmHighUsd: effectiveRpmHigh, videosPerMonth, baselineViewsPerVideo: opportunity.medianViews });
   const monthlyViews = scenario.monthlyViewsLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.monthlyViewsLow, locale)} – ${plannerNumber(scenario.monthlyViewsHigh, locale)}`;
   const viewsPerVideo = scenario.viewsPerVideoLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.viewsPerVideoLow, locale)} – ${plannerNumber(scenario.viewsPerVideoHigh, locale)}`;
   const baselineVideos = scenario.baselineVideosLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.baselineVideosLow, locale)} – ${plannerNumber(scenario.baselineVideosHigh, locale)}`;
   return <section className="longform-planning-panel" aria-label={zh ? '长视频目标收益规划与 AI 生产边界' : 'Long-form income planner and AI production boundaries'}>
-    <div className="longform-planning-head"><div><span className="longform-kicker">P2 · SCENARIO PLANNER</span><b>{zh ? '目标收益规划（仅作场景推演）' : 'Target income planner (scenario only)'}</b><small>{zh ? 'RPM 必须由你输入；页面不会自动补齐收益或承诺结果。' : 'RPM must be supplied by you; this page does not invent revenue or promise an outcome.'}</small></div><span>{zh ? '不写入账号' : 'Not saved to account'}</span></div>
+    <div className="longform-planning-head"><div><span className="longform-kicker">P2 · SCENARIO PLANNER</span><b>{zh ? '目标收益规划（仅作场景推演）' : 'Target income planner (scenario only)'}</b><small>{zh ? 'RPM 优先采用公开市场工具的区间基准，也可切换为你输入的 Studio / 自定义区间。' : 'RPM uses a public market-tool range by default, or your Studio / custom range after switching.'}</small></div><span>{zh ? '不写入账号' : 'Not saved to account'}</span></div>
+    <RpmBenchmarkPanel benchmark={benchmark} locale={locale} mode={rpmMode} onModeChange={setRpmMode}/>
     <div className="longform-planning-inputs">
       <label><span>{zh ? '月目标' : 'Monthly target'}</span><select value={targetUsd} onChange={event => setTargetUsd(Number(event.target.value))}>{[500, 1000, 3000, 5000, 10000].map(value => <option key={value} value={value}>${value.toLocaleString()} / mo</option>)}</select></label>
-      <label><span>{zh ? 'RPM 下限假设' : 'RPM low assumption'}</span><input type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 4' : 'e.g. 4'} value={rpmLowInput} onChange={event => setRpmLowInput(event.target.value)}/></label>
-      <label><span>{zh ? 'RPM 上限假设' : 'RPM high assumption'}</span><input type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 8' : 'e.g. 8'} value={rpmHighInput} onChange={event => setRpmHighInput(event.target.value)}/></label>
+      <label><span>{zh ? 'RPM 下限假设' : 'RPM low assumption'}</span><input className={useMarketBenchmark ? 'is-derived' : ''} type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 4' : 'e.g. 4'} value={rpmLowInput} onChange={event => setRpmLowInput(event.target.value)} disabled={useMarketBenchmark}/><small>{useMarketBenchmark ? (zh ? `市场基准 ${rpmLabel(benchmark.lowUsd)}` : `Market ${rpmLabel(benchmark.lowUsd)}`) : (zh ? 'Studio 或自定义输入' : 'Studio or custom input')}</small></label>
+      <label><span>{zh ? 'RPM 上限假设' : 'RPM high assumption'}</span><input className={useMarketBenchmark ? 'is-derived' : ''} type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 8' : 'e.g. 8'} value={rpmHighInput} onChange={event => setRpmHighInput(event.target.value)} disabled={useMarketBenchmark}/><small>{useMarketBenchmark ? (zh ? `市场基准 ${rpmLabel(benchmark.highUsd)}` : `Market ${rpmLabel(benchmark.highUsd)}`) : (zh ? 'Studio 或自定义输入' : 'Studio or custom input')}</small></label>
       <label><span>{zh ? '每月计划视频' : 'Videos / month'}</span><input type="number" min="1" step="1" inputMode="numeric" value={videosPerMonth} onChange={event => setVideosPerMonth(Number(event.target.value))}/></label>
     </div>
     <div className="longform-planning-results">
-      <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '需要月播放' : 'Required monthly views'}</span><b>{monthlyViews}</b><small>{scenario.isScenario ? `${rpmLabel(scenario.rpmLowUsd)} – ${rpmLabel(scenario.rpmHighUsd)} RPM · ${zh ? '用户假设' : 'user assumption'}` : (zh ? '填写 RPM 区间后计算' : 'Enter an RPM range to calculate')}</small></article>
+      <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '需要月播放' : 'Required monthly views'}</span><b>{monthlyViews}</b><small>{scenario.isScenario ? `${rpmLabel(scenario.rpmLowUsd)} – ${rpmLabel(scenario.rpmHighUsd)} RPM · ${useMarketBenchmark ? (zh ? '市场基准' : 'market benchmark') : (zh ? '用户假设' : 'user assumption')}` : (zh ? '填写 RPM 区间后计算' : 'Enter an RPM range to calculate')}</small></article>
       <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '每条视频目标播放' : 'Views per video'}</span><b>{viewsPerVideo}</b><small>{zh ? '按月计划产量均摊，不代表成功率' : 'Distributed across planned output; not a success rate'}</small></article>
       <article className={scenario.baselineVideosLow === null ? 'unknown' : ''}><span>{zh ? '按样本中位播放需多少条' : 'Videos at sample median'}</span><b>{baselineVideos}</b><small>{opportunity.medianViews === null ? (zh ? '当前方向没有中位播放数据' : 'No median-view data for this direction') : (zh ? `以样本中位 ${formatNumber(opportunity.medianViews, locale)} 播放作参考` : `Using sample median of ${formatNumber(opportunity.medianViews, locale)} views`)}</small></article>
     </div>
