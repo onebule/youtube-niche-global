@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
 import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
 import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
+import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -184,6 +185,13 @@ function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformO
   </section>;
 }
 
+function LongformValidationPlan({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const plan = buildLongformValidationPlan(opportunity);
+  const reason = plan.reason === 'DO_NOT_ENTER' ? (zh ? '当前结论不支持直接进入，先保留观察。' : 'The current evidence does not support entering directly; keep watching.') : plan.reason === 'THIN_EVIDENCE' ? (zh ? '证据偏薄，先用更大的最小批次确认可重复性。' : 'Evidence is thin; use a larger bounded batch to confirm repeatability.') : (zh ? '证据已达到小规模验证门槛，但仍不能直接 BUILD。' : 'Evidence clears a small-test bar, but it is not a BUILD decision.');
+  return <details className="longform-validation-plan"><summary><span className="longform-kicker">TEST → VALIDATE</span><b>{plan.recommendedVideos === null ? (zh ? '当前不创建测试批次' : 'No test batch yet') : (zh ? `建议先验证 ${plan.recommendedVideos} 条长视频` : `Start with ${plan.recommendedVideos} long-form videos`)}</b></summary><div className="longform-validation-body"><p>{reason}</p><div className="longform-validation-columns"><div><span>{zh ? '成功判据' : 'Success criteria'}</span><ul>{plan.successCriteria.map(item => <li key={item}>{item}</li>)}</ul></div><div><span>{zh ? '必须回收的指标' : 'Metrics to collect'}</span><ul>{plan.requiredMetrics.map(item => <li key={item}>{item}</li>)}</ul></div></div><div className="longform-validation-unknown"><b>{zh ? '测试结果：UNKNOWN' : 'Test result: UNKNOWN'}</b><small>{zh ? '完成批次并回填真实数据后，才判断 CONTINUE / BUILD / WATCH / AVOID。' : 'Only after the batch is completed and real data is returned can the system decide CONTINUE / BUILD / WATCH / AVOID.'}</small></div></div></details>;
+}
+
 function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportunity | null; locale: UiLocale }) {
   const zh = locale === 'zh';
   const recommendation = recommendationFor(opportunity, locale);
@@ -222,6 +230,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '需求强度与供给空位' : 'Demand and supply gap'}/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit} hint={zh ? '结构是否容易复用' : 'Repeatable production fit'}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink" hint={zh ? '综合验证优先级' : 'Combined validation priority'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
     <LongformPlanningPanel opportunity={opportunity} locale={locale}/>
+    <LongformValidationPlan opportunity={opportunity} locale={locale}/>
     <div className="longform-lanes" id="research-pattern">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence" id="research-competition"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
     <details className="longform-representatives" id="research-evidence"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map((video, index) => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale} priority={index < 2}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
