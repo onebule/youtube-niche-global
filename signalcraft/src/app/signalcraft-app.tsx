@@ -12,6 +12,7 @@ import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
 import { hasOwnerAccess } from '@/src/lib/owner-admin';
 import { getRecordedGrowth } from '@/src/lib/growth';
+import type { OpportunityRadarEvent } from '@/src/lib/opportunity-radar';
 import UpgradeModal, { type UpgradePlan } from './upgrade-modal';
 import RankingDataScope from './ranking-data-scope';
 
@@ -388,6 +389,59 @@ export default function SignalCraftApp() {
     notify('已退出账号');
   };
 
+  const watchRadarEvent = (event: OpportunityRadarEvent) => {
+    if (!account) {
+      notify('请先登录，再保存雷达监听。');
+      return;
+    }
+    const name = `雷达：${event.title}`;
+    setState(current => {
+      if (current.rules.some(rule => rule.name === name && rule.type === '赛道')) return current;
+      const threshold = event.whyNowScore === null ? 65 : Math.max(0, Math.min(100, Math.round(event.whyNowScore)));
+      return {
+        ...current,
+        rules: [...current.rules, {
+          id: `radar-watch-${event.id}`,
+          name,
+          type: '赛道',
+          threshold,
+          frequency: '每天一次',
+          channel: event.topic || event.title,
+          paused: false,
+        }],
+      };
+    });
+    notify('已加入视频警报，可在“视频警报”中查看');
+  };
+
+  const createRadarIdea = (event: OpportunityRadarEvent) => {
+    if (!account) {
+      notify('请先登录，再保存行动草稿。');
+      return;
+    }
+    const title = `雷达行动：${event.title}`;
+    setState(current => {
+      if (current.ideas.some(idea => idea.title === title)) return current;
+      const sourceVideoId = event.evidenceVideoIds[0] || `radar:${event.id}`;
+      return {
+        ...current,
+        ideas: [...current.ideas, {
+          id: `radar-idea-${event.id}`,
+          title,
+          sourceVideoId,
+          angle: event.inferences[0] || '基于当前事件证据验证一个原创角度',
+          audience: '当前 Opportunity Event 覆盖的公开受众',
+          hypothesis: `在 ${event.baseline.windowDays}D 窗口复核该事件是否继续出现`,
+          owner: account.name || '当前用户',
+          status: '收集',
+          note: `来自 Opportunity Radar：${event.id}；仅保留公开证据，不自动生成标题。`,
+          createdAt: new Date().toISOString(),
+        }],
+      };
+    });
+    notify('已创建行动草稿，可在“选题”中查看');
+  };
+
   const content = path === '/'
     ? <Home locale={locale} />
     : path === '/discover'
@@ -395,7 +449,7 @@ export default function SignalCraftApp() {
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
     : path === '/radar'
-      ? <OpportunityRadar locale={locale} />
+      ? <OpportunityRadar locale={locale} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} />
       : path === '/longform'
         ? <LongformOpportunities locale={locale} />
       : path === '/doctor' || path === '/app/doctor'
