@@ -520,6 +520,22 @@ export default function SignalCraftApp() {
     notify('已创建行动草稿，可在“选题”中查看');
   };
 
+  const researchRadarEvent = (event: OpportunityRadarEvent) => {
+    const query = new URLSearchParams({
+      opportunityId: event.id,
+      topic: event.topic,
+      format: event.format,
+      signalType: event.eventType,
+      window: `${event.baseline.windowDays}d`,
+      confidence: event.confidence,
+      videoIds: event.evidenceVideoIds.slice(0, 8).join(','),
+      channelIds: event.evidenceChannelIds.slice(0, 8).join(','),
+      reason: event.facts.slice(0, 2).join(' '),
+    });
+    navigate(`/longform?${query.toString()}`);
+    notify('已带入雷达证据上下文，正在打开赛道研究');
+  };
+
   const content = path === '/'
     ? <Home locale={locale} />
     : path === '/discover'
@@ -527,7 +543,7 @@ export default function SignalCraftApp() {
       : path === '/rankings'
         ? <Discovery mode="rankings" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
     : path === '/radar' || path === '/longform' || path === '/short-radar'
-      ? <LongformResearchDesk locale={locale} initialView={path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} />
+      ? <LongformResearchDesk locale={locale} initialView={path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} onResearch={researchRadarEvent} />
       : path === '/doctor' || path === '/app/doctor'
             ? <ChannelDoctor locale={locale} />
             : path === '/methodology'

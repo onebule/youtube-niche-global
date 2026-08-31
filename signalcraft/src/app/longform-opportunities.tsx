@@ -88,6 +88,32 @@ function decisionFor(opportunity: LongformOpportunity, locale: UiLocale) {
   return { key: 'thin', label: zh ? '证据偏薄' : 'Evidence thin' };
 }
 
+function recommendationFor(opportunity: LongformOpportunity | null, locale: UiLocale) {
+  if (!opportunity) return { key: 'insufficient', label: locale === 'zh' ? '数据不足' : 'INSUFFICIENT DATA' };
+  const decision = decisionFor(opportunity, locale);
+  if (decision.key === 'priority') return { key: 'test', label: locale === 'zh' ? '值得测试' : 'TEST' };
+  if (decision.key === 'watch') return { key: 'watch', label: locale === 'zh' ? '谨慎测试' : 'WATCH' };
+  return { key: 'insufficient', label: locale === 'zh' ? '数据不足' : 'INSUFFICIENT DATA' };
+}
+
+function summaryMetric(value: number | null | undefined, locale: UiLocale) {
+  return value === null || value === undefined || !Number.isFinite(value) ? (locale === 'zh' ? '数据不足' : 'N/A') : String(Math.round(value));
+}
+
+function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportunity | null; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const recommendation = recommendationFor(opportunity, locale);
+  if (!opportunity) return <section className="longform-decision-summary insufficient"><div className="longform-decision-summary-head"><div><span className="longform-kicker">DECISION SUMMARY</span><h2>{zh ? '先确认数据，再决定是否进入。' : 'Confirm the evidence before deciding whether to enter.'}</h2></div><span className="longform-recommendation insufficient">{recommendation.label}</span></div><p className="longform-summary-empty">{zh ? '当前筛选没有可用于决策的长视频方向；不会用演示数据填充结论。' : 'There is no long-form direction in the current filter; this decision stays empty rather than using demo data.'}</p></section>;
+  const decision = decisionFor(opportunity, locale);
+  const growth = opportunity.metrics?.growth ?? null;
+  const supplyProxy = opportunity.metrics?.lowCompetition ?? null;
+  const diversity = opportunity.metrics?.creatorDiversity ?? null;
+  const why = opportunity.sampleSize && opportunity.channelCount
+    ? (zh ? `当前方向由 ${opportunity.sampleSize} 条视频、${opportunity.channelCount} 个频道支持，${decision.key === 'priority' ? '市场机会与执行适配都达到优先验证门槛。' : '证据仍适合先做小规模验证。'}` : `${opportunity.sampleSize} videos across ${opportunity.channelCount} channels support this direction; ${decision.key === 'priority' ? 'market and execution both clear the validation bar.' : 'evidence still calls for a small validation test.'}`)
+    : (zh ? '样本或频道覆盖不足，暂不把分数解释为确定性机会。' : 'Sample or channel coverage is incomplete, so the score is not treated as a certain opportunity.');
+  return <section className={`longform-decision-summary ${recommendation.key}`}><div className="longform-decision-summary-head"><div><span className="longform-kicker">DECISION SUMMARY · {zh ? '当前首要方向' : 'CURRENT LEAD'}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2><p>{opportunity.topic} · {zh ? '以当前筛选结果中进入分最高者为代表' : 'represented by the highest entry score in the current filter'}</p></div><span className={`longform-recommendation ${recommendation.key}`}>{recommendation.label}</span></div><div className="longform-decision-summary-grid"><div className="longform-summary-verdict"><small>{zh ? '为什么现在判断' : 'WHY THIS DECISION'}</small><b>{why}</b><span>{zh ? `置信度 ${opportunity.confidence} · ${opportunity.sampleSize} 条样本 · ${opportunity.channelCount} 个频道` : `${opportunity.confidence} confidence · ${opportunity.sampleSize} samples · ${opportunity.channelCount} channels`}</span></div><div className="longform-summary-score"><small>{zh ? '市场机会' : 'MARKET OPPORTUNITY'}</small><strong>{score(opportunity.marketOpportunity)}</strong><span>{zh ? '需求、供给空位与多样性' : 'Demand, supply gap and diversity'}</span></div><div className="longform-summary-score execution"><small>{zh ? '执行适配' : 'EXECUTION FIT'}</small><strong>{score(opportunity.executionFit)}</strong><span>{zh ? '可复用制作结构' : 'Repeatable production fit'}</span></div></div><div className="longform-demand-supply"><div><small>{zh ? '需求趋势代理' : 'DEMAND TREND PROXY'}</small><b>{summaryMetric(growth, locale)}<em>{growth === null ? '' : '/100'}</em></b><span>{growth === null ? (zh ? '公开增长代理不可用' : 'Public growth proxy unavailable') : (zh ? '由近期增长与样本推断' : 'Derived from recent growth and samples')}</span></div><div><small>{zh ? '供给空位代理' : 'SUPPLY GAP PROXY'}</small><b>{summaryMetric(supplyProxy, locale)}<em>{supplyProxy === null ? '' : '/100'}</em></b><span>{supplyProxy === null ? (zh ? '竞争代理不可用' : 'Competition proxy unavailable') : (zh ? '分数越高表示相对更开放' : 'Higher means relatively more open')}</span></div><div><small>{zh ? '创作者多样性' : 'CREATOR DIVERSITY'}</small><b>{summaryMetric(diversity, locale)}<em>{diversity === null ? '' : '/100'}</em></b><span>{diversity === null ? (zh ? '频道覆盖不足' : 'Channel coverage unavailable') : (zh ? '跨频道确认程度' : 'Cross-channel confirmation')}</span></div></div></section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -110,6 +136,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const [data, setData] = useState<LongformResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [researchContext, setResearchContext] = useState<{ opportunityId: string; topic: string; format: string; signalType: string; window: string; confidence: string; videoIds: string[]; channelIds: string[]; reason: string } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
   const load = useCallback(async () => {
@@ -130,14 +157,29 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   }, [market, window, locale, zh]);
   useEffect(() => { const timer = setTimeout(() => { void load(); }, 0); return () => clearTimeout(timer); }, [load]);
   useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => {
+    const syncContext = () => {
+      const params = new URLSearchParams(globalThis.window.location.search);
+      const opportunityId = params.get('opportunityId');
+      if (!opportunityId) { setResearchContext(null); return; }
+      setResearchContext({ opportunityId, topic: params.get('topic') || '', format: params.get('format') || '', signalType: params.get('signalType') || '', window: params.get('window') || '', confidence: params.get('confidence') || '', videoIds: (params.get('videoIds') || '').split(',').filter(Boolean), channelIds: (params.get('channelIds') || '').split(',').filter(Boolean), reason: params.get('reason') || '' });
+    };
+    syncContext();
+    globalThis.window.addEventListener('popstate', syncContext);
+    globalThis.window.addEventListener('signalcraft:navigate', syncContext);
+    return () => { globalThis.window.removeEventListener('popstate', syncContext); globalThis.window.removeEventListener('signalcraft:navigate', syncContext); };
+  }, []);
   const laneOptions = useMemo(() => [{ key: 'ALL', label: zh ? '全部机会' : 'All opportunities' }, { key: 'BREAKOUT', label: zh ? '爆发信号' : 'Breakout' }, { key: 'UNDERSERVED', label: zh ? '低粉机会' : 'Underserved' }, { key: 'EVERGREEN', label: zh ? '长期需求' : 'Evergreen' }, { key: 'FORMAT_GAP', label: zh ? '形态空位' : 'Format gaps' }], [zh]);
   const opportunities = (data?.opportunities || []).filter(item => lane === 'ALL' || item.lanes.includes(lane));
+  const leadOpportunity = opportunities[0] || null;
   const heroWindow = windowLabels[window] || windowLabels['28d'];
   const Container = embedded ? 'section' : 'main';
   return <Container className="longform-page">
     <section className="longform-hero"><div><span className="longform-kicker">LONG-FORM DISCOVERY ENGINE</span><h1>{zh ? '找到值得长期制作的长视频方向。' : 'Find long-form directions worth making.'}</h1><p>{zh ? '市场机会与执行适配分开计算。每个结论都回到公开样本、采集时间和置信度，不把不可见的 CTR、留存或收益伪装成事实。' : 'Market opportunity and execution fit stay separate. Every conclusion points back to public samples, capture time, and confidence.'}</p></div><div className="longform-hero-mark"><span>{heroWindow.value}</span><small>{zh ? heroWindow.zh : heroWindow.en}</small><i /></div></section>
+    {researchContext && <section className="longform-research-context" aria-label={zh ? '机会雷达研究上下文' : 'Opportunity Radar research context'}><div><span className="longform-kicker">RADAR → RESEARCH</span><b>{zh ? '已带入机会雷达证据上下文' : 'Opportunity Radar evidence context loaded'}</b><small>{researchContext.topic || (zh ? '未命名主题' : 'Untitled topic')} · {researchContext.format || (zh ? '未识别形态' : 'Format unavailable')} · {researchContext.signalType || '—'}</small>{researchContext.reason ? <small>{researchContext.reason}</small> : null}</div><div><span>{zh ? '事件 ID' : 'Event ID'} <b>{researchContext.opportunityId}</b></span><span>{zh ? '窗口' : 'Window'} <b>{researchContext.window || '—'}</b></span><span>{zh ? '置信度' : 'Confidence'} <b>{researchContext.confidence || '—'}</b></span><span>{zh ? '证据' : 'Proof'} <b>{researchContext.videoIds.length}V · {researchContext.channelIds.length}C</b></span></div></section>}
     <section className="longform-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => setWindow(event.target.value)}><option value="7d">{zh ? '近 7 天' : '7 days'}</option><option value="28d">{zh ? '近 28 天' : '28 days'}</option><option value="90d">{zh ? '近 90 天' : '90 days'}</option><option value="365d">{zh ? '近 1 年' : '1 year'}</option></select></label><button type="button" className="longform-refresh" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '更新中…' : 'Refreshing…') : (zh ? '更新数据' : 'Refresh')}</button></section>
     {data && <section className="longform-scope"><div className="longform-scope-copy"><span className="longform-kicker">DATA SCOPE</span><b>{zh ? '这次判断基于哪一批公开样本？' : 'Which public sample powers this view?'}</b><small>{data.dataScope.source === 'longform_video_features' ? (zh ? '独立长视频候选池 · 不与 Shorts 共用排名样本' : 'Independent long-form pool · isolated from Shorts ranking samples') : (zh ? '兼容读取现有公开信号池 · 独立采集尚未启用' : 'Compatibility read from the existing public signal pool · independent collector not enabled')}</small><small>{data.dataScope.latestCapturedAt ? `${zh ? '最近采集' : 'Latest capture'} ${new Date(data.dataScope.latestCapturedAt).toLocaleString()}` : (zh ? '尚无采集时间' : 'No capture timestamp')}</small>{data.dataScope.marketSampleLimit ? <small>{zh ? `按市场分层取样：每个市场最多 ${data.dataScope.marketSampleLimit} 条` : `Market-stratified pool: up to ${data.dataScope.marketSampleLimit} rows per market`}</small> : null}{data.dataScope.failedMarkets?.length ? <small className="longform-partial-warning">{zh ? `部分市场读取失败：${data.dataScope.failedMarkets.join('、')}` : `Partial market read failure: ${data.dataScope.failedMarkets.join(', ')}`}</small> : null}</div><div className="longform-scope-facts"><span><small>{zh ? '长视频候选' : 'Long-form pool'}</small><b>{data.dataScope.longformRows}</b></span><span><small>{zh ? '已采集样本' : 'Collected rows'}</small><b>{data.dataScope.collectedRows}</b></span><span><small>{zh ? '覆盖市场' : 'Markets'}</small><b>{data.dataScope.markets.length || '—'}</b></span></div><div className="longform-coverage"><b>{data.availabilityAudit.coverage}%</b><small>{zh ? '字段可用率' : 'field availability'}</small></div></section>}
+    <DecisionSummary opportunity={leadOpportunity} locale={locale} />
     <section className="longform-reading-guide" aria-label={zh ? '机会台读法' : 'How to read the opportunity desk'}><div className="longform-reading-guide-title"><span className="longform-kicker">HOW TO READ</span><b>{zh ? '三步判断，不把一个分数当结论' : 'Three checks before treating a score as a decision'}</b><small>{zh ? '分数用于排序，证据用于确认。' : 'Scores sort the list; evidence confirms the decision.'}</small></div><ol><li><b>01</b><span>{zh ? '先看市场机会' : 'Market first'}</span><small>{zh ? '需求与供给' : 'Demand and supply'}</small></li><li><b>02</b><span>{zh ? '再看执行适配' : 'Then execution'}</span><small>{zh ? '制作是否可复用' : 'Repeatable format'}</small></li><li><b>03</b><span>{zh ? '最后看代表证据' : 'Then evidence'}</span><small>{zh ? '样本、时间、置信度' : 'Sample, recency, confidence'}</small></li></ol></section>
     <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => setLane(item.key)}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}<span className="longform-lane-note">{opportunities.length ? (zh ? `当前显示 ${opportunities.length} 个方向 · 按进入分排序，置信度辅助判断` : `${opportunities.length} directions · sorted by entry score, with confidence as a guide`) : (zh ? '当前筛选暂无方向' : 'No directions match this filter')}</span></nav>
     {error ? <div className="longform-state error"><b>{zh ? '暂时无法读取长视频数据' : 'Long-form data is unavailable'}</b><p>{error}</p><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="longform-state"><b>{zh ? '正在整理公开长视频样本…' : 'Preparing public long-form samples…'}</b></div> : opportunities.length ? <div className="longform-grid">{opportunities.map(item => <OpportunityCard key={item.key} opportunity={item} locale={locale}/>)}</div> : <div className="longform-state"><b>{zh ? '当前窗口还没有足够的长视频样本' : 'Not enough long-form samples for this window'}</b><p>{zh ? '这不是演示数据。请扩大市场或时间窗口，等采集任务积累可比较的快照。' : 'This is not demo data. Expand the market or window and wait for comparable snapshots.'}</p></div>}

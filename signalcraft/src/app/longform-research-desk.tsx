@@ -19,7 +19,7 @@ function setRoute(path: string) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-export default function LongformResearchDesk({ locale, initialView, onWatch, onCreateIdea }: LongformResearchDeskProps) {
+export default function LongformResearchDesk({ locale, initialView, onWatch, onCreateIdea, onResearch }: LongformResearchDeskProps) {
   const zh = locale === 'zh';
   const view = initialView;
   const shortRadar = view === 'short-radar';
@@ -57,7 +57,7 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
     <div className="longform-research-boundary"><span>{zh ? '同一张研究桌 · 三条判断链' : 'ONE DESK · THREE DECISION CHAINS'}</span><p>{view === 'opportunities' ? (zh ? '当前视角：赛道研究。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current view: Track Research. Market, execution, and entry scores answer long-term making value.') : view === 'radar' ? (zh ? '当前视角：机会雷达。Why Now、历史基线和跨频道证据只回答长视频最近变化。' : 'Current view: Opportunity Radar. Why Now, historical baselines, and cross-channel proof answer recent long-form change.') : (zh ? '当前视角：短视频机会雷达。只读取 Shorts 样本，独立计算跨频道扩散、突破和供给变化；原有 Shorts 产品保持不变。' : 'Current view: short-form opportunity radar. It reads Shorts samples only and computes spread, breakout and supply signals independently; the existing Shorts product is unchanged.')}</p></div>
     <div className="research-lens-grid" aria-label={zh ? '当前视角的判断顺序' : 'Decision order for this view'}>{decisionLenses.map(([label, body]) => <article key={label}><span>{label}</span><b>{body}</b></article>)}</div>
     <section className="longform-research-content" aria-live="polite">
-      {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : view === 'radar' ? <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} /> : <ShortformOpportunityRadar locale={locale} embedded />}
+      {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : view === 'radar' ? <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} /> : <ShortformOpportunityRadar locale={locale} embedded />}
     </section>
   </main>;
 }
