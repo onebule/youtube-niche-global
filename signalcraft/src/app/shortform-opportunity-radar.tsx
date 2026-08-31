@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import { fetchShortformOpportunityRadar, type ShortformRadarEvent, type ShortformRadarResponse } from '@/src/lib/shortform-opportunity-radar';
 import type { UiLocale } from '@/src/lib/ui-language';
+import SignalSparkline from './signal-sparkline';
 
 const compact = (value: number | null, locale: UiLocale) => value === null || !Number.isFinite(value)
   ? '—'
@@ -36,11 +37,18 @@ function RadarCard({ event, locale }: { event: ShortformRadarEvent; locale: UiLo
   const label = eventLabels[event.eventType];
   const confidence = confidenceLabels[event.confidence];
   const lifecycle = lifecycleLabels[event.lifecycle];
+  const guardrail = event.independentChannelCount < 2
+    ? (zh ? '单频道证据：不作为跨频道机会结论。' : 'Single-channel evidence: not a cross-channel opportunity conclusion.')
+    : event.sampleVideoCount < 5
+      ? (zh ? '样本偏少：先观察下一次采集。' : 'Small sample: confirm on the next capture.')
+      : event.creatorConcentrationTop3 !== null && event.creatorConcentrationTop3 >= 65
+        ? (zh ? `Top 3 频道占 ${event.creatorConcentrationTop3}% 流量，开放度可能被高估。` : `Top 3 channels hold ${event.creatorConcentrationTop3}% of views; openness may be overstated.`)
+        : null;
   return <article className="shortform-radar-card">
     <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts only</p></div><span className={`shortform-radar-lifecycle ${event.lifecycle.toLowerCase()}`}>{lifecycle[zh ? 'zh' : 'en']}</span></header>
     <div className="shortform-radar-score"><div><small>{zh ? '机会分' : 'OPPORTUNITY'}</small><strong>{event.opportunityScore}</strong><span>{event.whyNowLevel.replace('_', ' ')}</span></div><div><small>{zh ? '置信度' : 'CONFIDENCE'}</small><b className={`shortform-radar-confidence ${event.confidence.toLowerCase()}`}>{confidence[zh ? 'zh' : 'en']}</b><span>{event.dataQuality}</span></div><div><small>{zh ? '对照窗口' : 'BASELINE'}</small><b>{event.baseline.windowDays}D</b><span>{event.sampleVideoCount} {zh ? '条短视频' : 'shorts'}</span></div></div>
     <div className="shortform-radar-metrics"><div><small>{zh ? '独立频道' : 'Channels'}</small><b>{event.independentChannelCount}</b></div><div><small>{zh ? '突破候选' : 'Breakouts'}</small><b>{event.breakoutCount}</b></div><div><small>{zh ? '中位播放' : 'Median views'}</small><b>{compact(event.medianViews, locale)}</b></div><div><small>{zh ? '播放/订阅' : 'Median VPD'}</small><b>{event.medianVpd === null ? '—' : `${event.medianVpd.toFixed(1)}×`}</b></div><div><small>{zh ? '需求代理' : 'Demand proxy'}</small><b>{event.metrics.demandProxyGrowth === null ? '—' : `${event.metrics.demandProxyGrowth >= 0 ? '+' : ''}${event.metrics.demandProxyGrowth}%`}</b></div><div><small>{zh ? '新鲜度' : 'Freshness'}</small><b>{event.metrics.freshness}%</b></div></div>
-    <section className="shortform-radar-changed"><small>{zh ? '为什么现在看' : 'WHY NOW'}</small><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="shortform-radar-note">{event.confidenceNote}</p></section>
+    <section className="shortform-radar-changed"><div className="shortform-radar-changed-head"><small>{zh ? '为什么现在看' : 'WHY NOW'}</small><SignalSparkline points={[event.metrics.previousSample, event.metrics.currentSample]} tone={event.metrics.currentSample >= event.metrics.previousSample ? 'teal' : 'coral'} label={zh ? '历史到当前样本量对照' : 'Historical to current sample comparison'}/></div><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="shortform-radar-note">{event.confidenceNote}</p>{guardrail ? <p className="shortform-radar-guardrail">! {guardrail}</p> : null}</section>
     <div className="shortform-radar-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.metrics.breakoutDensity}% {zh ? '突破密度' : 'breakout density'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条普通证据' : 'standard examples'}</span></div>
     <details className="shortform-radar-details"><summary>{zh ? '查看证据与代表视频' : 'View evidence and representative videos'}</summary><div className="shortform-radar-facts"><div><h3>{zh ? '可验证事实' : 'FACTS'}</h3>{event.facts.map(fact => <p key={fact}>{fact}</p>)}</div><div><h3>{zh ? '推断' : 'INFERENCE'}</h3>{event.inferences.length ? event.inferences.map(item => <p key={item}>{item}</p>) : <p>{zh ? '暂无额外推断。' : 'No additional inference.'}</p>}</div></div><div className="shortform-radar-video-list">{event.representativeVideos.map(video => <ShortformVideo key={video.videoId} video={video} locale={locale}/>)}</div><p className="shortform-radar-provenance">{event.evidence.provenance}</p></details>
   </article>;

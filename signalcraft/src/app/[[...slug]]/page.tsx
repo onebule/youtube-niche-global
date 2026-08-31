@@ -18,6 +18,10 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     title: 'YouTube 机会雷达',
     description: '发现正在形成的长视频新兴、升温、突破、拥挤与回落信号；不替代排行榜。',
   },
+  '/radar/all': {
+    title: 'YouTube 全部机会信号',
+    description: '分别查看长视频与 Shorts 的机会变化；不同内容形态使用各自的基线、窗口与证据链。',
+  },
   '/longform': {
     title: 'YouTube 赛道研究',
     description: '基于公开长视频样本，判断赛道长期机会、执行适配、证据覆盖与代表视频。',

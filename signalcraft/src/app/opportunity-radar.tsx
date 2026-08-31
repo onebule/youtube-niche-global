@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import { fetchOpportunityRadar, type OpportunityRadarEvent, type OpportunityRadarResponse } from '@/src/lib/opportunity-radar';
 import type { UiLocale } from '@/src/lib/ui-language';
+import SignalSparkline from './signal-sparkline';
 
 const number = (value: number | null, locale: UiLocale) => value === null || !Number.isFinite(value)
   ? locale === 'zh' ? '—' : '—'
@@ -50,11 +51,20 @@ function RadarCard({ event, locale, onWatch, onCreateIdea, onResearch, onSelect 
   const kind = eventTypeLabel[event.eventType] || eventTypeLabel.EMERGING_TOPIC;
   const confidence = confidenceLabel[event.confidence] || confidenceLabel.LOW;
   const changed = event.metrics.breakoutAcceleration !== null ? `${event.metrics.breakoutAcceleration >= 0 ? '+' : ''}${event.metrics.breakoutAcceleration}%` : '—';
+  const previousSample = typeof event.metrics.previousSample === 'number' ? event.metrics.previousSample : null;
+  const currentSample = typeof event.metrics.currentSample === 'number' ? event.metrics.currentSample : event.sampleVideoCount;
+  const guardrail = event.independentChannelCount < 2
+    ? (zh ? '单频道证据：不作为跨频道机会结论。' : 'Single-channel evidence: not a cross-channel opportunity conclusion.')
+    : event.sampleVideoCount < 5
+      ? (zh ? '样本偏少：先观察下一次采集。' : 'Small sample: confirm on the next capture.')
+      : event.creatorConcentrationTop3 !== null && event.creatorConcentrationTop3 !== undefined && event.creatorConcentrationTop3 >= 65
+        ? (zh ? `Top 3 频道占 ${event.creatorConcentrationTop3}% 流量，开放度可能被高估。` : `Top 3 channels hold ${event.creatorConcentrationTop3}% of views; openness may be overstated.`)
+        : null;
   return <article className="radar-v2-card">
     <header className="radar-v2-card-head"><div><span className="radar-v2-kicker">{kind[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.format}</p></div><span className={`radar-v2-lifecycle ${event.lifecycle.toLowerCase()}`}>{lifecycle[zh ? 'zh' : 'en']}</span></header>
     <div className="radar-v2-score-row"><div><small>{zh ? '机会信号' : 'OPPORTUNITY SIGNAL'}</small><strong>{event.whyNowScore === null ? '—' : event.whyNowScore}</strong><span>{event.whyNowLevel.replace('_', ' ')}</span></div><div><small>{zh ? '置信度' : 'CONFIDENCE'}</small><strong className={`confidence-${event.confidence.toLowerCase()}`}>{confidence[zh ? 'zh' : 'en']}</strong><span>{event.dataQuality}</span></div><div><small>{zh ? '窗口' : 'WINDOW'}</small><strong>{event.baseline.windowDays}D</strong><span>{event.sampleVideoCount} {zh ? '样本' : 'samples'}</span></div></div>
     <div className="radar-v2-metrics"><Metric label={zh ? '独立频道' : 'Independent channels'} value={event.independentChannelCount}/><Metric label={zh ? '中小频道突破' : 'Small creator breakouts'} value={event.smallCreatorBreakoutCount}/><Metric label={zh ? '中位 VPD' : 'Median VPD'} value={number(event.medianVpd, locale)} suffix={event.vpdAcceleration === null ? '' : ` (${event.vpdAcceleration >= 0 ? '+' : ''}${event.vpdAcceleration}%)`}/><Metric label={zh ? '异常密度' : 'Outlier density'} value={event.outlierDensity === null ? '—' : event.outlierDensity} suffix="%"/></div>
-    <section className="radar-v2-changed"><small>{zh ? 'WHAT CHANGED' : 'WHAT CHANGED'}</small><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="radar-v2-baseline">{event.metrics.previousSample ?? 0} → {event.metrics.currentSample} {zh ? '历史/当前样本 · 突破变化' : 'historical/current samples · breakout change'} {changed}</p></section>
+    <section className="radar-v2-changed"><div className="radar-v2-changed-head"><small>{zh ? 'WHAT CHANGED' : 'WHAT CHANGED'}</small><SignalSparkline points={[previousSample, currentSample]} tone={currentSample >= (previousSample ?? currentSample) ? 'teal' : 'coral'} label={zh ? '历史到当前样本量对照' : 'Historical to current sample comparison'}/></div><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="radar-v2-baseline">{previousSample ?? 0} → {currentSample} {zh ? '历史/当前样本 · 突破变化' : 'historical/current samples · breakout change'} {changed}</p>{guardrail ? <p className="radar-v2-guardrail">! {guardrail}</p> : null}</section>
     <div className="radar-v2-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.smallCreatorBreakoutCount} {zh ? '个中小突破' : 'small creator breakouts'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条弱证据' : 'weak examples'}</span></div>
     <div className="radar-v2-actions" aria-label={zh ? '事件操作' : 'Event actions'}><button type="button" onClick={() => onSelect(event)}>{zh ? '查看证据' : 'View evidence'}</button>{onWatch && <button type="button" onClick={() => onWatch(event)}>{zh ? '关注事件' : 'Watch event'}</button>}{onCreateIdea && <button type="button" className="primary" onClick={() => onCreateIdea(event)}>{zh ? '创建行动草稿' : 'Create action draft'}</button>}{onResearch && <button type="button" className="research" onClick={() => onResearch(event)}>{zh ? '深入赛道研究 →' : 'Research this niche →'}</button>}</div>
   </article>;
