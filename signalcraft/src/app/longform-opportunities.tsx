@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
 import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
+import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 
@@ -146,6 +147,43 @@ function LongformEvidenceLayer({ opportunity, locale }: { opportunity: LongformO
   </section>;
 }
 
+function plannerNumber(value: number | null, locale: UiLocale) {
+  if (value === null || !Number.isFinite(value)) return locale === 'zh' ? 'UNKNOWN' : 'UNKNOWN';
+  return new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+
+function rpmLabel(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return '—';
+  return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
+}
+
+function LongformPlanningPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const [targetUsd, setTargetUsd] = useState(1000);
+  const [rpmLowInput, setRpmLowInput] = useState('');
+  const [rpmHighInput, setRpmHighInput] = useState('');
+  const [videosPerMonth, setVideosPerMonth] = useState(4);
+  const scenario = calculateLongformIncomeScenario({ targetUsd, rpmLowUsd: rpmLowInput ? Number(rpmLowInput) : null, rpmHighUsd: rpmHighInput ? Number(rpmHighInput) : null, videosPerMonth, baselineViewsPerVideo: opportunity.medianViews });
+  const monthlyViews = scenario.monthlyViewsLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.monthlyViewsLow, locale)} – ${plannerNumber(scenario.monthlyViewsHigh, locale)}`;
+  const viewsPerVideo = scenario.viewsPerVideoLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.viewsPerVideoLow, locale)} – ${plannerNumber(scenario.viewsPerVideoHigh, locale)}`;
+  const baselineVideos = scenario.baselineVideosLow === null ? 'UNKNOWN' : `${plannerNumber(scenario.baselineVideosLow, locale)} – ${plannerNumber(scenario.baselineVideosHigh, locale)}`;
+  return <section className="longform-planning-panel" aria-label={zh ? '长视频目标收益规划与 AI 生产边界' : 'Long-form income planner and AI production boundaries'}>
+    <div className="longform-planning-head"><div><span className="longform-kicker">P2 · SCENARIO PLANNER</span><b>{zh ? '目标收益规划（仅作场景推演）' : 'Target income planner (scenario only)'}</b><small>{zh ? 'RPM 必须由你输入；页面不会自动补齐收益或承诺结果。' : 'RPM must be supplied by you; this page does not invent revenue or promise an outcome.'}</small></div><span>{zh ? '不写入账号' : 'Not saved to account'}</span></div>
+    <div className="longform-planning-inputs">
+      <label><span>{zh ? '月目标' : 'Monthly target'}</span><select value={targetUsd} onChange={event => setTargetUsd(Number(event.target.value))}>{[500, 1000, 3000, 5000, 10000].map(value => <option key={value} value={value}>${value.toLocaleString()} / mo</option>)}</select></label>
+      <label><span>{zh ? 'RPM 下限假设' : 'RPM low assumption'}</span><input type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 4' : 'e.g. 4'} value={rpmLowInput} onChange={event => setRpmLowInput(event.target.value)}/></label>
+      <label><span>{zh ? 'RPM 上限假设' : 'RPM high assumption'}</span><input type="number" min="0" step="0.5" inputMode="decimal" placeholder={zh ? '例如 8' : 'e.g. 8'} value={rpmHighInput} onChange={event => setRpmHighInput(event.target.value)}/></label>
+      <label><span>{zh ? '每月计划视频' : 'Videos / month'}</span><input type="number" min="1" step="1" inputMode="numeric" value={videosPerMonth} onChange={event => setVideosPerMonth(Number(event.target.value))}/></label>
+    </div>
+    <div className="longform-planning-results">
+      <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '需要月播放' : 'Required monthly views'}</span><b>{monthlyViews}</b><small>{scenario.isScenario ? `${rpmLabel(scenario.rpmLowUsd)} – ${rpmLabel(scenario.rpmHighUsd)} RPM · ${zh ? '用户假设' : 'user assumption'}` : (zh ? '填写 RPM 区间后计算' : 'Enter an RPM range to calculate')}</small></article>
+      <article className={!scenario.isScenario ? 'unknown' : ''}><span>{zh ? '每条视频目标播放' : 'Views per video'}</span><b>{viewsPerVideo}</b><small>{zh ? '按月计划产量均摊，不代表成功率' : 'Distributed across planned output; not a success rate'}</small></article>
+      <article className={scenario.baselineVideosLow === null ? 'unknown' : ''}><span>{zh ? '按样本中位播放需多少条' : 'Videos at sample median'}</span><b>{baselineVideos}</b><small>{opportunity.medianViews === null ? (zh ? '当前方向没有中位播放数据' : 'No median-view data for this direction') : (zh ? `以样本中位 ${formatNumber(opportunity.medianViews, locale)} 播放作参考` : `Using sample median of ${formatNumber(opportunity.medianViews, locale)} views`)}</small></article>
+    </div>
+    <div className="longform-production-boundary"><div className="longform-planning-head"><div><span className="longform-kicker">AI PRODUCTION</span><b>{zh ? '生产可行性边界' : 'Production feasibility boundary'}</b><small>{zh ? '当前接口没有重试率、延迟、质量或真实制作成本，以下结论保持未知。' : 'The current API has no retry, latency, quality or real production-cost evidence, so these stay unknown.'}</small></div></div><div className="longform-production-grid">{[zh ? 'AI 适配性' : 'AI suitability', zh ? 'AI 可规模化' : 'AI scalability', zh ? '制作成本' : 'Production cost', zh ? '返工 / 重试风险' : 'Rework / retry risk'].map(label => <article key={label}><span>{label}</span><b>UNKNOWN</b></article>)}</div><p>{zh ? `已知制作形式：${opportunity.productionType}；公开执行适配分：${score(opportunity.execution.score)}。这不等同于 AI 成本或规模化结论。` : `Observed production type: ${opportunity.productionType}; public execution-fit score: ${score(opportunity.execution.score)}. This is not an AI cost or scalability conclusion.`}</p></div>
+  </section>;
+}
+
 function DecisionSummary({ opportunity, locale }: { opportunity: LongformOpportunity | null; locale: UiLocale }) {
   const zh = locale === 'zh';
   const recommendation = recommendationFor(opportunity, locale);
@@ -183,6 +221,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '需求强度与供给空位' : 'Demand and supply gap'}/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit} hint={zh ? '结构是否容易复用' : 'Repeatable production fit'}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink" hint={zh ? '综合验证优先级' : 'Combined validation priority'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
+    <LongformPlanningPanel opportunity={opportunity} locale={locale}/>
     <div className="longform-lanes" id="research-pattern">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence" id="research-competition"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
     <details className="longform-representatives" id="research-evidence"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map((video, index) => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale} priority={index < 2}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
