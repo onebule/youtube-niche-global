@@ -184,3 +184,53 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 .viral-case-corpus-quick-filters{display:flex;align-items:center;gap:6px;padding:9px 16px;border-bottom:1px solid var(--desk-line);background:#f7f3ed}.viral-case-corpus-quick-filters>span{margin-right:3px;color:#897e73;font:800 9px ui-monospace,"Cascadia Mono",monospace;letter-spacing:.08em;text-transform:uppercase}.viral-case-corpus-quick-filters button{padding:6px 8px;border:1px solid #d7cec2;background:transparent;color:#625a51;font:800 10px/1 inherit;cursor:pointer}.viral-case-corpus-quick-filters button:hover,.viral-case-corpus-quick-filters button.active{border-color:#30675b;background:#30675b;color:#fff}.viral-case-corpus-quick-filters button b{margin-left:3px;color:#897e73}.viral-case-corpus-quick-filters button:hover b,.viral-case-corpus-quick-filters button.active b{color:#f3be79}.viral-case-corpus-card{content-visibility:auto;contain-intrinsic-size:360px}.viral-case-corpus-actions{display:flex;gap:7px}.viral-case-corpus-actions button{flex:1;min-height:33px;padding:0 10px;border:1px solid #c83a2e;background:transparent;color:#a82f26;font:800 11px/1 inherit;cursor:pointer}.viral-case-corpus-actions button:first-child{border-color:#d7cec2;color:#625a51}.viral-case-corpus-actions button:first-child:hover{border-color:#30675b;background:#eef4f0;color:#30675b}.viral-case-corpus-actions button.primary{border-color:#c83a2e;background:#c83a2e;color:#fff}.viral-case-corpus-actions button.primary:hover{background:#a82f26}.viral-case-corpus-actions button:disabled{cursor:not-allowed;opacity:.45}.viral-case-corpus-actions button:focus-visible,.viral-case-corpus-quick-filters button:focus-visible{outline:2px solid #1f6f63;outline-offset:2px}
 [data-theme="dark"] .viral-case-corpus-quick-filters{background:#2b2520}[data-theme="dark"] .viral-case-corpus-quick-filters button{border-color:#51463d;color:#bfb4a9}[data-theme="dark"] .viral-case-corpus-actions button:first-child{border-color:#51463d;color:#bfb4a9}[data-theme="dark"] .viral-case-corpus-actions button:first-child:hover{background:#183b34;color:#9ee0cf}
 @media(max-width:620px){.viral-case-corpus-quick-filters{overflow-x:auto}.viral-case-corpus-actions{flex-direction:column}}
+
+/* Monitoring center: make sync state, empty state and rule creation read as
+   one compact workflow. The right rail stays intentionally quiet so the
+   floating assistant never competes with the controls. */
+.watchlists-page{max-width:1140px;padding-bottom:76px}
+.watchlists-page .page-intro{max-width:900px;margin-bottom:21px}
+.watchlists-status{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;margin:0 0 17px;padding:13px 16px;border:1px solid var(--desk-line);border-left:4px solid var(--desk-moss);background:#f7f3ed}
+.watchlists-status.is-syncing{border-left-color:var(--desk-orange)}
+.watchlists-status.is-fallback{border-left-color:var(--desk-red);background:#fff3f0}
+.watchlists-status-mark{display:grid;place-items:center;width:27px;height:27px;border:1px solid currentColor;border-radius:50%;color:var(--desk-moss);font:800 15px/1 ui-monospace,"Cascadia Mono",monospace}
+.watchlists-status.is-syncing .watchlists-status-mark{color:#b2762d;animation:watchlists-spin 1.2s linear infinite}
+.watchlists-status.is-fallback .watchlists-status-mark{color:var(--desk-red)}
+.watchlists-status>div{min-width:0}
+.watchlists-status b{display:block;color:var(--desk-ink);font-size:13px}
+.watchlists-status p{margin:3px 0 0;color:var(--desk-muted);font-size:11px;line-height:1.45}
+.watchlists-status button{min-height:33px;padding:0 11px;border:1px solid var(--desk-line);background:transparent;color:var(--desk-ink);font:800 11px/1 inherit;cursor:pointer}
+.watchlists-status button:hover{border-color:var(--desk-moss);color:var(--desk-moss)}
+.watchlists-status button:disabled{cursor:wait;opacity:.58}
+.watchlists-rules{gap:1px;margin-bottom:17px;border:1px solid var(--desk-line);background:var(--desk-line)}
+.watchlists-rules .watch-card{min-height:92px;padding:16px 17px;border:0;border-radius:0;background:var(--desk-paper)}
+.watchlists-rules .watch-card:hover{background:#fff8f2}
+.watchlists-rules .watch-card h2{margin:7px 0 5px;color:var(--desk-ink);font-family:Georgia,"Songti SC",serif;font-size:19px;font-weight:600;letter-spacing:-.025em}
+.watchlists-rules .watch-card p{color:var(--desk-muted);line-height:1.45}
+.watchlists-rules .toggle{flex:0 0 auto;padding:6px 0 6px 10px;cursor:pointer}
+.watchlists-empty{display:flex;align-items:center;gap:15px;min-height:128px;margin:0 0 17px;padding:22px 24px;border:1px dashed var(--desk-line);background:var(--desk-paper)}
+.watchlists-empty-mark{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--desk-moss);border-radius:50%;color:var(--desk-moss);font:400 23px/1 Georgia,serif}
+.watchlists-empty b{display:block;color:var(--desk-ink);font:700 19px/1.2 Georgia,"Songti SC",serif}
+.watchlists-empty p{margin:6px 0 0;color:var(--desk-muted);font-size:12px;line-height:1.5}
+.watchlists-form{margin-top:0;padding:19px 21px 20px;border:1px solid var(--desk-line);background:var(--desk-paper)}
+.watchlists-form-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:14px;border-bottom:1px solid var(--desk-line)}
+.watchlists-kicker{color:var(--desk-red);font:800 10px/1 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.1em;text-transform:uppercase}
+.watchlists-form h2{margin:6px 0 4px;color:var(--desk-ink);font:700 23px/1.12 Georgia,"Songti SC",serif;letter-spacing:-.035em}
+.watchlists-form-head p{margin:0;color:var(--desk-muted);font-size:11px;line-height:1.45}
+.watchlists-form-note{flex:0 0 auto;padding:5px 8px;border:1px solid #d8cabb;color:var(--desk-moss);font:800 10px/1 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.06em}
+.watchlists-form-grid{display:grid;grid-template-columns:minmax(250px,1.5fr) repeat(3,minmax(122px,.68fr)) auto;align-items:end;gap:9px;margin-top:16px}
+.watchlists-field{display:grid;min-width:0;gap:6px}
+.watchlists-field>span{color:var(--desk-muted);font:800 10px/1 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.06em}
+.watchlists-field input,.watchlists-field select{box-sizing:border-box;width:100%;height:42px;padding:0 10px;border:1px solid #d6cec3;border-radius:0;background:#fffdfa;color:var(--desk-ink);font-size:12px}
+.watchlists-field input:focus,.watchlists-field select:focus{outline:none;border-color:var(--desk-moss);box-shadow:0 0 0 3px rgba(48,103,91,.1)}
+.watchlists-submit{min-height:42px;padding:0 15px;border-radius:0;white-space:nowrap;font-size:12px}
+.watchlists-submit span{margin-left:8px;font-size:15px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@keyframes watchlists-spin{to{transform:rotate(360deg)}}
+[data-theme="dark"] .watchlists-status,[data-theme="dark"] .watchlists-form,[data-theme="dark"] .watchlists-empty,[data-theme="dark"] .watchlists-rules .watch-card{background:var(--desk-paper);border-color:var(--desk-line)}
+[data-theme="dark"] .watchlists-status.is-fallback{background:#30211e}
+[data-theme="dark"] .watchlists-form-note{border-color:var(--desk-line)}
+[data-theme="dark"] .watchlists-field input,[data-theme="dark"] .watchlists-field select{border-color:#51463d;background:#171412;color:var(--desk-ink)}
+@media(max-width:980px){.watchlists-page{max-width:none}.watchlists-form-grid{grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(110px,.7fr)) auto}}
+@media(max-width:760px){.watchlists-status{grid-template-columns:auto minmax(0,1fr);align-items:start}.watchlists-status button{grid-column:2;width:max-content}.watchlists-form-head{flex-direction:column}.watchlists-form-note{align-self:flex-start}.watchlists-form-grid{grid-template-columns:1fr 1fr}.watchlists-field-name{grid-column:1/-1}.watchlists-submit{grid-column:1/-1;width:100%}}
+@media(max-width:480px){.watchlists-page{padding-bottom:52px}.watchlists-status{padding:12px}.watchlists-empty{min-height:104px;padding:18px}.watchlists-form{padding:17px 14px}.watchlists-form-grid{grid-template-columns:1fr}.watchlists-field-name,.watchlists-submit{grid-column:auto}.watchlists-submit{width:100%}}

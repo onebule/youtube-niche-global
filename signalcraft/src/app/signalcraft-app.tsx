@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { channels, getOpportunity, initialAlerts, initialCollections, initialIdeas, initialTasks, promptTemplates, watchRules } from '@/src/lib/mock';
 import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
 import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from '@/src/lib/types';
@@ -335,7 +335,73 @@ function ThumbnailLab({state,openDetail,locale}:{state:Persisted;openDetail:(v:V
 
 function Research({state,setState,openDetail,locale}:{state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;openDetail:(v:Video)=>void;locale:UiLocale}){return <Discovery mode="research" state={state} setState={setState} openDetail={openDetail} locale={locale}/>}
 function Watchlists({state,setState,toast}:{state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;toast:(t:string)=>void}){return <main className="app-page"><PageIntro label="视频警报" title="让值得研究的异常自己来找你。" body="为关键词、频道或赛道设置最低信号分数与检查频率。规则会保存在当前账号的此设备；后台检测和邮件、Webhook 会在账户数据库接入后启用。"/>{state.rules.length?<div className="watch-grid">{state.rules.map(rule=><article className="watch-card" key={rule.id}><div><span className="tag">{rule.type}</span><h2>{rule.name}</h2><p>{rule.frequency} · 信号评分 ≥ {rule.threshold} · {rule.channel}</p></div><label className="toggle"><input type="checkbox" checked={!rule.paused} onChange={()=>setState(s=>({...s,rules:s.rules.map(r=>r.id===rule.id?{...r,paused:!r.paused}:r)}))}/><span /></label></article>)}</div>:<Empty title="还没有视频警报" body="创建规则后会保存在当前账号的此设备，等待服务器定时检测接入。"/>}<div className="inline-form"><input placeholder="例如：英语 AI 效率低粉爆发" id="ruleName"/><select id="ruleType"><option>关键词</option><option>频道</option><option>赛道</option></select><select id="ruleThreshold" defaultValue="75"><option value="65">信号 ≥ 65</option><option value="75">信号 ≥ 75</option><option value="85">信号 ≥ 85</option></select><select id="ruleFrequency" defaultValue="每 6 小时"><option>每 6 小时</option><option>每天一次</option><option>每周一次</option></select><button className="primary" onClick={()=>{const input=document.getElementById('ruleName') as HTMLInputElement;const type=document.getElementById('ruleType') as HTMLSelectElement;const threshold=document.getElementById('ruleThreshold') as HTMLSelectElement;const frequency=document.getElementById('ruleFrequency') as HTMLSelectElement;if(!input.value.trim())return toast('请先填写规则名称');setState(s=>({...s,rules:[...s.rules,{id:`w${Date.now()}`,name:input.value,type:type.value as WatchRule['type'],threshold:Number(threshold.value),frequency:frequency.value,channel:'站内通知',paused:false}]}));input.value='';toast('视频警报已创建')}}>创建警报</button></div></main>}
-function PersistentWatchlists({state,setState,toast,account}:{state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;toast:(t:string)=>void;account:AccountSession|null}){const [syncing,setSyncing]=useState(false);useEffect(()=>{if(!account?.accessToken)return;let active=true;const start=window.setTimeout(()=>{if(active)setSyncing(true)},0);void loadMonitorRules().then(rules=>{if(active)setState(s=>({...s,rules}))}).catch(()=>{if(active)toast('监控服务暂不可用，继续使用当前账号的本地规则。')}).finally(()=>{if(active)setSyncing(false)});return()=>{active=false;window.clearTimeout(start)}},[account?.accessToken,setState,toast]);const toggle=async(rule:WatchRule)=>{const paused=!rule.paused;setState(s=>({...s,rules:s.rules.map(item=>item.id===rule.id?{...item,paused}:item)}));if(!account?.accessToken||rule.id.startsWith('local-'))return;try{await updateMonitorRule(rule.id,{paused})}catch{toast('服务器同步失败，已保留本地开关状态。')}};const create=async()=>{const input=document.getElementById('ruleName') as HTMLInputElement|null;const type=document.getElementById('ruleType') as HTMLSelectElement|null;const threshold=document.getElementById('ruleThreshold') as HTMLSelectElement|null;const frequency=document.getElementById('ruleFrequency') as HTMLSelectElement|null;if(!input?.value.trim())return toast('请先填写规则名称');const draft:Omit<WatchRule,'id'>={name:input.value.trim(),type:(type?.value||'关键词') as WatchRule['type'],threshold:Number(threshold?.value||75),frequency:frequency?.value||'每天一次',channel:'站内通知',paused:false};input.value='';if(account?.accessToken){try{const rule=await createMonitorRule(draft);setState(s=>({...s,rules:[rule,...s.rules]}));toast('视频警报已创建并同步')}catch{const localRule={...draft,id:`local-${Date.now()}`};setState(s=>({...s,rules:[localRule,...s.rules]}));toast('服务器暂不可用，已保存到当前账号本地')}}else{const localRule={...draft,id:`local-${Date.now()}`};setState(s=>({...s,rules:[localRule,...s.rules]}));toast('视频警报已保存到当前账号本地')}};return <main className="app-page"><PageIntro label="视频警报" title="让值得研究的异常自己来找你。" body="为关键词、频道或赛道设置最低信号分数与检查频率。登录后会同步到当前账号；未登录时仍保留本地规则。"/>{syncing&&<div className="api-note" role="status">正在同步当前账号的监控规则…</div>}{state.rules.length?<div className="watch-grid">{state.rules.map(rule=><article className="watch-card" key={rule.id}><div><span className="tag">{rule.type}</span><h2>{rule.name}</h2><p>{rule.frequency} · 信号评分 ≥ {rule.threshold} · {rule.channel}</p></div><label className="toggle"><input type="checkbox" checked={!rule.paused} onChange={()=>void toggle(rule)}/><span /></label></article>)}</div>:<Empty title="还没有视频警报" body="创建规则后会保存在当前账号，等待服务器定时检测接入。"/>}<div className="inline-form"><input placeholder="例如：英语 AI 效率低粉爆发" id="ruleName"/><select id="ruleType"><option>关键词</option><option>频道</option><option>赛道</option></select><select id="ruleThreshold" defaultValue="75"><option value="65">信号 ≥ 65</option><option value="75">信号 ≥ 75</option><option value="85">信号 ≥ 85</option></select><select id="ruleFrequency" defaultValue="每 6 小时"><option>每 6 小时</option><option>每天一次</option><option>每周一次</option></select><button className="primary" onClick={()=>void create()}>创建警报</button></div></main>}
+type MonitoringSyncState = 'idle' | 'syncing' | 'synced' | 'fallback';
+
+function PersistentWatchlists({state,setState,toast,account}:{state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;toast:(t:string)=>void;account:AccountSession|null}) {
+  const [syncState,setSyncState]=useState<MonitoringSyncState>('idle');
+  const syncGeneration=useRef(0);
+  const syncRules=useCallback(async()=>{
+    const generation=++syncGeneration.current;
+    if(!account?.accessToken){setSyncState('idle');return;}
+    setSyncState('syncing');
+    try {
+      const rules=await loadMonitorRules();
+      if(generation!==syncGeneration.current)return;
+      setState(current=>({...current,rules}));
+      setSyncState('synced');
+    } catch {
+      if(generation!==syncGeneration.current)return;
+      // Keep the current account's local rules visible when cloud persistence is unavailable.
+      setSyncState('fallback');
+    }
+  },[account?.accessToken,setState]);
+  useEffect(()=>{void syncRules();return()=>{syncGeneration.current+=1}},[syncRules]);
+  const toggle=async(rule:WatchRule)=>{
+    const paused=!rule.paused;
+    setState(s=>({...s,rules:s.rules.map(item=>item.id===rule.id?{...item,paused}:item)}));
+    if(!account?.accessToken||rule.id.startsWith('local-'))return;
+    try{await updateMonitorRule(rule.id,{paused})}catch{toast('服务器同步失败，已保留本地开关状态。')}
+  };
+  const create=async()=>{
+    const input=document.getElementById('ruleName') as HTMLInputElement|null;
+    const type=document.getElementById('ruleType') as HTMLSelectElement|null;
+    const threshold=document.getElementById('ruleThreshold') as HTMLSelectElement|null;
+    const frequency=document.getElementById('ruleFrequency') as HTMLSelectElement|null;
+    if(!input?.value.trim())return toast('请先填写规则名称');
+    const draft:Omit<WatchRule,'id'>={name:input.value.trim(),type:(type?.value||'关键词') as WatchRule['type'],threshold:Number(threshold?.value||75),frequency:frequency?.value||'每天一次',channel:'站内通知',paused:false};
+    input.value='';
+    if(account?.accessToken){
+      try{const rule=await createMonitorRule(draft);setState(s=>({...s,rules:[rule,...s.rules]}));setSyncState('synced');toast('视频警报已创建并同步')}
+      catch{const localRule={...draft,id:`local-${Date.now()}`};setState(s=>({...s,rules:[localRule,...s.rules]}));setSyncState('fallback');toast('服务器暂不可用，已保存到当前账号本地')}
+    } else {
+      const localRule={...draft,id:`local-${Date.now()}`};
+      setState(s=>({...s,rules:[localRule,...s.rules]}));
+      toast('视频警报已保存到当前账号本地');
+    }
+  };
+  const status=account?.accessToken?syncState:'idle';
+  const statusTitle=status==='syncing'?'正在同步当前账号':status==='synced'?'已同步当前账号规则':status==='fallback'?'云端暂不可用，已切换本地模式':'本地规则模式';
+  const statusBody=status==='syncing'?'读取云端规则，页面不会替换本账号的本地资产。':status==='synced'?`共 ${state.rules.length} 条规则 · 云端数据已就绪`:status==='fallback'?'规则仍保留在当前账号；服务恢复后可重新同步。':'未登录时规则只保存在此设备；登录后可同步到当前账号。';
+  return <main className="app-page watchlists-page">
+    <PageIntro label="视频警报" title="让值得研究的异常自己来找你。" body="为关键词、频道或赛道设置最低信号分数与检查频率。登录后会同步到当前账号；未登录时仍保留本地规则。"/>
+    <section className={cn('watchlists-status',`is-${status}`)} role="status" aria-live="polite">
+      <span className="watchlists-status-mark" aria-hidden="true">{status==='syncing'?'↻':status==='synced'?'✓':status==='fallback'?'!':'•'}</span>
+      <div><b>{statusTitle}</b><p>{statusBody}</p></div>
+      {account?.accessToken&&<button type="button" onClick={()=>void syncRules()} disabled={status==='syncing'}>{status==='syncing'?'同步中…':'重新同步'}</button>}
+    </section>
+    {state.rules.length?<div className="watch-grid watchlists-rules" aria-label="当前视频警报">{state.rules.map(rule=><article className="watch-card" key={rule.id}><div><span className="tag">{rule.type}</span><h2>{rule.name}</h2><p>{rule.frequency} · 信号评分 ≥ {rule.threshold} · {rule.channel}</p></div><label className="toggle"><span className="sr-only">{rule.name} {rule.paused?'已暂停':'已启用'}</span><input type="checkbox" checked={!rule.paused} onChange={()=>void toggle(rule)}/><span aria-hidden="true" /></label></article>)}</div>:<section className="watchlists-empty"><span className="watchlists-empty-mark" aria-hidden="true">◇</span><div><b>还没有视频警报</b><p>从下方创建第一条规则；它只会写入当前账号。</p></div></section>}
+    <section className="watchlists-form" aria-label="创建视频警报">
+      <div className="watchlists-form-head"><div><span className="watchlists-kicker">新建规则</span><h2>告诉我你要盯什么</h2><p>从关键词、频道或赛道开始，设置触发门槛和检查频率。</p></div><span className="watchlists-form-note">当前账号</span></div>
+      <div className="watchlists-form-grid">
+        <label className="watchlists-field watchlists-field-name"><span>规则名称</span><input placeholder="例如：英语 AI 效率低粉爆发" id="ruleName"/></label>
+        <label className="watchlists-field"><span>监控对象</span><select id="ruleType" defaultValue="关键词"><option>关键词</option><option>频道</option><option>赛道</option></select></label>
+        <label className="watchlists-field"><span>信号门槛</span><select id="ruleThreshold" defaultValue="75"><option value="65">信号 ≥ 65</option><option value="75">信号 ≥ 75</option><option value="85">信号 ≥ 85</option></select></label>
+        <label className="watchlists-field"><span>检查频率</span><select id="ruleFrequency" defaultValue="每 6 小时"><option>每 6 小时</option><option>每天一次</option><option>每周一次</option></select></label>
+        <button className="primary watchlists-submit" type="button" onClick={()=>void create()}>创建警报 <span aria-hidden="true">→</span></button>
+      </div>
+    </section>
+  </main>
+}
 function Benchmarks({state,toast,locale}:{state:Persisted;toast:(t:string)=>void;locale:UiLocale}){const [compare,setCompare]=useState<string[]>([]);const candidate=state.saved;const selected=compare.map(id=>candidate.find(v=>v.id===id)).filter(Boolean) as Video[];return <main className="app-page"><PageIntro label="竞品与对标" title="把竞品的高表现视频放在同一张研究桌上。" body="收藏频道与视频后，可比较 2–5 个公开视频的播放、相对表现、速度与共同标签；所有结论都能回到原视频。"/>{state.collections.length?<div className="collection-grid">{state.collections.map(c=><article className="collection" key={c.id}><span style={{background:c.color}} /><div><h2>{c.name}</h2><p>{c.items.length} 个项目 · 当前账号</p></div><button onClick={()=>toast('跨设备分享将在账户与数据库接入后开放')}>分享</button></article>)}</div>:<Empty title="还没有竞品对标组" body="在真实视频的证据页点击“加入对标组”即可创建。"/>}<div className="compare-picker"><h2>快速比较</h2><p>选择 2–5 个已收藏的真实视频。</p>{candidate.length?candidate.map(v=>{const titleZh=translatedTitle(v,locale);return <label key={v.id}><input type="checkbox" checked={compare.includes(v.id)} onChange={()=>setCompare(x=>x.includes(v.id)?x.filter(i=>i!==v.id):x.length<5?[...x,v.id]:x)}/><span>{v.title}{titleZh&&<small className="title-translation">中文：{titleZh}</small>}</span></label>}):<p>先在发现页收藏至少两个视频。</p>}</div>{selected.length>=2&&<div className="compare-table"><div className="compare-heading"><b>指标</b>{selected.map(v=>{const titleZh=translatedTitle(v,locale);return <b key={v.id}><span>{v.title.slice(0,14)}…</span>{titleZh&&<small className="title-translation">{titleZh}</small>}</b>})}</div>{[['机会评分',(v:Video)=>scoreFor(v).opportunityScore],['播放 / 订阅',(v:Video)=>`${scoreFor(v).viewsPerSubscriber}×`],['每小时播放',(v:Video)=>num.format(scoreFor(v).viewsPerHour)],['发布时间',(v:Video)=>date(v.publishedAt)],['共同标签',(v:Video)=>v.tags.slice(0,2).join(' / ')]].map(([label,fn])=><div className="compare-row" key={label as string}><span>{label as string}</span>{selected.map(v=><span key={v.id}>{(fn as (v:Video)=>React.ReactNode)(v)}</span>)}</div>)}</div>}</main>}
 function Ideas({state,setState,locale}:{state:Persisted;setState:React.Dispatch<React.SetStateAction<Persisted>>;locale:UiLocale}){const statuses:IdeaStatus[]=['收集','验证','制作中','已发布','复盘'];return <main className="app-page"><PageIntro label="选题实验室" title="从信号到制作，再到复盘。" body="每张选题卡都保留真实来源视频，避免凭感觉断开数据。"/><div className="kanban">{statuses.map(status=><section key={status}><div className="kanban-head"><b>{status}</b><span>{state.ideas.filter(i=>i.status===status).length}</span></div>{state.ideas.filter(i=>i.status===status).map(i=>{const v=state.saved.find(v=>v.id===i.sourceVideoId),titleZh=v?translatedTitle(v,locale):null;return <article className="idea" key={i.id}><span className="tag">来源 {v?scoreFor(v).opportunityScore:'数据已不可用'} </span>{v&&<small className="title-translation idea-source-title">来源视频：{titleZh||v.title}</small>}<h3>{i.title}</h3><p>{i.angle}</p><small>{i.owner} · {date(i.createdAt)}</small><select value={i.status} onChange={e=>setState(s=>({...s,ideas:s.ideas.map(x=>x.id===i.id?{...x,status:e.target.value as IdeaStatus}:x)}))}>{statuses.map(x=><option key={x}>{x}</option>)}</select></article>})}{!state.ideas.some(i=>i.status===status)&&<p className="muted">请从真实视频的证据页创建选题。</p>}</section>)}</div></main>}
 function Prompts({toast}:{toast:(t:string)=>void}){return <main className="app-page"><PageIntro label="提示词库" title="把研究方法沉淀成可复用模板。" body="提示词会在真实 AI 接入后带入选题上下文。"/>{promptTemplates.length?<div className="prompt-list">{promptTemplates.map(p=><article key={p.id}><div><span className="tag">{p.category}</span><h2>{p.title}</h2><p>{p.body}</p><small>{p.version} · {p.enabled?'已启用':'已停用'}</small></div><button className="primary" onClick={()=>navigator.clipboard?.writeText(p.body).then(()=>toast('提示词模板已复制'))}>复制模板</button></article>)}</div>:<Empty title="暂无自定义提示词" body="创建与保存提示词需要账户数据库接入，当前不展示预置内容。"/>}</main>}
