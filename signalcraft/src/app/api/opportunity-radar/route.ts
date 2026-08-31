@@ -29,12 +29,12 @@ export async function GET(request: NextRequest) {
         // Keep non-JSON upstream responses out of the user-facing error text.
       }
       return Response.json(
-        { ...payload, error: clientErrorMessage(payload.error, `机会雷达数据服务暂时不可用（HTTP ${response.status}）。`) },
+        { ...payload, error: clientErrorMessage(payload.error, `长视频趋势雷达数据服务暂时不可用（HTTP ${response.status}）。`) },
         { status: response.status, headers: { 'cache-control': 'no-store' } },
       );
     }
     return new Response(body, { status: response.status, headers: { 'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
   } catch {
-    return Response.json({ error: '机会雷达数据服务暂时不可达，请稍后重试。' }, { status: 502, headers: { 'cache-control': 'no-store' } });
+    return Response.json({ error: '长视频趋势雷达数据服务暂时不可达，请稍后重试。' }, { status: 502, headers: { 'cache-control': 'no-store' } });
   }
 }

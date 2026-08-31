@@ -381,7 +381,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
         <span>✦</span>
         <p className="eyebrow">VIRAL CASE DESK</p>
         <h1>先带回一个真实样本，再开始拆解。</h1>
-        <p>爆款拆解只处理你在发现、排行榜或机会雷达中保存的公开视频。这样每条笔记都能回到原视频与公开信号，不会被演示数据污染。</p>
+        <p>爆款拆解只处理你在发现、排行榜或趋势雷达中保存的公开视频。这样每条笔记都能回到原视频与公开信号，不会被演示数据污染。</p>
         {importPanel}
         <button className="primary" onClick={onDiscover}>去发现真实视频</button>
       </section>

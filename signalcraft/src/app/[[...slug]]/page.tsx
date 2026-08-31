@@ -15,20 +15,20 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     description: '查看近期公开视频和频道的播放表现、增长信号与内容形态。',
   },
   '/radar': {
-    title: 'YouTube 机会雷达',
-    description: '发现正在形成的长视频新兴、升温、突破、拥挤与回落信号；不替代排行榜。',
+    title: 'YouTube 长视频趋势雷达',
+    description: '识别长视频市场最近出现的新兴、升温、突破、拥挤与回落信号；不替代排行榜或赛道评估。',
   },
   '/radar/all': {
-    title: 'YouTube 全部机会信号',
-    description: '分别查看长视频与 Shorts 的机会变化；不同内容形态使用各自的基线、窗口与证据链。',
+    title: 'YouTube 双形态信号总览',
+    description: '并列查看长视频与 Shorts 趋势信号；不同内容形态使用各自的基线、窗口与证据链。',
   },
   '/longform': {
-    title: 'YouTube 赛道研究',
-    description: '基于公开长视频样本，判断赛道长期机会、执行适配、证据覆盖与代表视频。',
+    title: 'YouTube 长视频赛道评估',
+    description: '基于公开长视频样本，判断一个方向是否值得长期进入，并查看市场机会、执行适配、证据覆盖与代表视频。',
   },
   '/short-radar': {
-    title: 'YouTube 短视频机会雷达',
-    description: '用独立的 Shorts 机会雷达查看跨频道扩散、中小频道突破与供给变化；不改变现有短视频榜单。',
+    title: 'YouTube Shorts 趋势雷达',
+    description: '用独立的 Shorts 趋势雷达查看跨频道扩散、中小频道突破与供给变化；不改变现有短视频榜单。',
   },
   '/doctor': {
     title: 'YouTube 频道诊断',

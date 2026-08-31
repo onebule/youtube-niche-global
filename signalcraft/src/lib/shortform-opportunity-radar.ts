@@ -91,6 +91,6 @@ export async function fetchShortformOpportunityRadar(input: { market?: string; w
     signal: options.signal,
   });
   const payload = await response.json().catch(() => ({})) as ShortformRadarResponse & { error?: unknown };
-  if (!response.ok) throw new Error(clientErrorMessage(payload.error, '短视频机会雷达数据暂时不可用。'));
+  if (!response.ok) throw new Error(clientErrorMessage(payload.error, 'Shorts 趋势雷达数据暂时不可用。'));
   return payload;
 }

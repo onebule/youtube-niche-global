@@ -91,6 +91,6 @@ export async function fetchOpportunityRadar(input: { market?: string; window?: '
     signal: options.signal,
   });
   const payload = await response.json().catch(() => ({})) as OpportunityRadarResponse & { error?: unknown };
-  if (!response.ok) throw new Error(clientErrorMessage(payload.error, '机会雷达数据暂时不可用。'));
+  if (!response.ok) throw new Error(clientErrorMessage(payload.error, '长视频趋势雷达数据暂时不可用。'));
   return payload;
 }
