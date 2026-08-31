@@ -30,6 +30,25 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 
 .video-grid{grid-template-columns:repeat(auto-fill,minmax(292px,1fr));gap:22px}.video-card{border:1px solid var(--desk-line);border-radius:0;background:var(--desk-paper);box-shadow:none;transition:transform .2s ease,box-shadow .2s ease}.video-card:hover{transform:translateY(-3px);border-color:#bfb3a5;box-shadow:0 16px 28px rgba(55,42,28,.12)}.thumb{height:196px;border-bottom:1px solid var(--desk-line)}.thumb-fallback{position:absolute;inset:0;display:grid;place-content:center;gap:5px;text-align:center;background:radial-gradient(circle at 33% 30%,#e06b55,transparent 25%),#3d2b2a;color:#fff;z-index:0}.thumb-fallback b{font-size:27px}.thumb-fallback span{font-size:10px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.thumb .video-format{border-radius:2px;background:rgba(25,23,21,.8);font-size:10px;letter-spacing:.03em}.thumb .score{border:0;border-radius:0;background:#fffdf9;box-shadow:none;color:var(--desk-red)}.card-body{padding:15px 16px 16px}.card-body .eyebrow{color:var(--desk-red);font-size:9px;letter-spacing:.11em}.video-title{min-height:51px;margin:7px 0 8px;color:var(--desk-ink);font-family:Georgia,"Songti SC",serif;font-size:18px;font-weight:600;letter-spacing:-.026em;line-height:1.38}.channel-line{padding-bottom:12px;border-bottom:1px solid #e8e1d7;color:#776e65}.metric-row{margin:12px 0 8px;padding:0;border:0}.metric-row b{font-family:Georgia,"Songti SC",serif;font-size:19px}.metric-row b small{font-family:ui-sans-serif,"PingFang SC",sans-serif;font-size:10px}.metric-row .up{color:var(--desk-moss)}.metric-row .spark{color:var(--desk-red)}.evidence-strip{display:flex;flex-wrap:wrap;gap:5px;padding:9px 0 11px;border-bottom:1px solid #e8e1d7;color:#776e65;font-size:10px}.evidence-strip span{padding:2px 5px;border:1px solid #dbd1c4;color:#776e65}.evidence-strip b{margin-left:auto;color:var(--desk-moss);font-size:10px}.card-actions{grid-template-columns:1fr 1fr;margin-top:12px}.card-actions button{min-height:37px;border-color:#cfc5b8;border-radius:0;background:transparent;color:#504840}.card-actions button:hover{border-color:var(--desk-red);background:#fff6f3;color:var(--desk-red)}.card-actions button:first-child{background:transparent;color:var(--desk-red);border-color:#dfbab4}.card-actions button:last-child:nth-child(3){grid-column:1/-1;background:var(--desk-ink);border-color:var(--desk-ink);border-radius:0;color:#fff}
 
+/* Public discovery: keep the grid readable and let a real YouTube thumbnail
+   win over the honest fallback. The fallback is intentionally retained for
+   missing or blocked public images; it never invents a preview asset. */
+.discover-page .filters{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 14px}
+.discover-page .result-toolbar{align-items:center;flex-wrap:wrap;gap:10px 14px}
+.discover-page .result-toolbar span:nth-child(2){margin-right:auto}
+.discover-page .video-grid{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.discover-page .video-card{min-width:0}
+.discover-page .thumb{height:auto;min-height:190px;aspect-ratio:16/9;overflow:hidden}
+.discover-page .thumb>img.video-card-image{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;object-fit:cover}
+.discover-page .thumb>img.video-card-image.is-hidden{display:none}
+.discover-page .thumb-fallback{z-index:0;transition:opacity .16s ease,visibility .16s ease}
+.discover-page .thumb-fallback.is-hidden{visibility:hidden;opacity:0;pointer-events:none}
+.discover-page .thumb-fallback small{font-size:10px;color:rgba(255,255,255,.8);letter-spacing:.04em}
+.discover-page .thumb-no-image .thumb-fallback{background:linear-gradient(145deg,#2b3536,#26302f)}
+.discover-page .video-title{min-height:54px}
+@media(max-width:980px){.discover-page .filters{grid-template-columns:repeat(2,minmax(0,1fr))}.discover-page .video-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.discover-page .filters{grid-template-columns:1fr}.discover-page .video-grid{grid-template-columns:1fr}.discover-page .result-toolbar span:nth-child(2){width:100%;margin-right:0}}
+
 .radar-tabs{gap:0;margin:21px 0 0;border-bottom:1px solid var(--desk-line)}.radar-tabs button{margin-bottom:-1px;padding:10px 14px;border:1px solid transparent;border-radius:0;color:#756d64;font-size:13px;font-weight:800}.radar-tabs .active{border-color:var(--desk-line);border-bottom-color:var(--desk-paper);background:var(--desk-paper);color:var(--desk-red)}.cluster-list{gap:25px;margin-top:18px}.cluster{padding:20px;border:1px solid var(--desk-line);border-radius:0;background:var(--desk-paper)}.cluster-head{align-items:end;padding-bottom:15px;border-bottom:1px solid var(--desk-line)}.cluster-head h2{font-family:Georgia,"Songti SC",serif;font-size:27px;font-weight:600;letter-spacing:-.04em}.cluster-head .score{border-radius:0}.mini-grid{padding-top:17px;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 
 /* Keep the filter rail in the same document flow as the ranking list. */
