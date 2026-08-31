@@ -1,5 +1,6 @@
 import { authHeaders } from './auth';
 import { clientErrorMessage } from './client-error';
+import { normalizeLongformResponse } from './longform-response';
 
 export type LongformOpportunity = {
   key: string;
@@ -40,5 +41,5 @@ export async function fetchLongformOpportunities(input: { market: string; window
   const response = await fetch(`/api/longform-opportunities?${params.toString()}`, { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store', signal: options.signal });
   const payload = await response.json().catch(() => ({})) as LongformResponse & { error?: unknown };
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, '长视频机会数据暂时不可用。'));
-  return payload;
+  return normalizeLongformResponse(payload);
 }
