@@ -18,9 +18,10 @@ export type ViralCaseAnalysisResponse = {
  * the adapter also refuses to invent a report when no provider is configured.
  */
 export async function requestViralCaseAnalysis(video: Video, model: ViralCaseAnalysisModelId = DEFAULT_VIRAL_CASE_ANALYSIS_MODEL): Promise<ViralCaseAnalysisResponse> {
+  const idempotencyKey = globalThis.crypto?.randomUUID?.() || `analysis-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const response = await fetch('/api/viral-case-analysis', {
     method: 'POST',
-    headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
+    headers: { accept: 'application/json', 'content-type': 'application/json', 'idempotency-key': idempotencyKey, ...authHeaders() },
     body: JSON.stringify({
       videoId: video.id,
       sourceUrl: video.sourceUrl,

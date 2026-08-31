@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
 
   const token = process.env.VIRAL_CASE_ANALYSIS_TOKEN?.trim();
   const incomingAuthorization = request.headers.get('authorization');
+  const incomingIdempotencyKey = request.headers.get('idempotency-key');
   try {
     const response = await fetch(upstream, {
       method: 'POST',
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
         accept: 'application/json',
         'content-type': 'application/json',
         ...(incomingAuthorization ? { authorization: incomingAuthorization } : token ? { authorization: `Bearer ${token}` } : {}),
+        ...(incomingIdempotencyKey ? { 'idempotency-key': incomingIdempotencyKey } : {}),
       },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(45_000),
