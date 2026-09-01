@@ -459,7 +459,9 @@ export function buildContentPatternReport(input: { videos: readonly ContentPatte
     const statusRank: Record<WinningPatternStatus, number> = { WINNING: 0, CANDIDATE: 1, INSUFFICIENT: 2 };
     return statusRank[a.winningPattern.status] - statusRank[b.winningPattern.status] || b.frequency.occurrences - a.frequency.occurrences || a.pattern.patternId.localeCompare(b.pattern.patternId);
   });
-  const dataAvailability = buildContentDataAvailability(input.videos);
+  // The P2 report is Long-form-only all the way through, including its field
+  // coverage audit. Shorts must not influence denominator or availability.
+  const dataAvailability = buildContentDataAvailability(videos);
   return {
     schemaVersion: 'content-patterns.v1', algorithmVersion: CONTENT_PATTERN_ALGORITHM_VERSION, scope: 'LONG_FORM', dataAvailability,
     input: { receivedVideos, longFormVideos: videos.length, excludedShorts, uniqueCreators: allCreators.length },

@@ -39,6 +39,7 @@ test('Shorts are excluded from Long-form candidates and aggregations', () => {
   const report = buildContentPatternReport({ videos: [video('s1', 'short-creator', 'How to win', { format: 'short' }), video('l1', 'long-creator', 'How to win')] });
   assert.equal(report.input.excludedShorts, 1);
   assert.equal(report.input.longFormVideos, 1);
+  assert.equal(report.dataAvailability.fields.videoTitle.sampleCount, 1);
   assert.ok(report.candidates.every(candidate => candidate.sourceVideoId === 'l1'));
 });
 
