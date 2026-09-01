@@ -51,6 +51,8 @@ test('Shorts and long-form receive independent format diagnoses', () => {
   const diagnosis = buildChannelDiagnosis(channel([...shorts, ...longs]), NOW);
   assert.equal(diagnosis.shortFormDiagnosis?.format, 'SHORTS');
   assert.equal(diagnosis.longFormDiagnosis?.format, 'LONG_FORM');
+  assert.equal(diagnosis.shortFormDiagnosis?.creatorBreakout, undefined);
+  assert.equal(diagnosis.longFormDiagnosis?.creatorBreakout?.format, 'long');
   assert.equal(diagnosis.topIssues.some(issue => issue.issueCode === 'FORMAT_CONFUSION'), true);
 });
 

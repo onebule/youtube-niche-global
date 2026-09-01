@@ -1,4 +1,5 @@
 import { channelDiagnosticConfig as config } from './channel-diagnostic-config.ts';
+import { buildCreatorBreakoutSummary, type CreatorBreakoutSummary } from './creator-breakout.ts';
 
 export type ChannelStage = 'NEW_CHANNEL' | 'EARLY_TESTING' | 'EARLY_GROWTH' | 'GROWTH' | 'STABLE' | 'MATURE' | 'DECLINING' | 'DORMANT' | 'INSUFFICIENT_DATA';
 export type ChannelState = 'HEALTHY_GROWTH' | 'HEALTHY_STABLE' | 'EARLY_EXPLORATION' | 'VOLATILE' | 'STALLED' | 'DECLINING' | 'HIT_DEPENDENT' | 'FORMAT_CONFUSED' | 'TOPIC_DRIFT' | 'DISTRIBUTION_ANOMALY' | 'LOW_REPEATABILITY' | 'DORMANT' | 'INSUFFICIENT_DATA';
@@ -64,6 +65,8 @@ export type FormatDiagnosis = {
   confidence: DiagnosticConfidence;
   metrics: DiagnosticMetrics;
   topIssues: DiagnosticIssue[];
+  /** Long-form-only creator baseline evidence; Shorts diagnostics remain unchanged. */
+  creatorBreakout?: CreatorBreakoutSummary;
 };
 
 export type ChannelDiagnosis = {
@@ -275,7 +278,10 @@ function formatDiagnosis(format: 'SHORTS' | 'LONG_FORM', videos: DiagnosticVideo
   if (!videos.length) return undefined;
   const metrics = metricFor(videos, now); const confidence = confidenceFor(videos); const stage = videos.length < config.minSample ? 'INSUFFICIENT_DATA' : 'STABLE';
   const issues = detectIssues(videos, metrics, metrics, confidence, now, stage);
-  return { format, sampleSize: videos.length, state: stateFor(metrics, issues, stage), confidence, metrics, topIssues: issues };
+  const creatorBreakout = format === 'LONG_FORM'
+    ? buildCreatorBreakoutSummary({ format: 'long', now: new Date(now), videos: videos.map(video => ({ id: video.id, format: 'long' as const, title: video.title, publishedAt: video.publishedAt, views: video.views, durationSeconds: video.durationSeconds })) })
+    : undefined;
+  return { format, sampleSize: videos.length, state: stateFor(metrics, issues, stage), confidence, metrics, topIssues: issues, ...(creatorBreakout ? { creatorBreakout } : {}) };
 }
 
 function trendFor(videos: DiagnosticVideo[], now: number) {

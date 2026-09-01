@@ -27,7 +27,8 @@ function DiagnosticIssueCard({ issue }: { issue: DiagnosticIssue }) {
 
 function FormatDiagnosisCard({ diagnosis }: { diagnosis: FormatDiagnosis }) {
   const label = diagnosis.format === 'SHORTS' ? 'Shorts' : '长视频';
-  return <article className="diagnostic-format-card"><header><div><span className="eyebrow">{label.toUpperCase()} DIAGNOSIS</span><h3>{label}独立诊断</h3></div><span>{stateLabels[diagnosis.state]}</span></header><div><b>{diagnosis.sampleSize}</b><small>条样本 · {confidenceLabels[diagnosis.confidence]}置信度</small></div><p>年龄校正播放中位数 {diagnosis.metrics.medianViewsPerDay.toLocaleString()} / 日；Top 3 播放占比 {diagnosis.metrics.top3ViewShare}%。</p></article>;
+  const breakout = diagnosis.creatorBreakout;
+  return <article className="diagnostic-format-card"><header><div><span className="eyebrow">{label.toUpperCase()} DIAGNOSIS</span><h3>{label}独立诊断</h3></div><span>{stateLabels[diagnosis.state]}</span></header><div><b>{diagnosis.sampleSize}</b><small>条样本 · {confidenceLabels[diagnosis.confidence]}置信度</small></div><p>年龄校正播放中位数 {diagnosis.metrics.medianViewsPerDay.toLocaleString()} / 日；Top 3 播放占比 {diagnosis.metrics.top3ViewShare}%。</p>{breakout ? <div className="diagnostic-breakout"><b>创作者 Long-form 基线</b><span>{breakout.repeatBreakoutStatus === 'INSUFFICIENT' ? '历史样本不足，暂不判断重复爆款' : `${breakout.breakoutVideos} 条爆款 / ${breakout.eligibleVideos} 条可比较视频 · ${breakout.repeatBreakoutStatus === 'REPEATED' ? '重复出现' : breakout.repeatBreakoutStatus === 'ONE_OFF' ? '单次出现' : '暂无爆款'}`}</span><small>中位倍数 {breakout.medianBreakoutMultiple === null ? '—' : `${breakout.medianBreakoutMultiple}×`} · 回顾性年龄校正 · 阈值校准状态：{breakout.calibrationStatus}</small></div> : null}</article>;
 }
 
 function DiagnosticSummaryV3({ diagnosis }: { diagnosis: ChannelDiagnosis }) {

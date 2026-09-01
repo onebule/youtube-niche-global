@@ -5,6 +5,7 @@ import { normalizeLongformResponse } from '../src/lib/longform-response.ts';
 import { normalizeOpportunityRadarResponse } from '../src/lib/opportunity-radar.ts';
 import { normalizeShortformRadarResponse } from '../src/lib/shortform-opportunity-radar.ts';
 import { readResearchUrlState, writeResearchUrlState } from '../src/lib/research-url-state.ts';
+import { buildCreatorBreakoutSummary } from '../src/lib/creator-breakout.ts';
 
 const longformFixture = {
   schemaVersion: 'longform.v3',
@@ -58,4 +59,18 @@ test('evidence fixture rejects malformed decision reasons instead of inventing p
   assert.equal(evidence.requestId, 'req-1');
   assert.equal(evidence.inputSnapshotId, 'in-1');
   assert.deepEqual(evidence.decisionReasons, [{ code: 'known', severity: 'CONTEXT', message: 'kept' }]);
+});
+
+test('creator breakout fixture replay is deterministic and keeps the retrospective boundary', () => {
+  const now = new Date('2026-09-01T00:00:00.000Z');
+  const video = (id, views, daysAgo) => {
+    const published = new Date(now.getTime() - daysAgo * 86_400_000);
+    return { id, format: 'long', publishedAt: published.toISOString(), views, snapshots: [{ capturedAt: new Date(published.getTime() + 86_400_000).toISOString(), views }] };
+  };
+  const fixture = { videos: [...Array.from({ length: 6 }, (_, index) => video(`n${index}`, 20_000, 30 + index)), video('breakout', 800_000, 5)], format: 'long', now };
+  const first = buildCreatorBreakoutSummary(fixture);
+  const replay = buildCreatorBreakoutSummary({ ...JSON.parse(JSON.stringify(fixture)), now });
+  assert.deepEqual(replay, first);
+  assert.equal(first.temporalSemantics, 'RETROSPECTIVE_BASELINE');
+  assert.equal(first.calibrationStatus, 'CALIBRATION_REQUIRED');
 });
