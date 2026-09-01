@@ -7,6 +7,7 @@ import { normalizeShortformRadarResponse } from '../src/lib/shortform-opportunit
 import { readResearchUrlState, writeResearchUrlState } from '../src/lib/research-url-state.ts';
 import { buildCreatorBreakoutSummary } from '../src/lib/creator-breakout.ts';
 import { buildNicheBreakoutSummary } from '../src/lib/niche-signals.ts';
+import { buildNicheLifecycleSummary } from '../src/lib/niche-lifecycle.ts';
 
 const longformFixture = {
   schemaVersion: 'longform.v3',
@@ -83,4 +84,13 @@ test('niche signal replay preserves creator breadth and signal types', () => {
   assert.deepEqual(replay, first);
   assert.equal(first.eligibleCreators, 6);
   assert.ok(first.signals.some(signal => signal.type === 'CROSS_CREATOR_BREAKOUT'));
+});
+
+test('niche lifecycle replay preserves retrospective semantics', () => {
+  const row = (id, creatorId, performance) => ({ nicheId: 'fixture-niche', videoId: id, creatorId, format: 'long', views: 100, normalizedPerformance: performance, subscriberCount: 20_000, baselineStatus: 'VERIFIED', baselineConfidence: 'HIGH', breakoutClassification: 'NORMAL', breakoutMultiple: 1, repeatBreakoutStatus: 'NONE' });
+  const makeWindow = (key, performance) => ({ nicheId: 'fixture-niche', format: 'long', key, start: key === 'current' ? '2026-08-01T00:00:00.000Z' : '2026-07-01T00:00:00.000Z', end: key === 'current' ? '2026-08-31T00:00:00.000Z' : '2026-07-31T00:00:00.000Z', timeSemantics: 'PUBLICATION_COHORT_HISTORY', coverage: 1, observations: Array.from({ length: 6 }, (_, index) => row(`${key}-${index}`, `creator-${index % 3}`, performance)) });
+  const first = buildNicheLifecycleSummary(makeWindow('current', 120), makeWindow('comparison', 100));
+  const replay = buildNicheLifecycleSummary(JSON.parse(JSON.stringify(makeWindow('current', 120))), JSON.parse(JSON.stringify(makeWindow('comparison', 100))));
+  assert.deepEqual(replay, first);
+  assert.equal(first.lifecycle.provenance, 'RETROSPECTIVE');
 });

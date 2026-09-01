@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeLongformResponse } from '../src/lib/longform-response.ts';
 import { buildNicheBreakoutSummary } from '../src/lib/niche-signals.ts';
+import { buildNicheLifecycleSummary } from '../src/lib/niche-lifecycle.ts';
 
 test('partial long-form responses normalize to safe unknown states', () => {
   const result = normalizeLongformResponse({
@@ -41,4 +42,14 @@ test('optional Long-form niche signals survive the response boundary', () => {
   const result = normalizeLongformResponse({ opportunities: [{ key: 'topic-a', nicheSignals }] });
   assert.equal(result.opportunities[0].nicheSignals?.nicheId, 'topic-a');
   assert.equal(result.opportunities[0].nicheSignals?.format, 'long');
+});
+
+test('optional Long-form lifecycle evidence survives the response boundary', () => {
+  const row = (id, creatorId, performance) => ({ nicheId: 'topic-a', videoId: id, creatorId, format: 'long', views: 100, normalizedPerformance: performance, subscriberCount: 20_000, baselineStatus: 'VERIFIED', baselineConfidence: 'HIGH', breakoutClassification: 'NORMAL', breakoutMultiple: 1, repeatBreakoutStatus: 'NONE' });
+  const current = { nicheId: 'topic-a', format: 'long', key: 'current', start: '2026-08-01T00:00:00.000Z', end: '2026-08-31T00:00:00.000Z', timeSemantics: 'PUBLICATION_COHORT_HISTORY', coverage: 1, observations: Array.from({ length: 5 }, (_, index) => row(`c${index}`, `creator-${index}`, 110)) };
+  const comparison = { nicheId: 'topic-a', format: 'long', key: 'comparison', start: '2026-07-01T00:00:00.000Z', end: '2026-07-31T00:00:00.000Z', timeSemantics: 'PUBLICATION_COHORT_HISTORY', coverage: 1, observations: Array.from({ length: 5 }, (_, index) => row(`p${index}`, `creator-${index}`, 100)) };
+  const nicheLifecycle = buildNicheLifecycleSummary(current, comparison);
+  const result = normalizeLongformResponse({ opportunities: [{ key: 'topic-a', nicheLifecycle }] });
+  assert.equal(result.opportunities[0].nicheLifecycle?.nicheId, 'topic-a');
+  assert.equal(result.opportunities[0].nicheLifecycle?.lifecycle.provenance, 'RETROSPECTIVE');
 });
