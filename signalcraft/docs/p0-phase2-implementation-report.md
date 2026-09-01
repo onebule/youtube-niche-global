@@ -4,7 +4,7 @@
 
 - Starting HEAD: `0afa15a` (`main`), confirmed before editing.
 - Phase 1 contracts and tests were present.
-- Ending HEAD: recorded after the Phase 2 commit/push.
+- Ending HEAD: `64ecdf4` (`main`), pushed to `origin/main`.
 - Pre-existing user-owned files preserved and untouched: `pnpm-workspace.yaml`, `tsconfig.tsbuildinfo`.
 - No production deployment is claimed from a Git push alone.
 
