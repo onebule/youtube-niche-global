@@ -301,7 +301,8 @@ function Discovery({mode,state,setState,openDetail,locale}:{mode:'discover'|'ran
   const rows=useMemo(()=>source.filter(v=>{
     const o=scoreFor(v),c=channelFor(v),text=`${v.title} ${v.topic} ${v.tags.join(' ')}`.toLowerCase();
     const matchesQuery=mode==='discover'||mode==='radar'||Boolean(remote)||!filters.q||text.includes(filters.q.toLowerCase());
-    return matchesQuery&&matchesContentScope(v,filters)&&(filters.language==='all'||v.language===filters.language)&&(filters.format==='all'||v.format===filters.format)&&(filters.maxSubs==='all'||(c.subscribers!==null&&c.subscribers<=Number(filters.maxSubs)))&&o.opportunityScore>=Number(filters.minScore);
+    const lowEvidenceLongForm=v.format!=='short'&&o.confidence===0;
+    return matchesQuery&&matchesContentScope(v,filters)&&(filters.language==='all'||v.language===filters.language)&&(filters.format==='all'||v.format===filters.format)&&(filters.maxSubs==='all'||(c.subscribers!==null&&c.subscribers<=Number(filters.maxSubs)))&&(lowEvidenceLongForm||o.opportunityScore>=Number(filters.minScore));
   }).sort((a,b)=>mode==='rankings'?b.snapshots.at(-1)!.views-a.snapshots.at(-1)!.views:scoreFor(b).opportunityScore-scoreFor(a).opportunityScore),[filters,mode,remote,source]);
   const rankingLongRows=rankingData?.long||rows.filter(video=>video.format==='long');
   const rankingShortRows=rankingData?.short||rows.filter(video=>video.format==='short');
