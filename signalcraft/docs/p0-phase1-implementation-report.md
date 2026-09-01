@@ -109,7 +109,7 @@
 ## 7. 验证结果
 
 - TypeScript：通过（`tsc --noEmit --pretty false`）。
-- 自动化测试：72 passed，0 failed。
+- 自动化测试：73 passed，0 failed。
 - Next production build：通过（Next 16.2.6，全部路由生成完成）。
 - ESLint：未全通过；保留 2 个既有 `react-hooks/set-state-in-effect` 错误和 23 个警告，主要为 `<img>`、未使用变量/参数。本轮没有新增 lint 错误。
 - `git diff --check`：通过（仅提示工作区 CRLF 转换）。
@@ -129,4 +129,3 @@
 ## 10. Recommended next phase
 
 P0 Phase 2 — **Performance / Evidence / Entry Decision Separation**：在本阶段 Evidence/DataQuality 基础上，逐步把表现、证据强度和进入决策拆为独立字段与解释，不重写 Shorts，不把长视频评分迁移到 Shorts。
-
