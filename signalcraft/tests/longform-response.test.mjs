@@ -42,6 +42,8 @@ test('optional Long-form niche signals survive the response boundary', () => {
   const result = normalizeLongformResponse({ opportunities: [{ key: 'topic-a', nicheSignals }] });
   assert.equal(result.opportunities[0].nicheSignals?.nicheId, 'topic-a');
   assert.equal(result.opportunities[0].nicheSignals?.format, 'long');
+  assert.equal(result.opportunities[0].opportunityAssessment?.algorithmVersion, 'opportunity-engine-v1');
+  assert.equal(result.opportunities[0].opportunityAssessment?.decision.status, 'INSUFFICIENT');
 });
 
 test('optional Long-form lifecycle evidence survives the response boundary', () => {

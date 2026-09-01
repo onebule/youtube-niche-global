@@ -3,6 +3,7 @@ import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, n
 import { evaluateLongformEntryDecision } from './entry-decision.ts';
 import { normalizeNicheBreakoutSummary } from './niche-signals.ts';
 import { normalizeNicheLifecycleSummary } from './niche-lifecycle.ts';
+import { buildOpportunityAssessment } from './opportunity-engine.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -42,7 +43,7 @@ function normalizeOpportunity(value: unknown, index: number): LongformOpportunit
   const execution = isRecord(value.execution) ? value.execution : {};
   const rawConfidenceLabel = textOr(value.confidenceLabel, 'LOW') as LongformOpportunity['confidenceLabel'];
   const rawRecommendation = textOr(value.recommendation, '') as NonNullable<LongformOpportunity['recommendation']>;
-  return {
+  const opportunity: LongformOpportunity = {
     key: textOr(value.key, `longform-direction-${index + 1}`),
     topic: textOr(value.topic, '未分类方向'),
     mechanism: textOr(value.mechanism, '待识别机制'),
@@ -63,6 +64,7 @@ function normalizeOpportunity(value: unknown, index: number): LongformOpportunit
     execution: { score: nullableNumber(execution.score), coverage: Math.max(0, Math.min(100, Math.round(numberOr(execution.coverage, 0)))), rationale: textOr(execution.rationale, '暂无执行适配说明。') },
     representativeVideos: Array.isArray(value.representativeVideos) ? value.representativeVideos.map(normalizeRepresentativeVideo) : [],
   };
+  return opportunity;
 }
 
 /**
@@ -111,11 +113,29 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       dataQuality: effectiveDataQuality,
       evidence,
     });
+    const opportunityAssessment = buildOpportunityAssessment({
+      key: opportunity.key,
+      topic: opportunity.topic,
+      sampleSize: opportunity.sampleSize,
+      channelCount: opportunity.channelCount,
+      representativeVideoCount: opportunity.representativeVideos.length,
+      metrics: opportunity.metrics,
+      marketOpportunity: opportunity.marketOpportunity,
+      executionFit: opportunity.executionFit,
+      entryScore: opportunity.entryScore,
+      recommendation: opportunity.recommendation,
+      baselineStatus: undefined,
+      dataQuality: effectiveDataQuality,
+      evidence,
+      nicheSignals: opportunity.nicheSignals,
+      nicheLifecycle: opportunity.nicheLifecycle,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
       performance: assessment.performance,
       entryDecision: assessment.decision,
+      opportunityAssessment,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,

@@ -97,6 +97,17 @@ function decisionFor(opportunity: LongformOpportunity, locale: UiLocale) {
 
 function recommendationFor(opportunity: LongformOpportunity | null, locale: UiLocale) {
   if (!opportunity) return { key: 'insufficient', label: locale === 'zh' ? '数据不足' : 'INSUFFICIENT DATA' };
+  if (opportunity.opportunityAssessment) {
+    const labels: Record<NonNullable<LongformOpportunity['opportunityAssessment']>['decision']['status'], { key: string; zh: string; en: string }> = {
+      INSUFFICIENT: { key: 'insufficient', zh: '数据不足', en: 'INSUFFICIENT' },
+      CAUTION: { key: 'watch', zh: '谨慎', en: 'CAUTION' },
+      TEST: { key: 'test', zh: '值得测试', en: 'TEST' },
+      RECOMMENDED: { key: 'build', zh: '推荐', en: 'RECOMMENDED' },
+      AVOID: { key: 'avoid', zh: '暂不建议', en: 'AVOID' },
+    };
+    const canonical = labels[opportunity.opportunityAssessment.decision.status];
+    return { key: canonical.key, label: locale === 'zh' ? canonical.zh : canonical.en };
+  }
   if (opportunity.entryDecision) {
     const labels: Record<NonNullable<LongformOpportunity['entryDecision']>['status'], { key: string; zh: string; en: string }> = {
       INSUFFICIENT: { key: 'insufficient', zh: '数据不足', en: 'INSUFFICIENT' },
@@ -339,6 +350,34 @@ function DecisionFirstBrief({ opportunity, locale }: { opportunity: LongformOppo
   </section>;
 }
 
+const opportunityDimensionLabels: Record<string, { zh: string; en: string }> = {
+  DEMAND_STRENGTH: { zh: '需求强度', en: 'Demand strength' }, DEMAND_MOMENTUM: { zh: '需求动能', en: 'Demand momentum' },
+  CREATOR_ACCESSIBILITY: { zh: '创作者可达性', en: 'Creator accessibility' }, BREAKOUT_BREADTH: { zh: '突破广度', en: 'Breakout breadth' },
+  COMPETITION_PRESSURE: { zh: '竞争压力', en: 'Competition pressure' }, SATURATION_RISK: { zh: '饱和风险', en: 'Saturation risk' },
+  CREATOR_CONCENTRATION: { zh: '创作者集中度', en: 'Creator concentration' }, LIFECYCLE_POSITION: { zh: '生命周期位置', en: 'Lifecycle position' },
+  EXECUTION_FIT: { zh: '执行适配', en: 'Execution fit' }, EVIDENCE_STRENGTH: { zh: '证据强度', en: 'Evidence strength' },
+};
+const opportunityStateLabels: Record<string, { zh: string; en: string }> = {
+  VERY_WEAK: { zh: '很弱', en: 'Very weak' }, WEAK: { zh: '弱', en: 'Weak' }, MODERATE: { zh: '中等', en: 'Moderate' }, STRONG: { zh: '强', en: 'Strong' }, VERY_STRONG: { zh: '很强', en: 'Very strong' },
+  RISING: { zh: '上升', en: 'Rising' }, STABLE: { zh: '稳定', en: 'Stable' }, FALLING: { zh: '回落', en: 'Falling' }, ONE_CREATOR: { zh: '单一创作者', en: 'One creator' }, MULTIPLE_CREATORS: { zh: '多个创作者', en: 'Multiple creators' }, REPEATED_ACROSS_CREATORS: { zh: '跨创作者重复', en: 'Repeated across creators' }, LOW: { zh: '低', en: 'Low' }, HIGH: { zh: '高', en: 'High' }, INSUFFICIENT: { zh: '证据不足', en: 'Insufficient' }, EMERGING: { zh: '新兴', en: 'Emerging' }, GROWING: { zh: '增长', en: 'Growing' }, MATURE: { zh: '成熟', en: 'Mature' }, SATURATED: { zh: '拥挤/饱和', en: 'Saturated' }, DECLINING: { zh: '回落', en: 'Declining' }, UPSTREAM_OPAQUE: { zh: '上游不可审计', en: 'Upstream opaque' },
+};
+
+function OpportunityAssessmentPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const assessment = opportunity.opportunityAssessment;
+  if (!assessment) return null;
+  const windowLabels: Record<string, { zh: string; en: string }> = { OPEN: { zh: '开放', en: 'OPEN' }, NARROWING: { zh: '收窄', en: 'NARROWING' }, CLOSED: { zh: '关闭', en: 'CLOSED' }, UNDETERMINED: { zh: '未确定', en: 'UNDETERMINED' } };
+  const decision = assessment.decision.status;
+  const shownReasons = assessment.reasons.filter(item => item.type === 'SUPPORTING').slice(0, 3);
+  const shownRisks = [...assessment.blockers, ...assessment.reasons.filter(item => item.type === 'RISK' || item.type === 'BLOCKING')].slice(0, 3);
+  return <section className={`longform-opportunity-assessment ${decision.toLowerCase()}`} aria-label={zh ? '统一机会评估' : 'Unified opportunity assessment'}>
+    <div className="longform-assessment-head"><div><span className="longform-kicker">P1 PHASE 4 · OPPORTUNITY ENGINE</span><b>{zh ? '统一机会判断' : 'Unified opportunity assessment'}</b><small>{zh ? '维度由既有证据组成，不是新的 0–100 总分。' : 'Composed from existing evidence; not a new 0–100 score.'}</small></div><div className="longform-assessment-verdict"><span>{zh ? '进入决策' : 'Entry decision'}</span><strong>{zh ? ({ INSUFFICIENT: '数据不足', CAUTION: '谨慎', TEST: '值得测试', RECOMMENDED: '推荐', AVOID: '暂不建议' } as Record<string, string>)[decision] : decision}</strong></div><div className="longform-assessment-window"><span>{zh ? '进入窗口' : 'Entry window'}</span><strong>{windowLabels[assessment.entryWindow][zh ? 'zh' : 'en']}</strong><small>{zh ? '当前结构条件，不是剩余月份预测' : 'Current structure, not a months-remaining forecast'}</small></div></div>
+    <div className="longform-assessment-dimensions">{Object.values(assessment.dimensions).map(item => <div key={item.name}><span>{opportunityDimensionLabels[item.name]?.[zh ? 'zh' : 'en'] || item.name}</span><b>{opportunityStateLabels[item.state]?.[zh ? 'zh' : 'en'] || item.state}</b><small>{item.confidence} · {item.provenance[0] || (zh ? '暂无来源' : 'No source')}</small></div>)}</div>
+    <div className="longform-assessment-reasons"><div><b>{zh ? '支持依据' : 'Why'}</b>{shownReasons.length ? shownReasons.map(item => <span key={item.code}>✓ {item.message}</span>) : <span>{zh ? '暂无足够的正向证据。' : 'No sufficient supporting evidence yet.'}</span>}</div><div><b>{zh ? '风险与阻塞' : 'Risks / blockers'}</b>{shownRisks.length ? shownRisks.map(item => <span key={item.code}>! {item.message}</span>) : <span>{zh ? '未触发额外风险。' : 'No additional risks fired.'}</span>}</div></div>
+    <small className="longform-assessment-provenance">{zh ? `来源：${assessment.provenance.sources.join(' · ')}；生命周期：${assessment.provenance.lifecycle}；阈值：需校准。` : `Sources: ${assessment.provenance.sources.join(' · ')}; lifecycle: ${assessment.provenance.lifecycle}; thresholds: calibration required.`}</small>
+  </section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -359,9 +398,9 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
-    <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
+    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
-    <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
+    <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
     {nicheSignals ? <section className="longform-niche-signals" aria-label={zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}><div className="longform-evidence-heading"><b>{zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}</b><small>{zh ? `${nicheSignals.eligibleCreators} 个独立创作者 · ${nicheSignals.eligibleVideos} 条可比较视频` : `${nicheSignals.eligibleCreators} independent creators · ${nicheSignals.eligibleVideos} eligible videos`}</small></div><div className="longform-niche-signal-list">{nicheSignals.signals.filter(signal => signal.strength !== 'INSUFFICIENT').map(signal => <span key={signal.type} className={`signal-${signal.strength.toLowerCase()}`}>{signalLabels[signal.type] || signal.type} · {strengthLabels[signal.strength] || signal.strength}</span>)}</div><div className="longform-niche-signal-metrics"><span>{zh ? '突破密度' : 'Breakout density'} {nicheSignals.breakoutDensity === null ? '—' : `${Math.round(nicheSignals.breakoutDensity * 100)}%`}</span><span>{zh ? '重复突破创作者' : 'Repeated-breakout creators'} {nicheSignals.repeatedBreakoutCreators}</span><span>{zh ? 'Top 3 播放占比' : 'Top 3 view share'} {nicheSignals.concentration.top3Share === null ? '—' : `${Math.round(nicheSignals.concentration.top3Share * 100)}%`}</span></div><small className="longform-niche-signal-note">{zh ? '这是跨创作者证据，不等于机会分数或进入建议。阈值状态：需校准。' : 'Cross-creator evidence only; not an opportunity score or entry recommendation. Thresholds require calibration.'}</small></section> : null}
     {lifecycle ? <section className="longform-lifecycle-evidence" aria-label={zh ? '赛道生命周期证据' : 'Niche lifecycle evidence'}><div className="longform-evidence-heading"><b>{zh ? '赛道生命周期' : 'Niche lifecycle'}</b><small>{lifecycle.lifecycle.provenance === 'RETROSPECTIVE' ? (zh ? '回顾性 cohort 证据' : 'Retrospective cohort evidence') : lifecycle.lifecycle.provenance}</small></div><div className="longform-lifecycle-state"><strong>{lifecycleLabels[lifecycle.lifecycle.state] || lifecycle.lifecycle.state}</strong><span>{zh ? `置信度 ${lifecycle.lifecycle.confidence}` : `${lifecycle.lifecycle.confidence} confidence`}</span><span>{zh ? `供需关系：${supplyDemandLabels[lifecycle.supplyDemandRelationship] || lifecycle.supplyDemandRelationship}` : `Supply/demand: ${supplyDemandLabels[lifecycle.supplyDemandRelationship] || lifecycle.supplyDemandRelationship}`}</span></div><small className="longform-niche-signal-note">{zh ? '生命周期只提供时间证据，不等于 AVOID 或进入决策；当前窗口与对比窗口必须保持可比。' : 'Lifecycle is temporal evidence only; it is not AVOID or an entry decision. Windows must remain comparable.'}</small></section> : null}

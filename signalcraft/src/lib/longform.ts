@@ -5,6 +5,7 @@ import type { DataQuality, EvidenceContract, EvidenceDecisionReason } from './ev
 import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './entry-decision.ts';
 import type { NicheBreakoutSummary } from './niche-signals.ts';
 import type { NicheLifecycleSummary } from './niche-lifecycle.ts';
+import type { OpportunityAssessment } from './opportunity-engine.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -37,6 +38,8 @@ export type LongformOpportunity = {
   nicheSignals?: NicheBreakoutSummary;
   /** Optional upstream Phase 3 temporal evidence; absent when comparable windows are unavailable. */
   nicheLifecycle?: NicheLifecycleSummary;
+  /** Canonical Phase 4 local decision; computed at the response boundary. */
+  opportunityAssessment?: OpportunityAssessment;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;
