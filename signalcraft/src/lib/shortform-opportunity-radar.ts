@@ -1,6 +1,7 @@
 import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
+import type { ConfidenceLevel } from './entry-decision.ts';
 
 export type ShortformRadarEvent = {
   id: string;
@@ -13,7 +14,7 @@ export type ShortformRadarEvent = {
   opportunityScore: number;
   whyNowScore: number;
   whyNowLevel: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
-  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  confidence: Exclude<ConfidenceLevel, 'INSUFFICIENT'>;
   confidenceNote: string;
   sampleVideoCount: number;
   independentChannelCount: number;

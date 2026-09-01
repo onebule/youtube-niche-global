@@ -2,6 +2,7 @@ import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
 import { normalizeLongformResponse } from './longform-response';
 import type { DataQuality, EvidenceContract } from './evidence-contract.ts';
+import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './entry-decision.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -16,6 +17,18 @@ export type LongformOpportunity = {
   entryScore: number | null;
   confidence: number;
   confidenceLabel: 'HIGH' | 'MEDIUM' | 'LOW';
+  /** Canonical Phase 2 confidence; confidenceLabel remains for compatibility. */
+  confidenceLevel?: ConfidenceLevel;
+  performance?: PerformanceAssessment;
+  entryDecision?: EntryDecision;
+  upstreamAssessment?: {
+    source: 'UPSTREAM_OPAQUE';
+    algorithmVersion: string | null;
+    snapshotId: string | null;
+    capturedAt: string | null;
+    scores: { marketOpportunity: number | null; executionFit: number | null; entryScore: number | null };
+    recommendation: string | null;
+  };
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

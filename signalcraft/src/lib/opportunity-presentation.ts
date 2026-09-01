@@ -30,7 +30,11 @@ type RadarLike = {
 
 const breakoutCount = (event: RadarLike) => event.smallCreatorBreakoutCount ?? event.breakoutCount ?? 0;
 
-export function opportunityStatusForRadar(event: RadarLike): OpportunityStatusCopy {
+/**
+ * Radar status describes the strength/risk of a recent change signal. It is
+ * intentionally not an EntryDecision and must not be used as one.
+ */
+export function changeSignalStatusForRadar(event: RadarLike): OpportunityStatusCopy {
   const config = event.eventType.startsWith('SHORTS_') ? SHORTS_OPPORTUNITY_CONFIG : LONG_FORM_OPPORTUNITY_CONFIG;
   const concentrated = typeof event.creatorConcentrationTop3 === 'number' && event.creatorConcentrationTop3 >= config.concentration.cautionTop3Share;
   if (event.lifecycle === 'CROWDED' || event.lifecycle === 'SATURATING' || event.eventType.includes('CROWDED') || event.eventType.includes('SATURATION')) {
@@ -45,6 +49,9 @@ export function opportunityStatusForRadar(event: RadarLike): OpportunityStatusCo
   }
   return OPPORTUNITY_STATUS.TEST;
 }
+
+/** @deprecated Compatibility alias for existing Radar/Shorts consumers. */
+export const opportunityStatusForRadar = changeSignalStatusForRadar;
 
 export function beginnerAccessForRadar(event: RadarLike, locale: 'zh' | 'en') {
   const config = event.eventType.startsWith('SHORTS_') ? SHORTS_OPPORTUNITY_CONFIG : LONG_FORM_OPPORTUNITY_CONFIG;

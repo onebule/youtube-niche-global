@@ -1,5 +1,6 @@
 import type { LongformOpportunity, LongformResponse } from './longform';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence } from './evidence-contract.ts';
+import { evaluateLongformEntryDecision } from './entry-decision.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -89,10 +90,42 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
     missingFields: [...new Set([...textList(raw.gaps), ...Object.entries(fields).filter(([, field]) => !field.available).map(([key]) => key)])],
   });
   const dataQuality = normalizeDataQuality(raw.dataQuality, derivedQuality);
+  const maxOpportunityChannels = opportunities.reduce((max, opportunity) => Math.max(max, opportunity.channelCount), 0);
+  const effectiveDataQuality = dataQuality.sampleChannels === null && maxOpportunityChannels > 0
+    ? normalizeDataQuality(dataQuality, { sampleChannels: maxOpportunityChannels })
+    : dataQuality;
+  const enrichedOpportunities = opportunities.map(opportunity => {
+    const assessment = evaluateLongformEntryDecision({
+      sampleSize: opportunity.sampleSize,
+      channelCount: opportunity.channelCount,
+      representativeVideoCount: opportunity.representativeVideos.length,
+      metrics: opportunity.metrics,
+      marketOpportunity: opportunity.marketOpportunity,
+      executionFit: opportunity.executionFit,
+      entryScore: opportunity.entryScore,
+      recommendation: opportunity.recommendation,
+      dataQuality: effectiveDataQuality,
+      evidence,
+    });
+    return {
+      ...opportunity,
+      confidenceLevel: assessment.confidence,
+      performance: assessment.performance,
+      entryDecision: assessment.decision,
+      upstreamAssessment: {
+        source: 'UPSTREAM_OPAQUE' as const,
+        algorithmVersion: evidence.algorithmVersion || null,
+        snapshotId: evidence.snapshotId || null,
+        capturedAt: evidence.capturedAt || null,
+        scores: { marketOpportunity: opportunity.marketOpportunity, executionFit: opportunity.executionFit, entryScore: opportunity.entryScore },
+        recommendation: opportunity.recommendation || null,
+      },
+    };
+  });
   return {
     schemaVersion: textOr(raw.schemaVersion, DATA_QUALITY_SCHEMA_VERSION),
     evidence,
-    dataQuality,
+    dataQuality: effectiveDataQuality,
     available: raw.available === true,
     engineVersion: textOr(raw.engineVersion, 'unknown'),
     dataScope: {
@@ -118,7 +151,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       fields,
     },
     lanes: Object.fromEntries(Object.entries(rawLanes).map(([key, value]) => [key, Math.max(0, Math.round(numberOr(value, 0)))])),
-    opportunities,
+    opportunities: enrichedOpportunities,
     gaps: textList(raw.gaps),
     quota: rawQuota ? { access_tier: nullableText(rawQuota.access_tier) || undefined, ranking_limit: nullableNumber(rawQuota.ranking_limit), ranking_unlimited: rawQuota.ranking_unlimited === true } : undefined,
   };

@@ -81,8 +81,9 @@ function RepresentativeVideoRow({ video, locale, priority = false }: { video: Lo
   return video.sourceUrl ? <a className="longform-representative-row" href={video.sourceUrl} target="_blank" rel="noreferrer" aria-label={zh ? `在新标签页打开：${video.title}` : `Open in a new tab: ${video.title}`}>{content}</a> : <div className="longform-representative-row longform-representative-missing">{content}</div>;
 }
 
-function Score({ label, value, tone = 'teal', hint }: { label: string; value: number | null; tone?: 'teal' | 'coral' | 'ink'; hint: string }) {
-  return <div className={`longform-score ${tone}`} title={`${label}：${hint}`} aria-label={`${label} ${score(value)} / 100，${hint}`}><span>{label}</span><b>{score(value)}</b><small>/100</small><em>{hint}</em></div>;
+function Score({ label, value, tone = 'teal', hint, displayValue }: { label: string; value: number | null; tone?: 'teal' | 'coral' | 'ink'; hint: string; displayValue?: string }) {
+  const shown = displayValue || score(value);
+  return <div className={`longform-score ${tone}`} title={`${label}：${hint}`} aria-label={`${label} ${shown}${displayValue ? '' : ' / 100'}，${hint}`}><span>{label}</span><b>{shown}</b>{displayValue ? null : <small>/100</small>}<em>{hint}</em></div>;
 }
 
 function decisionFor(opportunity: LongformOpportunity, locale: UiLocale) {
@@ -95,6 +96,17 @@ function decisionFor(opportunity: LongformOpportunity, locale: UiLocale) {
 
 function recommendationFor(opportunity: LongformOpportunity | null, locale: UiLocale) {
   if (!opportunity) return { key: 'insufficient', label: locale === 'zh' ? '数据不足' : 'INSUFFICIENT DATA' };
+  if (opportunity.entryDecision) {
+    const labels: Record<NonNullable<LongformOpportunity['entryDecision']>['status'], { key: string; zh: string; en: string }> = {
+      INSUFFICIENT: { key: 'insufficient', zh: '数据不足', en: 'INSUFFICIENT' },
+      CAUTION: { key: 'watch', zh: '谨慎', en: 'CAUTION' },
+      TEST: { key: 'test', zh: '值得测试', en: 'TEST' },
+      RECOMMENDED: { key: 'build', zh: '推荐', en: 'RECOMMENDED' },
+      AVOID: { key: 'avoid', zh: '暂不建议', en: 'AVOID' },
+    };
+    const canonical = labels[opportunity.entryDecision.status];
+    return { key: canonical.key, label: locale === 'zh' ? canonical.zh : canonical.en };
+  }
   if (opportunity.recommendation) {
     const labels: Record<NonNullable<LongformOpportunity['recommendation']>, { key: string; zh: string; en: string }> = {
       BUILD: { key: 'build', zh: '推荐', en: 'RECOMMENDED' },
@@ -334,7 +346,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${opportunity.confidenceLabel.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
-    <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会' : 'Market'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '需求强度与供给空位' : 'Demand and supply gap'}/><Score label={zh ? '执行适配' : 'Execution'} value={opportunity.executionFit} hint={zh ? '结构是否容易复用' : 'Repeatable production fit'}/><Score label={zh ? '进入分' : 'Entry'} value={opportunity.entryScore} tone="ink" hint={zh ? '综合验证优先级' : 'Combined validation priority'}/></div>
+    <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
     <LongformPlanningPanel opportunity={opportunity} locale={locale}/>
     <LongformValidationPlan opportunity={opportunity} locale={locale}/>

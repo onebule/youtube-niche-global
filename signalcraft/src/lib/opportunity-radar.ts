@@ -1,10 +1,12 @@
 import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
+import type { ConfidenceLevel } from './entry-decision.ts';
 
 export type RadarEventType = 'EMERGING_TOPIC' | 'SMALL_CREATOR_BREAKOUT' | 'FORMAT_MIGRATION' | 'SUPPLY_GAP' | 'SATURATION_WARNING';
 export type RadarLifecycle = 'WATCH' | 'EMERGING' | 'CONFIRMED' | 'CROWDED' | 'SATURATING' | 'DECLINING';
-export type RadarConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
+/** Shared confidence vocabulary; Radar payloads still omit INSUFFICIENT for compatibility. */
+export type RadarConfidence = Exclude<ConfidenceLevel, 'INSUFFICIENT'>;
 
 export type OpportunityRadarEvent = {
   id: string;
