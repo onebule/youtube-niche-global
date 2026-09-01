@@ -6,6 +6,7 @@ import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './en
 import type { NicheBreakoutSummary } from './niche-signals.ts';
 import type { NicheLifecycleSummary } from './niche-lifecycle.ts';
 import type { OpportunityAssessment } from './opportunity-engine.ts';
+import type { ContentPatternReport } from './content-patterns.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -40,6 +41,8 @@ export type LongformOpportunity = {
   nicheLifecycle?: NicheLifecycleSummary;
   /** Canonical Phase 4 local decision; computed at the response boundary. */
   opportunityAssessment?: OpportunityAssessment;
+  /** Optional P2 Phase 1 content-pattern evidence; Long-form only. */
+  contentPatterns?: ContentPatternReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

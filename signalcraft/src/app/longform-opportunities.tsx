@@ -378,6 +378,38 @@ function OpportunityAssessmentPanel({ opportunity, locale }: { opportunity: Long
   </section>;
 }
 
+const patternStatusLabels: Record<string, { zh: string; en: string }> = {
+  WINNING: { zh: '赢面模式', en: 'WINNING PATTERN' },
+  CANDIDATE: { zh: '候选模式', en: 'CANDIDATE' },
+  INSUFFICIENT: { zh: '证据不足', en: 'INSUFFICIENT' },
+  REPEATED_ACROSS_CREATORS: { zh: '跨频道重复', en: 'Repeated across creators' },
+  MULTI_CREATOR_ONE_OFF: { zh: '多频道一次性', en: 'Multi-creator one-off' },
+  ONE_CREATOR: { zh: '单频道', en: 'One creator' },
+};
+const patternFeatureLabels: Record<string, { zh: string; en: string }> = {
+  TITLE_STRUCTURE: { zh: '标题结构', en: 'Title structure' },
+  TITLE_SIGNAL: { zh: '标题信号', en: 'Title signal' },
+  DURATION_BAND: { zh: '时长带', en: 'Duration band' },
+};
+const patternValueLabels: Record<string, { zh: string; en: string }> = {
+  HOW_TO: { zh: '教程/方法', en: 'How-to' }, QUESTION: { zh: '问题式', en: 'Question' }, LIST_OR_NUMBER: { zh: '清单/数字', en: 'List / number' }, COMPARISON: { zh: '对比式', en: 'Comparison' }, STORY: { zh: '故事/实录', en: 'Story / documentary' }, PLAIN: { zh: '普通陈述', en: 'Plain statement' }, UNDER_10_MIN: { zh: '10 分钟内', en: 'Under 10 min' }, '10_TO_30_MIN': { zh: '10–30 分钟', en: '10–30 min' }, OVER_30_MIN: { zh: '30 分钟以上', en: 'Over 30 min' }, true: { zh: '有', en: 'Yes' },
+};
+
+function ContentPatternPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const report = opportunity.contentPatterns;
+  if (!report) return null;
+  const shown = report.aggregations.slice(0, 4);
+  const available = report.dataAvailability;
+  const valueLabel = (value: string) => patternValueLabels[value]?.[zh ? 'zh' : 'en'] || value.replaceAll('_', ' ');
+  return <section className="longform-content-patterns" aria-label={zh ? '长视频内容模式证据' : 'Long-form content pattern evidence'}>
+    <div className="longform-content-patterns-head"><div><span className="longform-kicker">P2 PHASE 1 · CONTENT INTELLIGENCE</span><b>{zh ? '内容结构证据' : 'Content structure evidence'}</b><small>{zh ? '只从长视频公开元数据提取候选模式；频率、表现、跨创作者和重复性分开显示。' : 'Candidates use Long-form public metadata only; frequency, performance, creator breadth and repeatability stay separate.'}</small></div><span>{report.winningPatterns.length ? `${report.winningPatterns.length} ${zh ? '个赢面模式' : 'winning'}` : (zh ? '暂无赢面模式' : 'No winning pattern yet')}</span></div>
+    <div className="longform-content-patterns-summary"><span>{zh ? '候选' : 'Candidates'} <b>{report.aggregations.length}</b></span><span>{zh ? '可用长视频' : 'Long-form'} <b>{report.input.longFormVideos}</b></span><span>{zh ? '频道' : 'Creators'} <b>{report.input.uniqueCreators}</b></span><span>{zh ? '字段可用率' : 'Field coverage'} <b>{Math.round(available.coverage)}%</b></span></div>
+    {shown.length ? <div className="longform-content-pattern-list">{shown.map(item => { const status = item.winningPattern.status; const performance = item.performance.medianNormalizedPerformance === null ? 'UNKNOWN' : `${item.performance.medianNormalizedPerformance.toFixed(2)}×`; const breakout = item.breakoutEvidence.breakoutRate === null ? 'UNKNOWN' : `${Math.round(item.breakoutEvidence.breakoutRate * 100)}%`; return <article key={item.pattern.patternId}><div className="longform-content-pattern-title"><b>{patternFeatureLabels[item.pattern.taxonomy]?.[zh ? 'zh' : 'en'] || item.pattern.taxonomy} · {valueLabel(item.pattern.featureValue)}</b><span className={`pattern-status ${status.toLowerCase()}`}>{patternStatusLabels[status]?.[zh ? 'zh' : 'en'] || status}</span></div><div className="longform-content-pattern-metrics"><span>{zh ? '出现' : 'Used'} <b>{item.frequency.occurrences}</b></span><span>{zh ? '频道' : 'Creators'} <b>{item.creatorBreadth.distinctCreators}</b></span><span>{zh ? '中位表现' : 'Median'} <b>{performance}</b></span><span>{zh ? '突破率' : 'Breakout'} <b>{breakout}</b></span><span>{zh ? '重复性' : 'Repeatability'} <b>{patternStatusLabels[item.repeatability.status]?.[zh ? 'zh' : 'en'] || item.repeatability.status}</b></span></div></article>; })}</div> : <p className="longform-content-pattern-empty">{zh ? '当前代表视频没有足够的标题或时长字段可提取。' : 'No title or duration fields are available in the current representative sample.'}</p>}
+    <small className="longform-content-pattern-note">{zh ? '赢面模式门槛：至少 5 条长视频、3 个独立频道、跨频道突破与可比较的创作者基线；原始播放量不会单独触发。当前阈值需校准。Hook、故事、剪辑、视觉和音频未接入，不做推断。' : 'Winning requires at least 5 Long-form videos, 3 independent creators, cross-creator breakout evidence and comparable creator baselines; raw views alone never qualify. Thresholds require calibration. Hooks, story, editing, visual and audio are not inferred.'}</small>
+  </section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -398,7 +430,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
-    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
+    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>

@@ -4,6 +4,7 @@ import { evaluateLongformEntryDecision } from './entry-decision.ts';
 import { normalizeNicheBreakoutSummary } from './niche-signals.ts';
 import { normalizeNicheLifecycleSummary } from './niche-lifecycle.ts';
 import { buildOpportunityAssessment } from './opportunity-engine.ts';
+import { buildContentPatternReport, normalizeContentPatternReport, type ContentPatternVideo } from './content-patterns.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -33,7 +34,7 @@ function normalizeRepresentativeVideo(value: unknown, index: number): LongformOp
   };
 }
 
-function normalizeOpportunity(value: unknown, index: number): LongformOpportunity | null {
+function normalizeOpportunity(value: unknown, index: number, capturedAt: string | null = null): LongformOpportunity | null {
   if (!isRecord(value)) return null;
   const rawMetrics = isRecord(value.metrics) ? value.metrics : {};
   const metrics = Object.fromEntries(Object.entries(rawMetrics).flatMap(([key, metricValue]): Array<[string, number | null]> => {
@@ -43,6 +44,24 @@ function normalizeOpportunity(value: unknown, index: number): LongformOpportunit
   const execution = isRecord(value.execution) ? value.execution : {};
   const rawConfidenceLabel = textOr(value.confidenceLabel, 'LOW') as LongformOpportunity['confidenceLabel'];
   const rawRecommendation = textOr(value.recommendation, '') as NonNullable<LongformOpportunity['recommendation']>;
+  const representativeVideos = Array.isArray(value.representativeVideos) ? value.representativeVideos.map(normalizeRepresentativeVideo) : [];
+  const upstreamContentPatterns = normalizeContentPatternReport(value.contentPatterns);
+  const contentPatterns = upstreamContentPatterns || (representativeVideos.length ? buildContentPatternReport({
+    capturedAt,
+    videos: representativeVideos.map(video => ({
+      videoId: video.videoId,
+      creatorId: video.channelTitle || `unknown-creator-${video.videoId}`,
+      format: 'long',
+      title: video.title,
+      durationSeconds: video.durationSeconds,
+      views: video.views,
+      thumbnailUrl: video.thumbnail,
+      sourceUrl: video.sourceUrl,
+      normalizedPerformance: null,
+      breakoutClassification: null,
+      breakoutMultiple: null,
+    } satisfies ContentPatternVideo)),
+  }) : undefined);
   const opportunity: LongformOpportunity = {
     key: textOr(value.key, `longform-direction-${index + 1}`),
     topic: textOr(value.topic, '未分类方向'),
@@ -62,7 +81,8 @@ function normalizeOpportunity(value: unknown, index: number): LongformOpportunit
     lanes: textList(value.lanes),
     metrics,
     execution: { score: nullableNumber(execution.score), coverage: Math.max(0, Math.min(100, Math.round(numberOr(execution.coverage, 0)))), rationale: textOr(execution.rationale, '暂无执行适配说明。') },
-    representativeVideos: Array.isArray(value.representativeVideos) ? value.representativeVideos.map(normalizeRepresentativeVideo) : [],
+    representativeVideos,
+    contentPatterns,
   };
   return opportunity;
 }
@@ -83,7 +103,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
   const availableFields = Object.values(fields).filter(field => field.available).length;
   const unavailableFields = Math.max(0, Object.keys(fields).length - availableFields);
   const rawLanes = isRecord(raw.lanes) ? raw.lanes : {};
-  const opportunities = Array.isArray(raw.opportunities) ? raw.opportunities.map(normalizeOpportunity).filter((item): item is LongformOpportunity => Boolean(item)) : [];
+  const opportunities = Array.isArray(raw.opportunities) ? raw.opportunities.map((value, index) => normalizeOpportunity(value, index, nullableText(rawScope.latestCapturedAt))).filter((item): item is LongformOpportunity => Boolean(item)) : [];
   const rawQuota = isRecord(raw.quota) ? raw.quota : null;
   const topLevel = raw as Record<string, unknown>;
   const evidence = normalizeEvidence(raw.evidence, { source: textOr(rawScope.source, 'unknown'), algorithmVersion: nullableText(topLevel.algorithmVersion), snapshotId: nullableText(topLevel.snapshotId), inputSnapshotId: nullableText(topLevel.inputSnapshotId), requestId: nullableText(topLevel.requestId), capturedAt: nullableText(topLevel.capturedAt) || nullableText(rawScope.latestCapturedAt) });
