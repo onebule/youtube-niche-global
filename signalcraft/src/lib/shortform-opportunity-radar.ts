@@ -1,5 +1,6 @@
-import { authHeaders } from './auth';
-import { clientErrorMessage } from './client-error';
+import { authHeaders } from './auth.ts';
+import { clientErrorMessage } from './client-error.ts';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 
 export type ShortformRadarEvent = {
   id: string;
@@ -59,6 +60,9 @@ export type ShortformRadarEvent = {
 };
 
 export type ShortformRadarResponse = {
+  schemaVersion?: string;
+  evidence?: EvidenceContract;
+  dataQuality?: DataQuality;
   available: boolean;
   engine: string;
   engineVersion: string;
@@ -82,6 +86,20 @@ export type ShortformRadarResponse = {
   quota?: { access_tier?: string; ranking_limit?: number | null; ranking_unlimited?: boolean };
 };
 
+export function normalizeShortformRadarResponse(payload: unknown): ShortformRadarResponse {
+  const raw = payload && typeof payload === 'object' ? payload as Partial<ShortformRadarResponse> : {};
+  const scope = raw.dataScope;
+  const rawRecord = raw as Record<string, unknown>;
+  const quality = deriveDataQuality({
+    sampleVideos: typeof scope?.currentRows === 'number' ? scope.currentRows : null,
+    sampleChannels: null,
+    completeness: scope && typeof scope.historicalRows === 'number' && scope.currentRows > 0 ? Math.min(100, (scope.historicalRows / scope.currentRows) * 100) : null,
+    capturedAt: scope?.latestCapturedAt || null,
+    source: scope?.source || 'unknown',
+  });
+  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engine: typeof raw.engine === 'string' ? raw.engine : 'unknown', engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', format: 'SHORT_FORM', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
+}
+
 export async function fetchShortformOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
@@ -92,5 +110,5 @@ export async function fetchShortformOpportunityRadar(input: { market?: string; w
   });
   const payload = await response.json().catch(() => ({})) as ShortformRadarResponse & { error?: unknown };
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, 'Shorts 趋势雷达数据暂时不可用。'));
-  return payload;
+  return normalizeShortformRadarResponse(payload);
 }

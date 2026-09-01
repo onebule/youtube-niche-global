@@ -1,5 +1,6 @@
-import { authHeaders } from './auth';
-import { clientErrorMessage } from './client-error';
+import { authHeaders } from './auth.ts';
+import { clientErrorMessage } from './client-error.ts';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 
 export type RadarEventType = 'EMERGING_TOPIC' | 'SMALL_CREATOR_BREAKOUT' | 'FORMAT_MIGRATION' | 'SUPPLY_GAP' | 'SATURATION_WARNING';
 export type RadarLifecycle = 'WATCH' | 'EMERGING' | 'CONFIRMED' | 'CROWDED' | 'SATURATING' | 'DECLINING';
@@ -61,6 +62,9 @@ export type OpportunityRadarEvent = {
 };
 
 export type OpportunityRadarResponse = {
+  schemaVersion?: string;
+  evidence?: EvidenceContract;
+  dataQuality?: DataQuality;
   available: boolean;
   engineVersion: string;
   window: '7d' | '14d' | '30d';
@@ -82,6 +86,20 @@ export type OpportunityRadarResponse = {
   quota?: { access_tier?: string; ranking_limit?: number | null; ranking_unlimited?: boolean };
 };
 
+export function normalizeOpportunityRadarResponse(payload: unknown): OpportunityRadarResponse {
+  const raw = payload && typeof payload === 'object' ? payload as Partial<OpportunityRadarResponse> : {};
+  const scope = raw.dataScope;
+  const rawRecord = raw as Record<string, unknown>;
+  const quality = deriveDataQuality({
+    sampleVideos: typeof scope?.currentRows === 'number' ? scope.currentRows : null,
+    sampleChannels: null,
+    completeness: scope && typeof scope.historicalRows === 'number' && scope.currentRows > 0 ? Math.min(100, (scope.historicalRows / scope.currentRows) * 100) : null,
+    capturedAt: scope?.latestCapturedAt || null,
+    source: scope?.source || 'unknown',
+  });
+  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
+}
+
 export async function fetchOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
@@ -92,5 +110,5 @@ export async function fetchOpportunityRadar(input: { market?: string; window?: '
   });
   const payload = await response.json().catch(() => ({})) as OpportunityRadarResponse & { error?: unknown };
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, '长视频趋势雷达数据暂时不可用。'));
-  return payload;
+  return normalizeOpportunityRadarResponse(payload);
 }

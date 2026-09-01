@@ -1,3 +1,5 @@
+import type { BaselineStatus, DataQuality, DataValueState, EvidenceContract } from './evidence-contract.ts';
+
 export type Role = 'owner' | 'editor' | 'viewer';
 export type IdeaStatus = '收集' | '验证' | '制作中' | '已发布' | '复盘';
 export type VideoFormat = 'short' | 'long' | 'unknown';
@@ -6,9 +8,9 @@ export type ContentType = 'SHORT_FORM' | 'LONG_FORM' | 'UNCERTAIN';
 export type AnalysisClass = 'NATIVE_SHORTS' | 'SHORT_FORM_VIDEO' | 'LONG_FORM_VIDEO' | 'PLATFORM_CONTENT_CONFLICT' | 'UNCERTAIN';
 export interface User { id:string; name:string; email:string; role:Role; avatar?:string }
 export interface Workspace { id:string; name:string; brandName:string; timezone:string }
-export interface Channel { id:string; title:string; handle:string; url?:string; thumbnail?:string; subscribers:number; language:string; region:string; medianViews:number; health:number; tags:string[]; owner:string; lastSync:string }
+export interface Channel { id:string; title:string; handle:string; url?:string; thumbnail?:string; subscribers:number|null; subscriberState?:DataValueState; language:string; region:string; medianViews:number|null; baselineStatus?:BaselineStatus; health:number; tags:string[]; owner:string; lastSync:string; evidence?:EvidenceContract; dataQuality?:DataQuality }
 export interface VideoSnapshot { capturedAt:string; views:number; likes:number; comments:number; subscribers?:number }
-export interface Video { id:string; channelId:string; title:string; titleZh?:string|null; topic:string; language:string; region:string; format:VideoFormat; formatConfidence?:'high'|'medium'|'low'; formatSource?:string; formatVersion?:number; formatSignals?:string[]; platformType?:PlatformType; platformTypeSource?:string; contentType?:ContentType; analysisClass?:AnalysisClass; formatConfidenceScore?:number; aspectRatio?:string|null; shortScore?:number|null; longScore?:number|null; evidenceUsed?:string[]; missingEvidence?:string[]; classificationReason?:string[]; needsSecondaryAnalysis?:boolean; classificationVersion?:string; publishedAt:string; durationSeconds:number; thumbnail:string; sourceUrl?:string; risk:'low'|'medium'|'high'; snapshots:VideoSnapshot[]; tags:string[]; }
+export interface Video { id:string; channelId:string; title:string; titleZh?:string|null; topic:string; language:string; region:string; format:VideoFormat; formatConfidence?:'high'|'medium'|'low'; formatSource?:string; formatVersion?:number; formatSignals?:string[]; platformType?:PlatformType; platformTypeSource?:string; contentType?:ContentType; analysisClass?:AnalysisClass; formatConfidenceScore?:number; aspectRatio?:string|null; shortScore?:number|null; longScore?:number|null; evidenceUsed?:string[]; missingEvidence?:string[]; classificationReason?:string[]; needsSecondaryAnalysis?:boolean; classificationVersion?:string; publishedAt:string; durationSeconds:number; thumbnail:string; sourceUrl?:string; risk:'low'|'medium'|'high'; snapshots:VideoSnapshot[]; tags:string[]; evidence?:EvidenceContract; dataQuality?:DataQuality; missingFields?:string[]; }
 export interface Opportunity { videoId:string; opportunityScore:number; velocityScore:number; outlierScore:number; confidence:number; viewsPerHour:number; viewsPerSubscriber:number; growthRate:number; reasons:string[]; }
 export interface WatchRule { id:string; name:string; type:'频道'|'关键词'|'赛道'|'对标组'; threshold:number; frequency:string; channel:string; paused:boolean }
 export interface Alert { id:string; title:string; body:string; createdAt:string; read:boolean; sourceVideoId?:string }

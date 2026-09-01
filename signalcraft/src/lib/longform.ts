@@ -1,6 +1,7 @@
-import { authHeaders } from './auth';
-import { clientErrorMessage } from './client-error';
+import { authHeaders } from './auth.ts';
+import { clientErrorMessage } from './client-error.ts';
 import { normalizeLongformResponse } from './longform-response';
+import type { DataQuality, EvidenceContract } from './evidence-contract.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -23,6 +24,9 @@ export type LongformOpportunity = {
 };
 
 export type LongformResponse = {
+  schemaVersion?: string;
+  evidence?: EvidenceContract;
+  dataQuality?: DataQuality;
   available: boolean;
   engineVersion: string;
   dataScope: { source: string; markets: string[]; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; marketSampleLimit?: number; failedMarkets?: string[]; note: string };

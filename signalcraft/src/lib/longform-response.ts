@@ -1,4 +1,5 @@
 import type { LongformOpportunity, LongformResponse } from './longform';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence } from './evidence-contract.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -77,7 +78,21 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
   const rawLanes = isRecord(raw.lanes) ? raw.lanes : {};
   const opportunities = Array.isArray(raw.opportunities) ? raw.opportunities.map(normalizeOpportunity).filter((item): item is LongformOpportunity => Boolean(item)) : [];
   const rawQuota = isRecord(raw.quota) ? raw.quota : null;
+  const topLevel = raw as Record<string, unknown>;
+  const evidence = normalizeEvidence(raw.evidence, { source: textOr(rawScope.source, 'unknown'), algorithmVersion: nullableText(topLevel.algorithmVersion), snapshotId: nullableText(topLevel.snapshotId), requestId: nullableText(topLevel.requestId), capturedAt: nullableText(topLevel.capturedAt) || nullableText(rawScope.latestCapturedAt) });
+  const derivedQuality = deriveDataQuality({
+    sampleVideos: Math.max(Number(rawScope.longformRows) || 0, opportunities.reduce((sum, opportunity) => sum + opportunity.sampleSize, 0)),
+    sampleChannels: Number.isFinite(Number(rawScope.sampleChannels)) ? Number(rawScope.sampleChannels) : null,
+    completeness: Number.isFinite(Number(rawScope.classificationCoverage)) ? Number(rawScope.classificationCoverage) : null,
+    capturedAt: nullableText(rawScope.latestCapturedAt),
+    source: textOr(rawScope.source, 'unknown'),
+    missingFields: [...new Set([...textList(raw.gaps), ...Object.entries(fields).filter(([, field]) => !field.available).map(([key]) => key)])],
+  });
+  const dataQuality = normalizeDataQuality(raw.dataQuality, derivedQuality);
   return {
+    schemaVersion: textOr(raw.schemaVersion, DATA_QUALITY_SCHEMA_VERSION),
+    evidence,
+    dataQuality,
     available: raw.available === true,
     engineVersion: textOr(raw.engineVersion, 'unknown'),
     dataScope: {
