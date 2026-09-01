@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import { fetchShortformOpportunityRadar, type ShortformRadarEvent, type ShortformRadarResponse } from '@/src/lib/shortform-opportunity-radar';
+import { beginnerAccessForRadar, competitionForRadar, opportunityStatusForRadar } from '@/src/lib/opportunity-presentation';
 import type { UiLocale } from '@/src/lib/ui-language';
 import type { RadarReturnState } from '@/src/lib/niche-analysis-context';
 import SignalSparkline from './signal-sparkline';
@@ -19,10 +20,6 @@ const eventLabels: Record<ShortformRadarEvent['eventType'], { zh: string; en: st
 const confidenceLabels: Record<ShortformRadarEvent['confidence'], { zh: string; en: string }> = {
   LOW: { zh: '低置信度', en: 'Low confidence' }, MEDIUM: { zh: '中置信度', en: 'Medium confidence' }, HIGH: { zh: '高置信度', en: 'High confidence' },
 };
-const lifecycleLabels: Record<ShortformRadarEvent['lifecycle'], { zh: string; en: string }> = {
-  WATCH: { zh: '观察', en: 'Watch' }, EMERGING: { zh: '形成中', en: 'Emerging' }, CONFIRMED: { zh: '已验证', en: 'Confirmed' }, CROWDED: { zh: '拥挤', en: 'Crowded' },
-};
-
 function ShortformVideo({ video, locale }: { video: ShortformRadarEvent['representativeVideos'][number]; locale: UiLocale }) {
   const thumbnail = mediaUrl(video.thumbnail);
   const avatar = mediaUrl(video.channelAvatar);
@@ -35,13 +32,14 @@ function ShortformVideo({ video, locale }: { video: ShortformRadarEvent['represe
 
 export type ShortformRadarActions = {
   onShortResearch?: (event: ShortformRadarEvent, returnState?: RadarReturnState) => void;
+  onSwitchFormat?: (format: 'ALL' | 'SHORTS' | 'LONG_FORM') => void;
 };
 
 function RadarCard({ event, locale, onResearch }: { event: ShortformRadarEvent; locale: UiLocale; onResearch?: (event: ShortformRadarEvent) => void }) {
   const zh = locale === 'zh';
   const label = eventLabels[event.eventType];
   const confidence = confidenceLabels[event.confidence];
-  const lifecycle = lifecycleLabels[event.lifecycle];
+  const decision = opportunityStatusForRadar(event);
   const guardrail = event.independentChannelCount < 2
     ? (zh ? '单频道证据：不作为跨频道机会结论。' : 'Single-channel evidence: not a cross-channel opportunity conclusion.')
     : event.sampleVideoCount < 5
@@ -50,17 +48,17 @@ function RadarCard({ event, locale, onResearch }: { event: ShortformRadarEvent; 
         ? (zh ? `Top 3 频道占 ${event.creatorConcentrationTop3}% 流量，开放度可能被高估。` : `Top 3 channels hold ${event.creatorConcentrationTop3}% of views; openness may be overstated.`)
         : null;
   return <article className="shortform-radar-card">
-    <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts only</p></div><span className={`shortform-radar-lifecycle ${event.lifecycle.toLowerCase()}`}>{lifecycle[zh ? 'zh' : 'en']}</span></header>
-    <div className="shortform-radar-score"><div><small>{zh ? '机会分' : 'OPPORTUNITY'}</small><strong>{event.opportunityScore}</strong><span>{event.whyNowLevel.replace('_', ' ')}</span></div><div><small>{zh ? '置信度' : 'CONFIDENCE'}</small><b className={`shortform-radar-confidence ${event.confidence.toLowerCase()}`}>{confidence[zh ? 'zh' : 'en']}</b><span>{event.dataQuality}</span></div><div><small>{zh ? '对照窗口' : 'BASELINE'}</small><b>{event.baseline.windowDays}D</b><span>{event.sampleVideoCount} {zh ? '条短视频' : 'shorts'}</span></div></div>
-    <div className="shortform-radar-metrics"><div><small>{zh ? '独立频道' : 'Channels'}</small><b>{event.independentChannelCount}</b></div><div><small>{zh ? '突破候选' : 'Breakouts'}</small><b>{event.breakoutCount}</b></div><div><small>{zh ? '中位播放' : 'Median views'}</small><b>{compact(event.medianViews, locale)}</b></div><div><small>{zh ? '播放/订阅' : 'Median VPD'}</small><b>{event.medianVpd === null ? '—' : `${event.medianVpd.toFixed(1)}×`}</b></div><div><small>{zh ? '需求代理' : 'Demand proxy'}</small><b>{event.metrics.demandProxyGrowth === null ? '—' : `${event.metrics.demandProxyGrowth >= 0 ? '+' : ''}${event.metrics.demandProxyGrowth}%`}</b></div><div><small>{zh ? '新鲜度' : 'Freshness'}</small><b>{event.metrics.freshness}%</b></div></div>
+    <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts</p></div><span className={`shortform-radar-decision ${decision.key.toLowerCase()}`}>{decision[zh ? 'zh' : 'en']}</span></header>
+    <section className="shortform-radar-decision-brief"><div><small>{zh ? '为什么现在值得看' : 'WHY CONSIDER IT'}</small><b>{event.facts[0] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</b></div><span className={`shortform-radar-confidence ${event.confidence.toLowerCase()}`}>{zh ? `${confidence.zh}置信度 · ${event.sampleVideoCount} 条样本` : `${confidence.en} confidence · ${event.sampleVideoCount} samples`}</span></section>
+    <div className="shortform-radar-decision-facts"><div><small>{zh ? '新人机会' : 'BEGINNER ACCESS'}</small><b>{beginnerAccessForRadar(event, locale)}</b><span>{event.breakoutCount ? (zh ? `${event.breakoutCount} 个突破样本` : `${event.breakoutCount} breakout samples`) : (zh ? '暂无突破证据' : 'No breakout proof yet')}</span></div><div><small>{zh ? '竞争程度' : 'COMPETITION'}</small><b>{competitionForRadar(event, locale)}</b><span>{event.creatorConcentrationTop3 === null ? (zh ? '集中度暂无数据' : 'Concentration unavailable') : (zh ? `Top 3 占 ${event.creatorConcentrationTop3}% 播放` : `Top 3 hold ${event.creatorConcentrationTop3}% of views`)}</span></div><div><small>{zh ? '收益作用' : 'MONETIZATION ROLE'}</small><b>{zh ? '涨粉与测试优先' : 'Reach and testing first'}</b><span>{zh ? '公开数据不能估算 Shorts RPM' : 'Public data cannot estimate Shorts RPM'}</span></div></div>
     <section className="shortform-radar-changed"><div className="shortform-radar-changed-head"><small>{zh ? '为什么现在看' : 'WHY NOW'}</small><SignalSparkline points={[event.metrics.previousSample, event.metrics.currentSample]} tone={event.metrics.currentSample >= event.metrics.previousSample ? 'teal' : 'coral'} label={zh ? '历史到当前样本量对照' : 'Historical to current sample comparison'}/></div><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="shortform-radar-note">{event.confidenceNote}</p>{guardrail ? <p className="shortform-radar-guardrail">! {guardrail}</p> : null}</section>
-    <div className="shortform-radar-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.metrics.breakoutDensity}% {zh ? '突破密度' : 'breakout density'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条普通证据' : 'standard examples'}</span></div>
+    <div className="shortform-radar-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.breakoutCount} {zh ? '个突破样本' : 'breakout samples'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条待复核证据' : 'items to verify'}</span></div>
     <details className="shortform-radar-details"><summary>{zh ? '查看证据与代表视频' : 'View evidence and representative videos'}</summary><div className="shortform-radar-facts"><div><h3>{zh ? '可验证事实' : 'FACTS'}</h3>{event.facts.map(fact => <p key={fact}>{fact}</p>)}</div><div><h3>{zh ? '推断' : 'INFERENCE'}</h3>{event.inferences.length ? event.inferences.map(item => <p key={item}>{item}</p>) : <p>{zh ? '暂无额外推断。' : 'No additional inference.'}</p>}</div></div><div className="shortform-radar-video-list">{event.representativeVideos.map(video => <ShortformVideo key={video.videoId} video={video} locale={locale}/>)}</div><p className="shortform-radar-provenance">{event.evidence.provenance}</p></details>
     {onResearch ? <div className="shortform-radar-actions"><button type="button" onClick={() => onResearch(event)}>{zh ? '进入 Shorts 赛道评估 →' : 'Open Shorts niche evaluation →'}</button></div> : null}
   </article>;
 }
 
-export default function ShortformOpportunityRadar({ locale, embedded = false, onShortResearch }: { locale: UiLocale; embedded?: boolean } & ShortformRadarActions) {
+export default function ShortformOpportunityRadar({ locale, embedded = false, onShortResearch, onSwitchFormat }: { locale: UiLocale; embedded?: boolean } & ShortformRadarActions) {
   const zh = locale === 'zh';
   const [window, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
   const [market, setMarket] = useState('all');
@@ -68,6 +66,7 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [focusTopic, setFocusTopic] = useState<string | null>(null);
+  const [mode, setMode] = useState<'ALL' | 'RECENT' | 'BEGINNER' | 'BREAKOUT' | 'CAUTION'>('ALL');
   const [contextReady, setContextReady] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
   const restoreScrollRef = useRef<number | null>(null);
@@ -126,17 +125,26 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
     return () => globalThis.window.clearTimeout(timer);
   }, [data]);
   useEffect(() => () => requestRef.current?.abort(), []);
-  const events = (data?.events || []).slice().sort((left, right) => {
+  const events = useMemo(() => (data?.events || []).filter(event => {
+    const decision = opportunityStatusForRadar(event);
+    if (mode === 'ALL') return decision.key !== 'AVOID';
+    if (mode === 'RECENT') return (event.lifecycle === 'EMERGING' || event.lifecycle === 'CONFIRMED') && decision.key !== 'AVOID';
+    if (mode === 'BEGINNER') return beginnerAccessForRadar(event, 'zh') === '较高';
+    if (mode === 'BREAKOUT') return event.eventType === 'SHORTS_BREAKOUT' || event.breakoutCount > 0;
+    return decision.key === 'CAUTION' || decision.key === 'AVOID';
+  }).slice().sort((left, right) => {
     if (!focusTopic) return 0;
     const leftMatch = left.topic.toLowerCase() === focusTopic.toLowerCase() || left.title.toLowerCase().includes(focusTopic.toLowerCase());
     const rightMatch = right.topic.toLowerCase() === focusTopic.toLowerCase() || right.title.toLowerCase().includes(focusTopic.toLowerCase());
     return Number(rightMatch) - Number(leftMatch);
-  });
+  }), [data, focusTopic, mode]);
   const Container = embedded ? 'section' : 'main';
   return <Container className="shortform-radar-page">
     <section className="shortform-radar-hero"><div><span className="shortform-radar-kicker">SHORTS TREND RADAR</span><h1>{zh ? '识别 Shorts 最近出现的变化。' : 'Detect recent changes in Shorts.'}</h1><p>{zh ? '独立读取 Shorts 数据，观察跨频道扩散、中小频道突破和供给变化。这里是变化监测引擎，不会改变现有 Shorts 榜单、筛选、历史数据或评分。' : 'A separate Shorts-only engine for cross-channel spread, creator breakouts, and supply change. Existing Shorts rankings, filters, history, and scoring remain untouched.'}</p></div><div className="shortform-radar-stamp"><strong>SHORTS</strong><span>{zh ? '独立数据范围' : 'isolated data scope'}</span><i/></div></section>
+    {onSwitchFormat ? <nav className="shortform-radar-format-tabs" aria-label={zh ? '内容形态' : 'Content format'}><button type="button" onClick={() => onSwitchFormat('ALL')}>{zh ? '全部' : 'All'}</button><button type="button" className="active" aria-current="page">Shorts</button><button type="button" onClick={() => onSwitchFormat('LONG_FORM')}>{zh ? '长视频' : 'Long-form'}</button></nav> : null}
     <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}><label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部市场' : 'All markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="IN">IN</option><option value="BR">BR</option><option value="JP">JP</option></select></label><label><span>{zh ? '时间窗口' : 'Window'}</span><select value={window} onChange={event => setWindow(event.target.value as '7d' | '14d' | '30d')}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label><div className="shortform-radar-scope"><b>{data?.dataScope.currentRows ?? '—'}</b><span>{zh ? '当前短视频样本' : 'current Shorts sample'}</span></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button></section>
     <div className="shortform-radar-boundary"><span>{zh ? '边界明确' : 'BOUNDARY'}</span><p>{zh ? 'Shorts 趋势雷达只回答“最近发生了什么变化”；长视频赛道评估回答“一个方向是否值得长期进入”。两者的数据范围、事件和指标彼此独立，现有 Shorts 产品行为保持不变。' : 'Shorts Trend Radar answers what changed recently; Long-form Niche Evaluation asks whether a direction is worth entering over time. Their scopes, events, and metrics stay separate, and the existing Shorts product remains unchanged.'}</p></div>
+    <nav className="shortform-radar-quick-modes" aria-label={zh ? '快速发现方式' : 'Quick discovery modes'}>{[{ key: 'ALL', zh: '最近有机会', en: 'Worth a look' }, { key: 'BEGINNER', zh: '新人更友好', en: 'Beginner friendly' }, { key: 'BREAKOUT', zh: '小频道正在跑出来', en: 'Creator breakouts' }, { key: 'RECENT', zh: '正在形成', en: 'Emerging now' }, { key: 'CAUTION', zh: '需要谨慎', en: 'Use caution' }].map(option => <button key={option.key} type="button" className={mode === option.key ? 'active' : ''} onClick={() => setMode(option.key as typeof mode)}>{option[zh ? 'zh' : 'en']}</button>)}</nav>
     {focusTopic ? <div className="shortform-radar-focus"><span>{zh ? '已定位赛道' : 'Focused niche'}</span><b>{focusTopic}</b><button type="button" onClick={() => setFocusTopic(null)}>{zh ? '清除定位' : 'Clear focus'}</button></div> : null}
     {error ? <div className="shortform-radar-state"><b>{error}</b><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="shortform-radar-state"><b>{zh ? '正在读取 Shorts 跨频道变化…' : 'Reading cross-channel Shorts changes…'}</b></div> : events.length ? <div className="shortform-radar-grid">{events.map(event => <RadarCard key={event.id} event={event} locale={locale} onResearch={onShortResearch ? research : undefined}/>)}</div> : <div className="shortform-radar-state"><b>{zh ? '当前窗口没有足够强的 Shorts 趋势事件' : 'No strong Shorts trend events for this window'}</b><p>{zh ? '请扩大市场或时间窗口，等待更多 Shorts 快照。' : 'Expand the market or window and wait for more Shorts snapshots.'}</p></div>}
     {data?.gaps?.length ? <section className="shortform-radar-gaps"><h2>{zh ? '数据边界' : 'Data boundaries'}</h2>{data.gaps.map(gap => <p key={gap}>→ {gap}</p>)}</section> : null}

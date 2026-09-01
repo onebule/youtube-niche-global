@@ -77,6 +77,21 @@ function verdictFor(lifecycle: string, confidence: string, eventType: string, lo
   return { key: 'validate', label: zh ? '值得验证' : 'Worth validating', body: zh ? '跨频道或突破信号已经出现，下一步是验证可复用的内容形式，而不是直接扩大投入。' : 'Cross-channel or breakout evidence is present; validate a repeatable format before scaling.' };
 }
 
+function ShortsValidationPlan({ locale, verdict }: { locale: UiLocale; verdict: ReturnType<typeof verdictFor> }) {
+  const zh = locale === 'zh';
+  const next = verdict.key === 'caution' || verdict.key === 'observe'
+    ? (zh ? '先观察或小样本验证，不要扩大投入。' : 'Observe or run a small validation batch before increasing effort.')
+    : (zh ? '先验证可复用形式，而不是追一条爆款。' : 'Validate a repeatable format, not a single viral post.');
+  const weeks = zh
+    ? [['第 1 周', '选一个明确受众问题，拆解代表视频的开头、节奏和承诺。'], ['第 2 周', '用同一内容模型发布一小组样本，保持制作方式可比较。'], ['第 3 周', '只改一个变量：切口、开头或包装；不要同时换全部。'], ['第 4 周', '检查是否出现可重复的完播、复看、关注转化或突破信号。']]
+    : [['Week 1', 'Choose one clear viewer problem and inspect the opening, pace, and promise of proof videos.'], ['Week 2', 'Publish a small comparable batch using one content model.'], ['Week 3', 'Change only one variable: angle, opening, or packaging.'], ['Week 4', 'Check for repeatable completion, rewatch, subscriber conversion, or breakout signals.']];
+  return <section className="short-evaluation-plan" aria-label={zh ? '30 天 Shorts 验证计划' : '30-day Shorts validation plan'}>
+    <div><span className="shortform-radar-kicker">06 · 30-DAY VALIDATION</span><h2>{zh ? '用四周验证这个 Shorts 方向。' : 'Validate this Shorts direction in four weeks.'}</h2><p>{next}</p></div>
+    <ol>{weeks.map(([week, note]) => <li key={week}><b>{week}</b><span>{note}</span></li>)}</ol>
+    <div className="short-evaluation-plan-guardrail"><b>{zh ? '不建议这样做' : 'Avoid this'}</b><span>{zh ? '不要用一条爆款、公开播放量或假设 RPM 直接判断赛道可长期进入。' : 'Do not use one viral post, public view counts, or assumed RPM to decide a durable niche entry.'}</span></div>
+  </section>;
+}
+
 function EvidenceVideo({ video, locale }: { video: ShortEvidenceVideo; locale: UiLocale }) {
   const zh = locale === 'zh';
   const channel = video.channelTitle || (zh ? '公开频道' : 'Public channel');
@@ -116,5 +131,6 @@ export default function ShortformNicheEvaluation({ locale }: { locale: UiLocale 
     <section className="short-evaluation-grid"><article><span className="shortform-radar-kicker">01 · DEMAND / SPREAD</span><h2>{zh ? '需求是否跨频道出现？' : 'Is the demand spreading across channels?'}</h2><p>{Array.isArray(trend.facts) && trend.facts[0] ? String(trend.facts[0]) : (zh ? '当前没有额外需求事实；回到代表视频核验。' : 'No extra demand fact was carried over; verify the representative videos.')}</p><div className="short-evaluation-stat-row"><div><b>{number(trend.sampleVideoCount ?? context.representativeVideos?.length, locale)}</b><span>{zh ? '视频样本' : 'video samples'}</span></div><div><b>{number(trend.independentChannelCount, locale)}</b><span>{zh ? '独立频道' : 'independent channels'}</span></div><div><b>{number(trend.demandProxyGrowth, locale)}{trend.demandProxyGrowth !== undefined && trend.demandProxyGrowth !== null ? '%' : ''}</b><span>{zh ? '需求代理变化' : 'demand proxy change'}</span></div></div></article><article><span className="shortform-radar-kicker">02 · CREATOR ACCESS</span><h2>{zh ? '小频道是否有切入证据？' : 'Is there an opening for smaller creators?'}</h2><p>{zh ? '只读雷达已识别的突破与集中度证据，不把它解释成保证。' : 'Read the Radar breakout and concentration evidence without turning it into a guarantee.'}</p><div className="short-evaluation-stat-row"><div><b>{number(breakout.count ?? smallCreator.count, locale)}</b><span>{zh ? '突破样本' : 'breakout samples'}</span></div><div><b>{number(smallCreator.signal, locale)}</b><span>{zh ? '小频道信号' : 'creator signal'}</span></div><div><b>{number(trend.creatorConcentrationTop3, locale)}{trend.creatorConcentrationTop3 !== undefined && trend.creatorConcentrationTop3 !== null ? '%' : ''}</b><span>{zh ? 'Top 3 集中度' : 'Top 3 concentration'}</span></div></div></article></section>
     <section className="short-evaluation-evidence"><div className="short-evaluation-section-head"><div><span className="shortform-radar-kicker">03 · PUBLIC PROOF</span><h2>{zh ? '代表视频证据' : 'Representative video evidence'}</h2></div><span>{videos.length ? `${videos.length} ${zh ? '条已带入' : 'carried over'}` : (zh ? '暂无' : 'None')}</span></div>{videos.length ? <div className="short-evaluation-video-list">{videos.map(video => <EvidenceVideo key={video.videoId} video={video} locale={locale}/>)}</div> : <p className="short-evaluation-muted">{zh ? '当前事件没有可展示的公开视频；不要用空白补成结论。' : 'No public videos were carried over for this event; do not fill the gap with an invented conclusion.'}</p>}</section>
     <section className="short-evaluation-facts"><div><span className="shortform-radar-kicker">04 · WHY NOW</span><h2>{zh ? '为什么现在值得验证？' : 'Why validate now?'}</h2>{Array.isArray(trend.facts) && trend.facts.length ? trend.facts.slice(0, 3).map(fact => <p key={String(fact)}>✓ {String(fact)}</p>) : <p>{zh ? '当前没有额外事实。' : 'No additional facts were carried over.'}</p>}</div><div><span className="shortform-radar-kicker">05 · GUARDRAIL</span><h2>{zh ? '进入前先确认' : 'Confirm before entering'}</h2><p>→ {zh ? '趋势机会信号不是收益承诺，RPM、留存、CTR 仍不可由公开数据回答。' : 'Trend opportunity signals are not a revenue promise; RPM, retention, and CTR remain unavailable from public data.'}</p><p>→ {zh ? '先做一轮小样本 Shorts 测试，再决定是否扩大制作。' : 'Run a small Shorts test before expanding production.'}</p><button type="button" onClick={returnToRadar}>{zh ? '回到雷达看同方向变化 →' : 'Return to Radar for the next change →'}</button></div></section>
+    <ShortsValidationPlan locale={locale} verdict={verdict}/>
   </main>;
 }

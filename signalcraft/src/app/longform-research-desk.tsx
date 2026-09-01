@@ -30,6 +30,9 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
   const chooseView = (next: DeskView) => {
     setRoute(next === 'radar' ? '/radar' : next === 'short-radar' ? '/short-radar' : next === 'all-radar' ? '/radar/all' : '/longform');
   };
+  const switchRadarFormat = (format: 'ALL' | 'SHORTS' | 'LONG_FORM') => {
+    chooseView(format === 'ALL' ? 'all-radar' : format === 'SHORTS' ? 'short-radar' : 'radar');
+  };
 
   const decisionLenses: Array<[string, string]> = allRadar
     ? zh
@@ -65,7 +68,7 @@ export default function LongformResearchDesk({ locale, initialView, onWatch, onC
     {view !== 'radar' && <div className="longform-research-boundary"><span>{allRadar ? (zh ? '内容范围边界' : 'CONTENT SCOPE') : zh ? '同一张研究桌 · 四种不同任务' : 'ONE DESK · FOUR DISTINCT JOBS'}</span><p>{allRadar ? (zh ? '信号总览只是扫描入口；长视频和 Shorts 仍沿各自基线、窗口和 guardrail 计算。' : 'The signal overview is only a scanning entry; long-form and Shorts still use their own baselines, windows, and guardrails.') : view === 'opportunities' ? (zh ? '当前任务：长视频赛道评估。市场机会、执行适配和进入分只回答长期制作价值。' : 'Current job: Long-form Niche Evaluation. Market, execution, and entry scores answer durable making value only.') : (zh ? '当前任务：Shorts 趋势雷达。只读取 Shorts 样本，独立计算跨频道扩散、突破和供给变化；原有 Shorts 产品保持不变。' : 'Current job: Shorts Trend Radar. It reads Shorts samples only and independently computes spread, breakout, and supply change; the existing Shorts product is unchanged.')}</p></div>}
     {view !== 'radar' && <div className="research-lens-grid" aria-label={zh ? '当前视角的判断顺序' : 'Decision order for this view'}>{decisionLenses.map(([label, body]) => <article key={label}><span>{label}</span><b>{body}</b></article>)}</div>}
     <section className="longform-research-content" aria-live="polite">
-      {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : view === 'radar' ? <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} /> : view === 'short-radar' ? <ShortformOpportunityRadar locale={locale} embedded onShortResearch={onShortResearch} /> : <AllOpportunityRadar locale={locale} onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} onShortResearch={onShortResearch} />}
+      {view === 'opportunities' ? <LongformOpportunities locale={locale} embedded /> : view === 'radar' ? <OpportunityRadar locale={locale} embedded onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} onSwitchFormat={switchRadarFormat} /> : view === 'short-radar' ? <ShortformOpportunityRadar locale={locale} embedded onShortResearch={onShortResearch} onSwitchFormat={switchRadarFormat} /> : <AllOpportunityRadar locale={locale} onWatch={onWatch} onCreateIdea={onCreateIdea} onResearch={onResearch} onShortResearch={onShortResearch} />}
     </section>
   </main>;
 }

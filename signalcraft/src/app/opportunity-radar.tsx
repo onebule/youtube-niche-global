@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import { fetchOpportunityRadar, type OpportunityRadarEvent, type OpportunityRadarResponse } from '@/src/lib/opportunity-radar';
+import { beginnerAccessForRadar, competitionForRadar, opportunityStatusForRadar } from '@/src/lib/opportunity-presentation';
+import { getRpmBenchmarkForTopic } from '@/src/lib/rpm-benchmarks';
 import type { UiLocale } from '@/src/lib/ui-language';
 import type { RadarReturnState } from '@/src/lib/niche-analysis-context';
 import SignalSparkline from './signal-sparkline';
@@ -11,10 +13,6 @@ const number = (value: number | null, locale: UiLocale) => value === null || !Nu
   ? locale === 'zh' ? '—' : '—'
   : new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 
-const lifecycleLabel: Record<string, { zh: string; en: string }> = {
-  WATCH: { zh: '观察', en: 'Watch' }, EMERGING: { zh: '形成中', en: 'Emerging' }, CONFIRMED: { zh: '已验证', en: 'Confirmed' },
-  CROWDED: { zh: '拥挤', en: 'Crowded' }, SATURATING: { zh: '趋于饱和', en: 'Saturating' }, DECLINING: { zh: '回落', en: 'Declining' },
-};
 const eventTypeLabel: Record<string, { zh: string; en: string }> = {
   EMERGING_TOPIC: { zh: '新兴主题', en: 'Emerging topic' }, SMALL_CREATOR_BREAKOUT: { zh: '中小频道突破', en: 'Small creator breakout' },
   SATURATION_WARNING: { zh: '拥挤预警', en: 'Saturation warning' }, FORMAT_MIGRATION: { zh: '格式迁移', en: 'Format migration' }, SUPPLY_GAP: { zh: '供给缺口', en: 'Supply gap' },
@@ -28,10 +26,6 @@ const formatDate = (value: string | null | undefined, locale: UiLocale) => {
   return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' }).format(date);
 };
 
-function Metric({ label, value, suffix = '' }: { label: string; value: string | number; suffix?: string }) {
-  return <div className="radar-v2-metric"><small>{label}</small><b>{value}{suffix}</b></div>;
-}
-
 function EvidenceVideo({ video, locale }: { video: OpportunityRadarEvent['representativeVideos'][number]; locale: UiLocale }) {
   const zh = locale === 'zh';
   const thumbnail = mediaUrl(video.thumbnail);
@@ -44,13 +38,16 @@ export type OpportunityRadarActions = {
   onWatch?: (event: OpportunityRadarEvent) => void;
   onCreateIdea?: (event: OpportunityRadarEvent) => void;
   onResearch?: (event: OpportunityRadarEvent, returnState?: RadarReturnState) => void;
+  onSwitchFormat?: (format: 'ALL' | 'SHORTS' | 'LONG_FORM') => void;
 };
 
 function RadarCard({ event, locale, onWatch, onCreateIdea, onResearch, onSelect, focused }: { event: OpportunityRadarEvent; locale: UiLocale; onSelect: (event: OpportunityRadarEvent) => void; focused?: boolean } & OpportunityRadarActions) {
   const zh = locale === 'zh';
-  const lifecycle = lifecycleLabel[event.lifecycle] || lifecycleLabel.WATCH;
   const kind = eventTypeLabel[event.eventType] || eventTypeLabel.EMERGING_TOPIC;
   const confidence = confidenceLabel[event.confidence] || confidenceLabel.LOW;
+  const decision = opportunityStatusForRadar(event);
+  const benchmark = getRpmBenchmarkForTopic(event.topic);
+  const rpmRange = benchmark.lowUsd !== null && benchmark.highUsd !== null ? `$${benchmark.lowUsd} – $${benchmark.highUsd}` : null;
   const changed = event.metrics.breakoutAcceleration !== null ? `${event.metrics.breakoutAcceleration >= 0 ? '+' : ''}${event.metrics.breakoutAcceleration}%` : '—';
   const previousSample = typeof event.metrics.previousSample === 'number' ? event.metrics.previousSample : null;
   const currentSample = typeof event.metrics.currentSample === 'number' ? event.metrics.currentSample : event.sampleVideoCount;
@@ -62,11 +59,11 @@ function RadarCard({ event, locale, onWatch, onCreateIdea, onResearch, onSelect,
         ? (zh ? `Top 3 频道占 ${event.creatorConcentrationTop3}% 流量，开放度可能被高估。` : `Top 3 channels hold ${event.creatorConcentrationTop3}% of views; openness may be overstated.`)
         : null;
   return <article className={`radar-v2-card${focused ? ' focused' : ''}`}>
-    <header className="radar-v2-card-head"><div><span className="radar-v2-kicker">{kind[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.format}</p></div><span className={`radar-v2-lifecycle ${event.lifecycle.toLowerCase()}`}>{lifecycle[zh ? 'zh' : 'en']}</span></header>
-    <div className="radar-v2-score-row"><div><small>{zh ? '机会信号' : 'OPPORTUNITY SIGNAL'}</small><strong>{event.whyNowScore === null ? '—' : event.whyNowScore}</strong><span>{event.whyNowLevel.replace('_', ' ')}</span></div><div><small>{zh ? '置信度' : 'CONFIDENCE'}</small><strong className={`confidence-${event.confidence.toLowerCase()}`}>{confidence[zh ? 'zh' : 'en']}</strong><span>{event.dataQuality}</span></div><div><small>{zh ? '窗口' : 'WINDOW'}</small><strong>{event.baseline.windowDays}D</strong><span>{event.sampleVideoCount} {zh ? '样本' : 'samples'}</span></div></div>
-    <div className="radar-v2-metrics"><Metric label={zh ? '独立频道' : 'Independent channels'} value={event.independentChannelCount}/><Metric label={zh ? '中小频道突破' : 'Small creator breakouts'} value={event.smallCreatorBreakoutCount}/><Metric label={zh ? '中位 VPD' : 'Median VPD'} value={number(event.medianVpd, locale)} suffix={event.vpdAcceleration === null ? '' : ` (${event.vpdAcceleration >= 0 ? '+' : ''}${event.vpdAcceleration}%)`}/><Metric label={zh ? '异常密度' : 'Outlier density'} value={event.outlierDensity === null ? '—' : event.outlierDensity} suffix="%"/></div>
+    <header className="radar-v2-card-head"><div><span className="radar-v2-kicker">{kind[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {zh ? '长视频趋势' : 'long-form trend'}</p></div><span className={`radar-v2-decision ${decision.key.toLowerCase()}`}>{decision[zh ? 'zh' : 'en']}</span></header>
+    <section className="radar-v2-decision-brief"><div><small>{zh ? '为什么值得看' : 'WHY CONSIDER IT'}</small><b>{event.facts[0] || (zh ? '公开快照中出现了可观察的跨频道变化。' : 'A measurable cross-channel change appeared in public snapshots.')}</b></div><span className={`confidence-${event.confidence.toLowerCase()}`}>{zh ? `${confidence.zh}置信度 · ${event.sampleVideoCount} 条样本` : `${confidence.en} confidence · ${event.sampleVideoCount} samples`}</span></section>
+    <div className="radar-v2-decision-facts"><div><small>{zh ? '新人机会' : 'BEGINNER ACCESS'}</small><b>{beginnerAccessForRadar(event, locale)}</b><span>{event.smallCreatorBreakoutCount ? (zh ? `${event.smallCreatorBreakoutCount} 个小频道突破样本` : `${event.smallCreatorBreakoutCount} creator breakout samples`) : (zh ? '暂无突破证据' : 'No breakout proof yet')}</span></div><div><small>{zh ? '竞争程度' : 'COMPETITION'}</small><b>{competitionForRadar(event, locale)}</b><span>{event.creatorConcentrationTop3 === null || event.creatorConcentrationTop3 === undefined ? (zh ? '集中度暂无数据' : 'Concentration unavailable') : (zh ? `Top 3 占 ${event.creatorConcentrationTop3}% 播放` : `Top 3 hold ${event.creatorConcentrationTop3}% of views`)}</span></div><div><small>{zh ? '收益潜力' : 'MONETIZATION'}</small><b>{rpmRange || (zh ? '暂不估算' : 'Not estimated')}</b><span>{rpmRange ? (zh ? '公开市场 RPM 参考 / 1,000 播放' : 'Public market RPM reference / 1,000 views') : (zh ? '无可匹配公开基准' : 'No matching public benchmark')}</span></div></div>
     <section className="radar-v2-changed"><div className="radar-v2-changed-head"><small>{zh ? 'WHAT CHANGED' : 'WHAT CHANGED'}</small><SignalSparkline points={[previousSample, currentSample]} tone={currentSample >= (previousSample ?? currentSample) ? 'teal' : 'coral'} label={zh ? '历史到当前样本量对照' : 'Historical to current sample comparison'}/></div><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="radar-v2-baseline">{previousSample ?? 0} → {currentSample} {zh ? '历史/当前样本 · 突破变化' : 'historical/current samples · breakout change'} {changed}</p>{guardrail ? <p className="radar-v2-guardrail">! {guardrail}</p> : null}</section>
-    <section className="radar-v2-guidance"><div><small>{zh ? '为什么被发现' : 'WHY THIS TREND'}</small><p>{event.facts[0] || (zh ? '公开快照中出现了可观察变化。' : 'A measurable change appeared in the public snapshot.')}</p></div><div><small>{zh ? '小频道机会' : 'SMALL CREATOR SIGNAL'}</small><p>{event.smallCreatorBreakoutCount > 0 ? `${event.smallCreatorBreakoutCount} ${zh ? '个小频道突破样本' : 'small-creator breakout samples'}` : (zh ? '当前没有小频道突破证据' : 'No small-creator breakout evidence')}</p></div><div><small>{zh ? '最大风险' : 'MAX RISK'}</small><p>{guardrail || (zh ? '当前没有额外风险提示，仍需核验代表视频。' : 'No additional risk flag; verify representative videos.')}</p></div></section>
+    <section className="radar-v2-guidance"><div><small>{zh ? '最大风险' : 'MAIN RISK'}</small><p>{guardrail || (decision.key === 'AVOID' ? (zh ? '供给拥挤或头部集中，不建议普通新手直接投入。' : 'Supply is crowded or concentrated; not a direct entry for most beginners.') : (zh ? '先核验代表视频，再安排小规模验证。' : 'Verify the representative videos before running a small test.'))}</p></div><div><small>{zh ? '下一步' : 'NEXT STEP'}</small><p>{decision.key === 'AVOID' ? (zh ? '保留观察，不要仅因播放量高就进入。' : 'Keep watching; do not enter solely because views are high.') : (zh ? '进入赛道评估，确认长期制作与变现边界。' : 'Open niche evaluation to confirm durable making and monetization limits.')}</p></div></section>
     <div className="radar-v2-proof"><span>✓ {event.independentChannelCount} {zh ? '个独立频道' : 'independent channels'}</span><span>✓ {event.smallCreatorBreakoutCount} {zh ? '个中小突破' : 'small creator breakouts'}</span><span>! {event.weakEvidenceVideoIds.length} {zh ? '条弱证据' : 'weak examples'}</span></div>
     <div className="radar-v2-actions" aria-label={zh ? '事件操作' : 'Event actions'}><button type="button" onClick={() => onSelect(event)}>{zh ? '查看证据' : 'View evidence'}</button>{onWatch && <button type="button" onClick={() => onWatch(event)}>{zh ? '关注事件' : 'Watch event'}</button>}{onCreateIdea && <button type="button" className="primary" onClick={() => onCreateIdea(event)}>{zh ? '创建行动草稿' : 'Create action draft'}</button>}{onResearch && <button type="button" className="research" onClick={() => onResearch(event)}>{zh ? '查看赛道评估 →' : 'Evaluate this niche →'}</button>}</div>
   </article>;
@@ -109,17 +106,20 @@ function RadarDrawer({ event, locale, onClose, onResearch }: { event: Opportunit
 }
 
 function matchesRadarLane(event: OpportunityRadarEvent, lane: string) {
-  if (lane === 'ALL') return true;
-  if (lane === 'ACCELERATING') return event.lifecycle === 'EMERGING' || event.lifecycle === 'CONFIRMED' || (event.metrics.demandProxyGrowth !== null && event.metrics.demandProxyGrowth > 0) || (event.vpdAcceleration !== null && event.vpdAcceleration > 0);
-  if (lane === 'EMERGING') return event.lifecycle === 'EMERGING';
-  if (lane === 'SMALL_CREATOR') return event.eventType === 'SMALL_CREATOR_BREAKOUT';
-  if (lane === 'SUPPLY_GAP') return event.eventType === 'SUPPLY_GAP';
-  if (lane === 'FORMAT_MIGRATION') return event.eventType === 'FORMAT_MIGRATION';
-  if (lane === 'SATURATION') return event.eventType === 'SATURATION_WARNING' || event.lifecycle === 'SATURATING';
+  const decision = opportunityStatusForRadar(event);
+  if (lane === 'ALL') return decision.key !== 'AVOID';
+  if (lane === 'RECENT') return (event.lifecycle === 'EMERGING' || event.lifecycle === 'CONFIRMED') && decision.key !== 'AVOID';
+  if (lane === 'BEGINNER') return beginnerAccessForRadar(event, 'zh') === '较高';
+  if (lane === 'SMALL_CREATOR') return event.eventType === 'SMALL_CREATOR_BREAKOUT' || event.smallCreatorBreakoutCount > 0;
+  if (lane === 'HIGH_RPM') {
+    const benchmark = getRpmBenchmarkForTopic(event.topic);
+    return benchmark.highUsd !== null && benchmark.highUsd >= 8;
+  }
+  if (lane === 'CAUTION') return decision.key === 'CAUTION' || decision.key === 'AVOID';
   return false;
 }
 
-export default function OpportunityRadar({ locale, embedded = false, onWatch, onCreateIdea, onResearch }: { locale: UiLocale; embedded?: boolean } & OpportunityRadarActions) {
+export default function OpportunityRadar({ locale, embedded = false, onWatch, onCreateIdea, onResearch, onSwitchFormat }: { locale: UiLocale; embedded?: boolean } & OpportunityRadarActions) {
   const zh = locale === 'zh';
   const [window, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
   const [market, setMarket] = useState('all');
@@ -157,7 +157,7 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
       if (shouldRestore && restoreContext?.returnState) {
         const state = restoreContext.returnState;
         restoreScrollRef.current = typeof state.scrollPosition === 'number' && Number.isFinite(state.scrollPosition) ? state.scrollPosition : null;
-        if (state.activeTab && ['ALL', 'ACCELERATING', 'EMERGING', 'SMALL_CREATOR', 'SUPPLY_GAP', 'FORMAT_MIGRATION', 'SATURATION'].includes(state.activeTab)) setLane(state.activeTab);
+        if (state.activeTab && ['ALL', 'RECENT', 'BEGINNER', 'SMALL_CREATOR', 'HIGH_RPM', 'CAUTION'].includes(state.activeTab)) setLane(state.activeTab);
         const restoredMarket = state.filters?.market;
         if (typeof restoredMarket === 'string' && restoredMarket) setMarket(restoredMarket);
         const restoredWindow = restoreContext.timeWindow;
@@ -192,9 +192,9 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
     return () => globalThis.window.clearTimeout(timer);
   }, [data]);
   useEffect(() => () => requestRef.current?.abort(), []);
-  const allEvents = data?.events || [];
+  const allEvents = useMemo(() => data?.events || [], [data]);
   const laneCount = useCallback((key: string) => allEvents.filter(event => matchesRadarLane(event, key)).length, [allEvents]);
-  const laneOptions = useMemo(() => [{ key: 'ALL', zh: '全部事件', en: 'All events' }, { key: 'ACCELERATING', zh: '正在加速', en: 'Accelerating' }, { key: 'EMERGING', zh: '新机会', en: 'Emerging' }, { key: 'SMALL_CREATOR', zh: '小频道突破', en: 'Small creator breakout' }, { key: 'SUPPLY_GAP', zh: '供需缺口', en: 'Supply gap' }, ...(allEvents.some(event => event.eventType === 'FORMAT_MIGRATION') ? [{ key: 'FORMAT_MIGRATION', zh: '格式迁移', en: 'Format migration' }] : []), ...(allEvents.some(event => event.eventType === 'SATURATION_WARNING' || event.lifecycle === 'SATURATING') ? [{ key: 'SATURATION', zh: '饱和预警', en: 'Saturation' }] : [])], [allEvents]);
+  const laneOptions = useMemo(() => [{ key: 'ALL', zh: '最近有机会', en: 'Worth a look' }, { key: 'BEGINNER', zh: '新人更友好', en: 'Beginner friendly' }, { key: 'SMALL_CREATOR', zh: '小频道正在跑出来', en: 'Small creators breaking out' }, { key: 'HIGH_RPM', zh: '高收益参考', en: 'Higher RPM reference' }, { key: 'CAUTION', zh: '需要谨慎', en: 'Use caution' }], []);
   const events = allEvents.filter(event => matchesRadarLane(event, lane)).sort((left, right) => {
     if (!focusTopic) return 0;
     const leftMatch = left.topic.toLowerCase() === focusTopic.toLowerCase() || left.title.toLowerCase().includes(focusTopic.toLowerCase());
@@ -203,6 +203,7 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
   });
   const Container = embedded ? 'section' : 'main';
   return <Container className="radar-v2-page"><section className="radar-v2-hero"><div><span className="radar-v2-kicker">LONG-FORM TREND RADAR · CHANGE DETECTION</span><h1>{zh ? '识别正在形成的长视频趋势变化。' : 'Detect long-form trend changes before they become obvious.'}</h1><p>{zh ? '长视频趋势雷达的对象是趋势事件，而不是单条爆款。它用历史基线、跨频道证据和中小频道突破回答：发生了什么、为什么是现在、是不是已经拥挤。' : 'Long-form Trend Radar tracks trend events, not isolated viral videos. Historical baselines, independent channels, and small-creator proof show what changed and whether it is too late.'}</p></div><div className="radar-v2-hero-stamp"><strong>14D</strong><span>{zh ? '默认主窗口' : 'default window'}</span><i/></div></section>
+    {onSwitchFormat ? <nav className="radar-v2-format-tabs" aria-label={zh ? '内容形态' : 'Content format'}><button type="button" onClick={() => onSwitchFormat('ALL')}>{zh ? '全部' : 'All'}</button><button type="button" onClick={() => onSwitchFormat('SHORTS')}>Shorts</button><button type="button" className="active" aria-current="page">{zh ? '长视频' : 'Long-form'}</button></nav> : null}
     <section className="radar-v2-toolbar"><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => setWindow(event.target.value as typeof window)}><option value="7d">7D</option><option value="14d">14D · {zh ? '推荐' : 'recommended'}</option><option value="30d">30D</option></select></label><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><button type="button" className="primary" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '读取中…' : 'Loading…') : (zh ? '更新雷达' : 'Refresh radar')}</button></section>
     {data && <section className="radar-v2-scope"><div><span className="radar-v2-kicker">DATA SCOPE</span><b>{data.dataScope.currentRows} {zh ? '条当前长视频 · ' : 'current long-form · '}{data.dataScope.historicalRows} {zh ? '条历史基线' : 'historical baseline'}</b><small>{data.dataScope.note}</small></div><div><strong>{data.events.length}</strong><span>{zh ? '个事件' : 'events'}</span></div></section>}
     {focusTopic ? <div className="radar-v2-focus"><span>{zh ? '已定位赛道' : 'Focused niche'}</span><b>{focusTopic}</b><button type="button" onClick={() => setFocusTopic(null)}>{zh ? '清除定位' : 'Clear focus'}</button></div> : null}
