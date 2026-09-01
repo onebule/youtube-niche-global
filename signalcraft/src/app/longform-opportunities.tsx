@@ -344,12 +344,23 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const representativeCount = opportunity.representativeVideos.length;
   const decision = recommendationFor(opportunity, locale);
   const canonicalConfidence = opportunity.confidenceLevel || opportunity.confidenceLabel;
+  const nicheSignals = opportunity.nicheSignals;
+  const signalLabels: Record<string, string> = {
+    SMALL_CREATOR_BREAKOUT: zh ? '小创作者突破' : 'Small-creator breakout',
+    CROSS_CREATOR_BREAKOUT: zh ? '跨创作者突破' : 'Cross-creator breakout',
+    REPEATED_BREAKOUT: zh ? '重复突破' : 'Repeated breakout',
+    BREAKOUT_DENSITY_HIGH: zh ? '突破密度偏高' : 'High breakout density',
+    CREATOR_CONCENTRATION_HIGH: zh ? '创作者集中度高' : 'High creator concentration',
+    CREATOR_CONCENTRATION_LOW: zh ? '创作者分布分散' : 'Low creator concentration',
+  };
+  const strengthLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', WEAK: zh ? '弱' : 'Weak', MODERATE: zh ? '中' : 'Moderate', STRONG: zh ? '强' : 'Strong' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
+    {nicheSignals ? <section className="longform-niche-signals" aria-label={zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}><div className="longform-evidence-heading"><b>{zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}</b><small>{zh ? `${nicheSignals.eligibleCreators} 个独立创作者 · ${nicheSignals.eligibleVideos} 条可比较视频` : `${nicheSignals.eligibleCreators} independent creators · ${nicheSignals.eligibleVideos} eligible videos`}</small></div><div className="longform-niche-signal-list">{nicheSignals.signals.filter(signal => signal.strength !== 'INSUFFICIENT').map(signal => <span key={signal.type} className={`signal-${signal.strength.toLowerCase()}`}>{signalLabels[signal.type] || signal.type} · {strengthLabels[signal.strength] || signal.strength}</span>)}</div><div className="longform-niche-signal-metrics"><span>{zh ? '突破密度' : 'Breakout density'} {nicheSignals.breakoutDensity === null ? '—' : `${Math.round(nicheSignals.breakoutDensity * 100)}%`}</span><span>{zh ? '重复突破创作者' : 'Repeated-breakout creators'} {nicheSignals.repeatedBreakoutCreators}</span><span>{zh ? 'Top 3 播放占比' : 'Top 3 view share'} {nicheSignals.concentration.top3Share === null ? '—' : `${Math.round(nicheSignals.concentration.top3Share * 100)}%`}</span></div><small className="longform-niche-signal-note">{zh ? '这是跨创作者证据，不等于机会分数或进入建议。阈值状态：需校准。' : 'Cross-creator evidence only; not an opportunity score or entry recommendation. Thresholds require calibration.'}</small></section> : null}
     <LongformPlanningPanel opportunity={opportunity} locale={locale}/>
     <LongformValidationPlan opportunity={opportunity} locale={locale}/>
     <div className="longform-lanes" id="research-pattern">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>

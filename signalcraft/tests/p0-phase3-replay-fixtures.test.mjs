@@ -6,6 +6,7 @@ import { normalizeOpportunityRadarResponse } from '../src/lib/opportunity-radar.
 import { normalizeShortformRadarResponse } from '../src/lib/shortform-opportunity-radar.ts';
 import { readResearchUrlState, writeResearchUrlState } from '../src/lib/research-url-state.ts';
 import { buildCreatorBreakoutSummary } from '../src/lib/creator-breakout.ts';
+import { buildNicheBreakoutSummary } from '../src/lib/niche-signals.ts';
 
 const longformFixture = {
   schemaVersion: 'longform.v3',
@@ -73,4 +74,13 @@ test('creator breakout fixture replay is deterministic and keeps the retrospecti
   assert.deepEqual(replay, first);
   assert.equal(first.temporalSemantics, 'RETROSPECTIVE_BASELINE');
   assert.equal(first.calibrationStatus, 'CALIBRATION_REQUIRED');
+});
+
+test('niche signal replay preserves creator breadth and signal types', () => {
+  const observations = Array.from({ length: 6 }, (_, index) => ({ nicheId: 'fixture-niche', videoId: `v${index}`, creatorId: `creator-${index}`, format: 'long', views: 100, subscriberCount: 20_000, baselineStatus: 'VERIFIED', baselineConfidence: 'HIGH', breakoutClassification: index < 3 ? 'BREAKOUT' : 'NORMAL', breakoutMultiple: index < 3 ? 4 : 1, repeatBreakoutStatus: 'NONE' }));
+  const first = buildNicheBreakoutSummary({ nicheId: 'fixture-niche', observations });
+  const replay = buildNicheBreakoutSummary({ nicheId: 'fixture-niche', observations: JSON.parse(JSON.stringify(observations)) });
+  assert.deepEqual(replay, first);
+  assert.equal(first.eligibleCreators, 6);
+  assert.ok(first.signals.some(signal => signal.type === 'CROSS_CREATOR_BREAKOUT'));
 });

@@ -3,6 +3,7 @@ import { clientErrorMessage } from './client-error.ts';
 import { normalizeLongformResponse } from './longform-response';
 import type { DataQuality, EvidenceContract, EvidenceDecisionReason } from './evidence-contract.ts';
 import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './entry-decision.ts';
+import type { NicheBreakoutSummary } from './niche-signals.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -31,6 +32,8 @@ export type LongformOpportunity = {
     recommendation: string | null;
     decisionReasons?: EvidenceDecisionReason[];
   };
+  /** Optional upstream Phase 2 evidence; absent when the public API has no creator-level inputs. */
+  nicheSignals?: NicheBreakoutSummary;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

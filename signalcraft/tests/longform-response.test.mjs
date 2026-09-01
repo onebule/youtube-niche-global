@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeLongformResponse } from '../src/lib/longform-response.ts';
+import { buildNicheBreakoutSummary } from '../src/lib/niche-signals.ts';
 
 test('partial long-form responses normalize to safe unknown states', () => {
   const result = normalizeLongformResponse({
@@ -33,4 +34,11 @@ test('normalized responses preserve real fields and reject invalid scores', () =
   assert.equal(result.opportunities[0].confidenceLabel, 'LOW');
   assert.equal(result.opportunities[0].recommendation, undefined);
   assert.equal(result.opportunities[0].sampleSize, 0);
+});
+
+test('optional Long-form niche signals survive the response boundary', () => {
+  const nicheSignals = buildNicheBreakoutSummary({ nicheId: 'topic-a', observations: Array.from({ length: 5 }, (_, index) => ({ nicheId: 'topic-a', videoId: `v${index}`, creatorId: `c${index}`, format: 'long', views: 100, subscriberCount: 20_000, baselineStatus: 'VERIFIED', baselineConfidence: 'HIGH', breakoutClassification: index < 3 ? 'BREAKOUT' : 'NORMAL', breakoutMultiple: index < 3 ? 4 : 1, repeatBreakoutStatus: 'NONE' })) });
+  const result = normalizeLongformResponse({ opportunities: [{ key: 'topic-a', nicheSignals }] });
+  assert.equal(result.opportunities[0].nicheSignals?.nicheId, 'topic-a');
+  assert.equal(result.opportunities[0].nicheSignals?.format, 'long');
 });

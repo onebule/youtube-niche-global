@@ -1,6 +1,7 @@
 import type { LongformOpportunity, LongformResponse } from './longform';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence } from './evidence-contract.ts';
 import { evaluateLongformEntryDecision } from './entry-decision.ts';
+import { normalizeNicheBreakoutSummary } from './niche-signals.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -54,6 +55,7 @@ function normalizeOpportunity(value: unknown, index: number): LongformOpportunit
     confidence: Math.max(0, Math.min(100, Math.round(numberOr(value.confidence, 0)))),
     confidenceLabel: confidenceValues.has(rawConfidenceLabel) ? rawConfidenceLabel : 'LOW',
     recommendation: recommendationValues.has(rawRecommendation) ? rawRecommendation : undefined,
+    nicheSignals: normalizeNicheBreakoutSummary(value.nicheSignals) || undefined,
     lanes: textList(value.lanes),
     metrics,
     execution: { score: nullableNumber(execution.score), coverage: Math.max(0, Math.min(100, Math.round(numberOr(execution.coverage, 0)))), rationale: textOr(execution.rationale, '暂无执行适配说明。') },
