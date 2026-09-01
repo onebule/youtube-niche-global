@@ -20,8 +20,8 @@ body {
 .brand-glyph { width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 9px 20px rgba(26, 64, 150, .24); }
 .brand small { margin-top: 1px; font-size: 8px; letter-spacing: 1.7px; }
 .site-nav { gap: 6px; }
-.site-nav button, .ghost { font-weight: 650; }
-.site-nav button:hover, .ghost:hover { background: #edf3fb; color: var(--navy); }
+.site-nav button, .site-nav a, .ghost { font-weight: 650; }
+.site-nav button:hover, .site-nav a:hover, .ghost:hover { background: #edf3fb; color: var(--navy); }
 .head-actions { gap: 10px; }
 .icon-btn { background: #fff; border-color: #dce5f1; }
 .primary { background: linear-gradient(135deg, #2a439d 0%, #1b2f7e 100%); border: 1px solid rgba(255,255,255,.22); box-shadow: 0 10px 22px rgba(35, 58, 145, .22); transition: transform .18s ease, box-shadow .18s ease; }
@@ -52,7 +52,7 @@ body {
 .video-grid { gap: 20px; }
 .video-card { position: relative; overflow: hidden; border: 1px solid #dce5f0; border-radius: 17px; background: var(--surface-raised); box-shadow: 0 8px 24px rgba(13, 28, 58, .055); transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
 .video-card:hover { transform: translateY(-4px); border-color: #bdcedf; box-shadow: var(--card-shadow); }
-.thumb { height: 188px; padding: 13px; }
+.thumb { height: 188px; padding: 13px; width:100%; border:0; text-align:left; }
 .thumb:after { content: ''; position: absolute; inset: auto 0 0; height: 46%; background: linear-gradient(transparent, rgba(3,11,30,.55)); z-index: 2; pointer-events: none; }
 .thumb > span { z-index: 4 !important; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; backdrop-filter: blur(6px); }
 .thumb > span:first-of-type { font-weight: 750; }

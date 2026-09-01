@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeEvidence } from '../src/lib/evidence-contract.ts';
+import { normalizeLongformResponse } from '../src/lib/longform-response.ts';
+import { normalizeOpportunityRadarResponse } from '../src/lib/opportunity-radar.ts';
+import { normalizeShortformRadarResponse } from '../src/lib/shortform-opportunity-radar.ts';
+import { readResearchUrlState, writeResearchUrlState } from '../src/lib/research-url-state.ts';
+
+const longformFixture = {
+  schemaVersion: 'longform.v3',
+  evidence: {
+    source: 'fixture',
+    algorithmVersion: 'upstream-lf-1',
+    snapshotId: 'snap-lf-1',
+    inputSnapshotId: 'input-lf-1',
+    requestId: 'req-lf-1',
+    capturedAt: '2026-09-01T00:00:00.000Z',
+    decisionReasons: [{ code: 'CONTROLLED_TEST', severity: 'SUPPORTING', message: 'Fixture evidence supports a controlled test.' }],
+  },
+  dataScope: { source: 'fixture', markets: ['US'], window: '28d', latestCapturedAt: '2026-09-01T00:00:00.000Z', collectedRows: 6, longformRows: 6, uncertainRows: 0, classificationCoverage: 100 },
+  opportunities: [
+    { key: 'b', topic: 'Topic B', mechanism: 'Format B', productionType: 'Tutorial', sampleSize: 4, channelCount: 2, marketOpportunity: 61, executionFit: 59, entryScore: 60, confidence: 72, confidenceLabel: 'MEDIUM', metrics: { growth: 52 }, representativeVideos: [{ videoId: 'vb', title: 'B' }] },
+    { key: 'a', topic: 'Topic A', mechanism: 'Format A', productionType: 'Explainer', sampleSize: 8, channelCount: 3, marketOpportunity: 71, executionFit: 68, entryScore: 70, confidence: 84, confidenceLabel: 'HIGH', metrics: { growth: 80 }, representativeVideos: [{ videoId: 'va', title: 'A' }] },
+  ],
+  gaps: [],
+};
+
+test('long-form fixture replay is deterministic and preserves upstream observability', () => {
+  const first = normalizeLongformResponse(longformFixture);
+  const replay = normalizeLongformResponse(JSON.parse(JSON.stringify(longformFixture)));
+  assert.deepEqual(replay, first);
+  assert.deepEqual(first.opportunities.map(item => item.key), ['b', 'a']);
+  assert.equal(first.evidence.inputSnapshotId, 'input-lf-1');
+  assert.equal(first.opportunities[0].upstreamAssessment.decisionReasons[0].code, 'CONTROLLED_TEST');
+  assert.equal(first.opportunities[0].entryDecision.status, 'INSUFFICIENT');
+});
+
+test('radar fixtures preserve count, order, and explicit empty/filter inputs', () => {
+  const payload = { available: true, engineVersion: 'fixture-radar', window: '14d', dataScope: { source: 'fixture', markets: ['US'], historyDays: 30, currentWindowDays: 14, currentRows: 2, historicalRows: 4, latestCapturedAt: null, note: 'fixture' }, events: [{ id: 'e2', title: 'Second' }, { id: 'e1', title: 'First' }], lanes: { ALL: 2 }, gaps: [] };
+  const first = normalizeOpportunityRadarResponse(payload);
+  const replay = normalizeOpportunityRadarResponse(JSON.parse(JSON.stringify(payload)));
+  assert.deepEqual(replay.events.map(event => event.id), ['e2', 'e1']);
+  assert.equal(first.events.length, 2);
+  assert.deepEqual(first, replay);
+  const shorts = normalizeShortformRadarResponse({ ...payload, format: 'SHORT_FORM', events: [{ id: 's2' }, { id: 's1' }] });
+  assert.deepEqual(shorts.events.map(event => event.id), ['s2', 's1']);
+});
+
+test('research URL state round-trips meaningful controls without workspace data', () => {
+  const state = readResearchUrlState('?market=US&window=28d&lane=BREAKOUT&topic=Format%20A&direction=a');
+  assert.deepEqual(state, { market: 'US', window: '28d', lane: 'BREAKOUT', topic: 'Format A', direction: 'a' });
+  assert.equal(writeResearchUrlState('?source=trend-radar&market=US', { window: '90d', lane: 'ALL', direction: 'a' }), '?source=trend-radar&market=US&window=90d&lane=ALL&direction=a');
+  assert.equal(writeResearchUrlState('?topic=Format%20A&lane=BREAKOUT', { topic: undefined, lane: 'ALL' }), '?lane=ALL');
+});
+
+test('evidence fixture rejects malformed decision reasons instead of inventing provenance', () => {
+  const evidence = normalizeEvidence({ requestId: 'req-1', inputSnapshotId: 'in-1', decisionReasons: [{ code: 'ok', severity: 'UNKNOWN', message: 'discard' }, { code: 'known', severity: 'CONTEXT', message: 'kept' }] });
+  assert.equal(evidence.requestId, 'req-1');
+  assert.equal(evidence.inputSnapshotId, 'in-1');
+  assert.deepEqual(evidence.decisionReasons, [{ code: 'known', severity: 'CONTEXT', message: 'kept' }]);
+});

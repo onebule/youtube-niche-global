@@ -1,7 +1,7 @@
 import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
 import { normalizeLongformResponse } from './longform-response';
-import type { DataQuality, EvidenceContract } from './evidence-contract.ts';
+import type { DataQuality, EvidenceContract, EvidenceDecisionReason } from './evidence-contract.ts';
 import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './entry-decision.ts';
 
 export type LongformOpportunity = {
@@ -25,9 +25,11 @@ export type LongformOpportunity = {
     source: 'UPSTREAM_OPAQUE';
     algorithmVersion: string | null;
     snapshotId: string | null;
+    inputSnapshotId?: string | null;
     capturedAt: string | null;
     scores: { marketOpportunity: number | null; executionFit: number | null; entryScore: number | null };
     recommendation: string | null;
+    decisionReasons?: EvidenceDecisionReason[];
   };
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];

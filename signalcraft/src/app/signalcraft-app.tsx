@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { channels, getOpportunity, initialAlerts, initialCollections, initialIdeas, initialTasks, promptTemplates, watchRules } from '@/src/lib/mock';
 import { parseFilters, serializeFilters } from '@/src/lib/scoring.mjs';
@@ -120,6 +121,11 @@ function usePersisted(account: AccountSession | null){
 }
 
 function navigate(path:string){ window.history.pushState({},'',path); window.dispatchEvent(new Event('signalcraft:navigate')); window.scrollTo({top:0,behavior:'smooth'}); }
+function handleInternalNavigation(event: React.MouseEvent<HTMLAnchorElement>, path: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  navigate(path);
+}
 function Sparkline({video}:{video:Video}){const data=video.snapshots.map(s=>s.views);const max=Math.max(...data),min=Math.min(...data);const pts=data.map((n,i)=>`${i*33},${30-((n-min)/(max-min||1))*25}`).join(' ');return <svg className="spark" viewBox="0 0 100 34" aria-label="播放量增长曲线"><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>}
 function ScorePill({value}:{value:number}){return <span className={cn('score',value>=80?'excellent':value>=65?'good':'watch')}>{value}<small>/100</small></span>}
 function Empty({title,body,action}:{title:string;body:string;action?:React.ReactNode}){return <div className="empty"><div className="empty-icon">◇</div><b>{title}</b><p>{body}</p>{action}</div>}
@@ -134,14 +140,14 @@ function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange,i
   const publicItems=[[ '/', primary.home ],['/rankings',primary.rankings],['/radar',primary.radar],['/longform',primary.research],['/doctor',primary.doctor],['/app/watchlists',primary.monitor],['/app',primary.studio]];
   const appItems=[['/app',copy.studioNav[0]],['/app/research',copy.studioNav[1]],['/app/ideas',copy.studioNav[2]]];
   const items=isApp?appItems:publicItems;
-  return <><header className="site-header"><button className="brand" onClick={()=>navigate('/')} aria-label={copy.backHome}><span className="brand-glyph">SC</span><span>{BRAND}<small>CONTENT INTELLIGENCE</small></span></button><nav className="site-nav" aria-label={locale==='zh'?'主导航':'Main navigation'}>{items.map(([href,label])=><button key={href} className={path===href?'active':''} aria-current={path===href?'page':undefined} onClick={()=>navigate(href)}>{label}</button>)}</nav><div className="head-actions"><div className="locale-toggle" role="group" aria-label={copy.interfaceLanguage}><button type="button" className={locale==='zh'?'active':''} aria-pressed={locale==='zh'} onClick={()=>onLocaleChange('zh')}>中文</button><button type="button" className={locale==='en'?'active':''} aria-pressed={locale==='en'} onClick={()=>onLocaleChange('en')}>EN</button></div><button className="icon-btn" onClick={onTheme} aria-label={copy.theme}>◐</button><button className="ghost" onClick={()=>navigate(isApp?'/discover':'/app')}>{isApp?copy.publicDiscovery:copy.enterStudio}</button><button className="ghost header-pricing" onClick={()=>navigate('/pricing')}>{primary.pricing}</button>{isOwner&&<button className="owner-link" onClick={()=>navigate('/owner')}>{locale==='zh'?'站点管理':'Site admin'}</button>}{account?<button className="account-chip" onClick={onSignOut} title={copy.signOut}><span>●</span>{account.email}</button>:<button className="google-login" onClick={onSignIn} title={copy.signInTitle}><span>G</span>{copy.signIn}</button>}</div></header>{isApp&&<StudioNav path={path} locale={locale}/>}</>
+  return <><header className="site-header"><Link className="brand" href="/" onClick={event=>handleInternalNavigation(event,'/')} aria-label={copy.backHome}><span className="brand-glyph">SC</span><span>{BRAND}<small>CONTENT INTELLIGENCE</small></span></Link><nav className="site-nav" aria-label={locale==='zh'?'主导航':'Main navigation'}>{items.map(([href,label])=><a href={href} key={href} className={path===href?'active':''} aria-current={path===href?'page':undefined} onClick={event=>handleInternalNavigation(event,href)}>{label}</a>)}</nav><div className="head-actions"><div className="locale-toggle" role="group" aria-label={copy.interfaceLanguage}><button type="button" className={locale==='zh'?'active':''} aria-pressed={locale==='zh'} onClick={()=>onLocaleChange('zh')}>中文</button><button type="button" className={locale==='en'?'active':''} aria-pressed={locale==='en'} onClick={()=>onLocaleChange('en')}>EN</button></div><button className="icon-btn" onClick={onTheme} aria-label={copy.theme}>◐</button><button className="ghost" onClick={()=>navigate(isApp?'/discover':'/app')}>{isApp?copy.publicDiscovery:copy.enterStudio}</button><button className="ghost header-pricing" onClick={()=>navigate('/pricing')}>{primary.pricing}</button>{isOwner&&<button className="owner-link" onClick={()=>navigate('/owner')}>{locale==='zh'?'站点管理':'Site admin'}</button>}{account?<button className="account-chip" onClick={onSignOut} title={copy.signOut}><span>●</span>{account.email}</button>:<button className="google-login" onClick={onSignIn} title={copy.signInTitle}><span>G</span>{copy.signIn}</button>}</div></header>{isApp&&<StudioNav path={path} locale={locale}/>}</>
 }
 function StudioNav({path,locale}:{path:string;locale:UiLocale}){const copy=languageCopy[locale];const primary=copy.primaryNav;const groups=[
   {label:locale==='zh'?'研究':'RESEARCH',items:[['/app',locale==='zh'?'概览':'Overview'],['/app/research',copy.studioNav[1]],['/app/library/channels',locale==='zh'?'竞品频道':'Competitor channels'],['/app/library/videos',locale==='zh'?'研究资料':'Research library'],['/app/thumbnails',locale==='zh'?'缩略图研究':'Thumbnail research'],['/app/benchmarks',locale==='zh'?'竞品对标':'Benchmarking']]},
   {label:locale==='zh'?'诊断与监控':'DIAGNOSE & MONITOR',items:[['/app/doctor',primary.doctor],['/app/watchlists',primary.monitor]]},
   {label:locale==='zh'?'创作':'CREATE',items:[['/app/cases',locale==='zh'?'视频拆解':'Video breakdown'],['/app/ideas',locale==='zh'?'选题':'Ideas'],['/app/canvas',locale==='zh'?'画布':'Canvas'],['/app/image-to-video',locale==='zh'?'图生视频':'Image-to-video'],['/app/prompts',locale==='zh'?'提示词与版本':'Prompts & versions']]},
   {label:locale==='zh'?'系统':'SYSTEM',items:[['/app/settings',locale==='zh'?'配置':'Settings']]},
-];return <aside className="studio-nav" aria-label={locale==='zh'?'工作室导航':'Studio navigation'}>{groups.map(group=><section className="studio-nav-group" key={group.label}><p>{group.label}</p>{group.items.map(([href,label])=><button key={href} className={cn(path===href&&'active')} onClick={()=>navigate(href)}>{label}</button>)}</section>)}</aside>}
+];return <aside className="studio-nav" aria-label={locale==='zh'?'工作室导航':'Studio navigation'}>{groups.map(group=><section className="studio-nav-group" key={group.label}><p>{group.label}</p>{group.items.map(([href,label])=><a href={href} key={href} className={cn(path===href&&'active')} aria-current={path===href?'page':undefined} onClick={event=>handleInternalNavigation(event,href)}>{label}</a>)}</section>)}</aside>}
 
 function Filters({filters,setFilters,hideKeyword=false}:{filters:ReturnType<typeof parseFilters>;setFilters:(v:ReturnType<typeof parseFilters>)=>void;hideKeyword?:boolean}){const patch=(key:string,value:string)=>{const next={...filters,[key]:value};setFilters(next);const q=serializeFilters(next);window.history.replaceState({},'',`${location.pathname}${q?`?${q}`:''}`)};return <div className="filters" aria-label="筛选器">{!hideKeyword&&<label>关键词<input value={filters.q} onChange={e=>patch('q',e.target.value)} placeholder="如：AI productivity"/></label>}<label>发布时间范围<select value={filters.window} onChange={e=>patch('window',e.target.value)}><option value="24h">近 24 小时</option><option value="7d">近 7 天</option><option value="28d">近 28 天</option><option value="90d">近 3 个月</option><option value="180d">近 6 个月</option><option value="365d">近 1 年</option></select></label><label>市场<select value={filters.region} onChange={e=>patch('region',e.target.value)}><option value="US">美国</option><option value="GB">英国</option><option value="JP">日本</option><option value="BR">巴西</option><option value="MX">墨西哥</option><option value="IN">印度</option><option value="ID">印度尼西亚</option></select></label><label>类别<select value={filters.category} onChange={e=>patch('category',e.target.value)}>{categoryOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>语言<select value={filters.language} onChange={e=>patch('language',e.target.value)}><option value="all">全部语言</option><option value="英语">英语</option><option value="西班牙语">西班牙语</option><option value="葡萄牙语">葡萄牙语</option></select></label><label>形态<select value={filters.format} onChange={e=>patch('format',e.target.value)}><option value="all">短+长视频</option><option value="short">短视频</option><option value="long">长视频</option></select></label><label>订阅上限<select value={filters.maxSubs} onChange={e=>patch('maxSubs',e.target.value)}><option value="100000">10 万</option><option value="50000">5 万</option><option value="all">不限</option></select></label><label>最低评分<select value={filters.minScore} onChange={e=>patch('minScore',e.target.value)}><option value="70">70+</option><option value="80">80+</option><option value="0">不限</option></select></label></div>}
 
@@ -186,17 +192,18 @@ function VideoCard({video,state,setState,onDetail,locale}:{video:Video;state:Per
   const o=scoreFor(video),channel=channelFor(video),saved=state.saved.some(item=>item.id===video.id);
   const titleZh=translatedTitle(video,locale);
   const portrait=video.aspectRatio==='9:16'||video.aspectRatio==='1:1';
-  const [imageState,setImageState]=useState<'loading'|'ready'|'missing'>(video.thumbnail?'loading':'missing');
-  useEffect(()=>{setImageState(video.thumbnail?'loading':'missing')},[video.thumbnail]);
+  const [loadedImage,setLoadedImage]=useState<string|null>(null);
+  const [failedImage,setFailedImage]=useState<string|null>(null);
+  const imageState: 'loading'|'ready'|'missing' = !video.thumbnail ? 'missing' : failedImage===video.thumbnail ? 'missing' : loadedImage===video.thumbnail ? 'ready' : 'loading';
   const toggle=()=>setState(s=>({...s,saved:s.saved.some(item=>item.id===video.id)?s.saved.filter(item=>item.id!==video.id):[...s.saved,video]}));
   const watch=()=>openOriginalVideo(video.sourceUrl,()=>onDetail(video));
   const duration=video.durationSeconds<60?`${video.durationSeconds} 秒`:`${Math.round(video.durationSeconds/60)} 分钟`;
   return <article className="video-card">
-    <div className={cn('thumb',portrait&&'thumb-portrait',imageState==='missing'&&'thumb-no-image')} role="link" tabIndex={0} onClick={watch} onKeyDown={event=>event.key==='Enter'&&watch()} title="打开并观看此视频">
-      {video.thumbnail&&<img className={cn('video-card-image',imageState==='missing'&&'is-hidden')} src={video.thumbnail} alt={`${video.title} 视频缩略图`} width={480} height={270} loading="lazy" decoding="async" onLoad={()=>setImageState('ready')} onError={()=>setImageState('missing')}/>}
+      <button type="button" className={cn('thumb',portrait&&'thumb-portrait',imageState==='missing'&&'thumb-no-image')} onClick={watch} title="打开并观看此视频" aria-label={`打开视频：${video.title}`}>
+      {video.thumbnail&&<img className={cn('video-card-image',imageState==='missing'&&'is-hidden')} src={video.thumbnail} alt={`${video.title} 视频缩略图`} width={480} height={270} loading="lazy" decoding="async" onLoad={()=>setLoadedImage(video.thumbnail||null)} onError={()=>setFailedImage(video.thumbnail||null)}/>}
       <div aria-hidden={imageState==='ready'?'true':undefined} className={cn('thumb-fallback',imageState==='ready'&&'is-hidden')}><b>▶</b><span>{video.topic}</span>{imageState==='missing'&&<small>无公开缩略图</small>}</div>
       <span className="video-format" style={{position:'relative',zIndex:3}}>{video.format==='short'?'短视频':video.format==='long'?'长视频':'待复核'} · {duration}</span><span style={{position:'relative',zIndex:3}}><ScorePill value={o.opportunityScore}/></span>
-    </div>
+      </button>
     <div className="card-body"><div className="eyebrow">{video.topic} · {video.language} / {video.region}</div><button className="video-title" onClick={watch}><span>{video.title}</span>{titleZh&&<small className="title-translation">中文：{titleZh}</small>}</button><p className="channel-line">{channel.title} · {formatSubscribers(channel.subscribers,'zh')} 订阅</p>
       <div className="metric-row"><b>{num.format(video.snapshots.at(-1)!.views)}<small>播放</small></b><b className="up">{num.format(o.viewsPerHour)}<small>平均播放 / 小时</small></b><Sparkline video={video}/></div>
     <div className="evidence-strip"><span>公开数据</span><span>单次快照</span><b>{o.viewsPerSubscriber===null?'未知':`${o.viewsPerSubscriber}×`} 播放 / 订阅</b></div>
@@ -362,7 +369,7 @@ function PersistentWatchlists({state,setState,toast,account}:{state:Persisted;se
       setSyncState('fallback');
     }
   },[account?.accessToken,setState]);
-  useEffect(()=>{void syncRules();return()=>{syncGeneration.current+=1}},[syncRules]);
+   useEffect(()=>{const timer=window.setTimeout(()=>{void syncRules()},0);return()=>{window.clearTimeout(timer);syncGeneration.current+=1}},[syncRules]);
   const toggle=async(rule:WatchRule)=>{
     const paused=!rule.paused;
     setState(s=>({...s,rules:s.rules.map(item=>item.id===rule.id?{...item,paused}:item)}));

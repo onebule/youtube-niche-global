@@ -26,16 +26,24 @@ export type EvidenceInference = {
   source?: string | null;
 };
 
+export type EvidenceDecisionReason = {
+  code: string;
+  severity: 'SUPPORTING' | 'BLOCKING' | 'CONTEXT';
+  message: string;
+};
+
 export type EvidenceContract = {
   schemaVersion: string;
   algorithmVersion?: string | null;
   snapshotId?: string | null;
+  inputSnapshotId?: string | null;
   requestId?: string | null;
   capturedAt?: string | null;
   source?: string | null;
   facts?: EvidenceFact[];
   inferences?: EvidenceInference[];
   missing?: string[];
+  decisionReasons?: EvidenceDecisionReason[];
 };
 
 export type DataQuality = {
@@ -88,12 +96,20 @@ export function normalizeEvidence(value: unknown, fallback?: Partial<EvidenceCon
     schemaVersion: text(raw.schemaVersion) || fallback?.schemaVersion || EVIDENCE_SCHEMA_VERSION,
     algorithmVersion: text(raw.algorithmVersion) ?? fallback?.algorithmVersion ?? null,
     snapshotId: text(raw.snapshotId) ?? fallback?.snapshotId ?? null,
+    inputSnapshotId: text(raw.inputSnapshotId) ?? fallback?.inputSnapshotId ?? null,
     requestId: text(raw.requestId) ?? fallback?.requestId ?? null,
     capturedAt: validIso(raw.capturedAt) ?? fallback?.capturedAt ?? null,
     source: text(raw.source) ?? fallback?.source ?? null,
     facts,
     inferences,
     missing: stringList(raw.missing),
+    decisionReasons: Array.isArray(raw.decisionReasons) ? raw.decisionReasons.flatMap((item): EvidenceDecisionReason[] => {
+      if (!isRecord(item)) return [];
+      const code = text(item.code);
+      const message = text(item.message);
+      const severity = item.severity === 'SUPPORTING' || item.severity === 'BLOCKING' || item.severity === 'CONTEXT' ? item.severity : null;
+      return code && message && severity ? [{ code, message, severity }] : [];
+    }) : fallback?.decisionReasons || [],
   };
 }
 

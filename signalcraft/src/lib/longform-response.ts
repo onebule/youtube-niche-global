@@ -80,7 +80,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
   const opportunities = Array.isArray(raw.opportunities) ? raw.opportunities.map(normalizeOpportunity).filter((item): item is LongformOpportunity => Boolean(item)) : [];
   const rawQuota = isRecord(raw.quota) ? raw.quota : null;
   const topLevel = raw as Record<string, unknown>;
-  const evidence = normalizeEvidence(raw.evidence, { source: textOr(rawScope.source, 'unknown'), algorithmVersion: nullableText(topLevel.algorithmVersion), snapshotId: nullableText(topLevel.snapshotId), requestId: nullableText(topLevel.requestId), capturedAt: nullableText(topLevel.capturedAt) || nullableText(rawScope.latestCapturedAt) });
+  const evidence = normalizeEvidence(raw.evidence, { source: textOr(rawScope.source, 'unknown'), algorithmVersion: nullableText(topLevel.algorithmVersion), snapshotId: nullableText(topLevel.snapshotId), inputSnapshotId: nullableText(topLevel.inputSnapshotId), requestId: nullableText(topLevel.requestId), capturedAt: nullableText(topLevel.capturedAt) || nullableText(rawScope.latestCapturedAt) });
   const derivedQuality = deriveDataQuality({
     sampleVideos: Math.max(Number(rawScope.longformRows) || 0, opportunities.reduce((sum, opportunity) => sum + opportunity.sampleSize, 0)),
     sampleChannels: Number.isFinite(Number(rawScope.sampleChannels)) ? Number(rawScope.sampleChannels) : null,
@@ -116,9 +116,11 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
         snapshotId: evidence.snapshotId || null,
+        inputSnapshotId: evidence.inputSnapshotId || null,
         capturedAt: evidence.capturedAt || null,
         scores: { marketOpportunity: opportunity.marketOpportunity, executionFit: opportunity.executionFit, entryScore: opportunity.entryScore },
         recommendation: opportunity.recommendation || null,
+        decisionReasons: evidence.decisionReasons || [],
       },
     };
   });

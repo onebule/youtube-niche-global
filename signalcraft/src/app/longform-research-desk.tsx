@@ -14,8 +14,15 @@ type LongformResearchDeskProps = {
 } & OpportunityRadarActions & ShortformRadarActions;
 
 function setRoute(path: string) {
-  if (typeof window === 'undefined' || window.location.pathname === path) return;
-  window.history.pushState({}, '', path);
+  if (typeof window === 'undefined') return;
+  const current = new URL(window.location.href);
+  const next = new URL(path, current.origin);
+  // Keep the current desk filters/focus when switching research jobs. The
+  // child surface validates each key; unknown keys are harmless and preserve
+  // backwards-compatible deep links.
+  next.search = current.search;
+  if (current.pathname === next.pathname && current.search === next.search) return;
+  window.history.pushState({}, '', `${next.pathname}${next.search}`);
   window.dispatchEvent(new Event('signalcraft:navigate'));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
