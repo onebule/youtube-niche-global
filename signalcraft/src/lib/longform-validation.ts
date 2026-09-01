@@ -1,4 +1,5 @@
 import type { LongformOpportunity } from './longform';
+import { LONG_FORM_OPPORTUNITY_CONFIG } from './opportunity-config.ts';
 
 export type LongformValidationPlan = {
   recommendedVideos: number | null;
@@ -12,6 +13,6 @@ export function buildLongformValidationPlan(opportunity: LongformOpportunity): L
   const requiredMetrics = ['CTR', '7D views', '30D views', 'channel baseline', 'production cost', 'RPM'];
   const successCriteria = ['Median uplift across the batch', 'P75 uplift without one viral outlier', 'Cross-video consistency', 'Production feasibility', 'Revenue evidence'];
   if (opportunity.recommendation === 'AVOID' || opportunity.recommendation === 'INSUFFICIENT_DATA') return { recommendedVideos: null, reason: 'DO_NOT_ENTER', successCriteria, requiredMetrics };
-  if (opportunity.sampleSize < 5 || opportunity.channelCount < 3 || opportunity.confidenceLabel === 'LOW') return { recommendedVideos: 5, reason: 'THIN_EVIDENCE', successCriteria, requiredMetrics };
+  if (opportunity.sampleSize < LONG_FORM_OPPORTUNITY_CONFIG.confidence.cautionMinVideos || opportunity.channelCount < LONG_FORM_OPPORTUNITY_CONFIG.confidence.cautionMinChannels || opportunity.confidenceLabel === 'LOW') return { recommendedVideos: 5, reason: 'THIN_EVIDENCE', successCriteria, requiredMetrics };
   return { recommendedVideos: 3, reason: 'READY_FOR_SMALL_TEST', successCriteria, requiredMetrics };
 }

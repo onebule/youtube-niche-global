@@ -20,6 +20,9 @@ const eventLabels: Record<ShortformRadarEvent['eventType'], { zh: string; en: st
 const confidenceLabels: Record<ShortformRadarEvent['confidence'], { zh: string; en: string }> = {
   LOW: { zh: '低置信度', en: 'Low confidence' }, MEDIUM: { zh: '中置信度', en: 'Medium confidence' }, HIGH: { zh: '高置信度', en: 'High confidence' },
 };
+const lifecycleLabels: Record<ShortformRadarEvent['lifecycle'], { zh: string; en: string }> = {
+  WATCH: { zh: '早期信号', en: 'Early signal' }, EMERGING: { zh: '形成中', en: 'Emerging' }, CONFIRMED: { zh: '已验证', en: 'Validated' }, CROWDED: { zh: '竞争拥挤', en: 'Crowded' },
+};
 function ShortformVideo({ video, locale }: { video: ShortformRadarEvent['representativeVideos'][number]; locale: UiLocale }) {
   const thumbnail = mediaUrl(video.thumbnail);
   const avatar = mediaUrl(video.channelAvatar);
@@ -40,6 +43,7 @@ function RadarCard({ event, locale, onResearch }: { event: ShortformRadarEvent; 
   const label = eventLabels[event.eventType];
   const confidence = confidenceLabels[event.confidence];
   const decision = opportunityStatusForRadar(event);
+  const lifecycle = lifecycleLabels[event.lifecycle];
   const guardrail = event.independentChannelCount < 2
     ? (zh ? '单频道证据：不作为跨频道机会结论。' : 'Single-channel evidence: not a cross-channel opportunity conclusion.')
     : event.sampleVideoCount < 5
@@ -48,7 +52,7 @@ function RadarCard({ event, locale, onResearch }: { event: ShortformRadarEvent; 
         ? (zh ? `Top 3 频道占 ${event.creatorConcentrationTop3}% 流量，开放度可能被高估。` : `Top 3 channels hold ${event.creatorConcentrationTop3}% of views; openness may be overstated.`)
         : null;
   return <article className="shortform-radar-card">
-    <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts</p></div><span className={`shortform-radar-decision ${decision.key.toLowerCase()}`}>{decision[zh ? 'zh' : 'en']}</span></header>
+    <header className="shortform-radar-card-head"><div><span className="shortform-radar-event-type">{label[zh ? 'zh' : 'en']}</span><h2>{event.title}</h2><p>{event.topic} · {event.mechanism} · Shorts</p><span className={`shortform-radar-lifecycle ${event.lifecycle.toLowerCase()}`}>{zh ? `生命周期 · ${lifecycle.zh}` : `Lifecycle · ${lifecycle.en}`}</span></div><span className={`shortform-radar-decision ${decision.key.toLowerCase()}`}>{decision[zh ? 'zh' : 'en']}</span></header>
     <section className="shortform-radar-decision-brief"><div><small>{zh ? '为什么现在值得看' : 'WHY CONSIDER IT'}</small><b>{event.facts[0] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</b></div><span className={`shortform-radar-confidence ${event.confidence.toLowerCase()}`}>{zh ? `${confidence.zh}置信度 · ${event.sampleVideoCount} 条样本` : `${confidence.en} confidence · ${event.sampleVideoCount} samples`}</span></section>
     <div className="shortform-radar-decision-facts"><div><small>{zh ? '新人机会' : 'BEGINNER ACCESS'}</small><b>{beginnerAccessForRadar(event, locale)}</b><span>{event.breakoutCount ? (zh ? `${event.breakoutCount} 个突破样本` : `${event.breakoutCount} breakout samples`) : (zh ? '暂无突破证据' : 'No breakout proof yet')}</span></div><div><small>{zh ? '竞争程度' : 'COMPETITION'}</small><b>{competitionForRadar(event, locale)}</b><span>{event.creatorConcentrationTop3 === null ? (zh ? '集中度暂无数据' : 'Concentration unavailable') : (zh ? `Top 3 占 ${event.creatorConcentrationTop3}% 播放` : `Top 3 hold ${event.creatorConcentrationTop3}% of views`)}</span></div><div><small>{zh ? '收益作用' : 'MONETIZATION ROLE'}</small><b>{zh ? '涨粉与测试优先' : 'Reach and testing first'}</b><span>{zh ? '公开数据不能估算 Shorts RPM' : 'Public data cannot estimate Shorts RPM'}</span></div></div>
     <section className="shortform-radar-changed"><div className="shortform-radar-changed-head"><small>{zh ? '为什么现在看' : 'WHY NOW'}</small><SignalSparkline points={[event.metrics.previousSample, event.metrics.currentSample]} tone={event.metrics.currentSample >= event.metrics.previousSample ? 'teal' : 'coral'} label={zh ? '历史到当前样本量对照' : 'Historical to current sample comparison'}/></div><p>{event.facts[1] || (zh ? '当前窗口出现了可观察的跨频道变化。' : 'The current window shows a measurable cross-channel change.')}</p><p className="shortform-radar-note">{event.confidenceNote}</p>{guardrail ? <p className="shortform-radar-guardrail">! {guardrail}</p> : null}</section>

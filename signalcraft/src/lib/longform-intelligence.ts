@@ -1,4 +1,5 @@
 import type { LongformOpportunity } from './longform';
+import { LONG_FORM_OPPORTUNITY_CONFIG } from './opportunity-config.ts';
 
 export type LongformEvidenceSignal = {
   value: number | null;
@@ -34,8 +35,8 @@ function metric(opportunity: LongformOpportunity, key: string) {
  */
 export function buildLongformEvidenceLayer(opportunity: LongformOpportunity): LongformEvidenceLayer {
   const riskFlags: LongformRiskFlag[] = [];
-  if (opportunity.sampleSize < 5) riskFlags.push('SMALL_SAMPLE');
-  if (opportunity.channelCount < 3) riskFlags.push('NARROW_CREATOR_BASE');
+  if (opportunity.sampleSize < LONG_FORM_OPPORTUNITY_CONFIG.confidence.cautionMinVideos) riskFlags.push('SMALL_SAMPLE');
+  if (opportunity.channelCount < LONG_FORM_OPPORTUNITY_CONFIG.confidence.cautionMinChannels) riskFlags.push('NARROW_CREATOR_BASE');
   if (opportunity.confidenceLabel === 'LOW') riskFlags.push('LOW_CONFIDENCE');
   if (opportunity.representativeVideos.length === 0) riskFlags.push('NO_REPRESENTATIVE_EVIDENCE');
   if (opportunity.recommendation === 'AVOID' || opportunity.recommendation === 'INSUFFICIENT_DATA') riskFlags.push('AVOID_RECOMMENDATION');
