@@ -12,6 +12,7 @@ import type { ContentStrategy } from './content-strategy.ts';
 import type { ExperimentValidationReport } from './experiment-validation.ts';
 import type { IdeaIntelligenceReport } from './idea-intelligence.ts';
 import type { CreativeBriefIntelligenceReport } from './creative-brief-intelligence.ts';
+import type { CreativeDevelopmentIntelligenceReport } from './creative-development.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -58,6 +59,8 @@ export type LongformOpportunity = {
   ideaIntelligence?: IdeaIntelligenceReport;
   /** P3 Phase 2 deterministic Idea Validation → Creative Brief hand-off; Long-form only. */
   creativeBriefIntelligence?: CreativeBriefIntelligenceReport;
+  /** P3 Phase 3 deterministic Title / Hook / Outline intelligence; Long-form only. */
+  creativeDevelopment?: CreativeDevelopmentIntelligenceReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

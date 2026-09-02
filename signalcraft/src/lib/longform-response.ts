@@ -10,6 +10,7 @@ import { buildContentStrategy } from './content-strategy.ts';
 import { buildExperimentValidationReport } from './experiment-validation.ts';
 import { buildIdeaIntelligence } from './idea-intelligence.ts';
 import { buildCreativeBriefIntelligence } from './creative-brief-intelligence.ts';
+import { buildCreativeDevelopmentIntelligence } from './creative-development.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -195,6 +196,12 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       capturedAt: nullableText(rawScope.latestCapturedAt),
       snapshotId: evidence.snapshotId || null,
     });
+    const creativeDevelopment = buildCreativeDevelopmentIntelligence({
+      creativeBriefIntelligence,
+      ideaIntelligence,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -205,6 +212,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       experimentValidation,
       ideaIntelligence,
       creativeBriefIntelligence,
+      creativeDevelopment,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
