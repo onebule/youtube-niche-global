@@ -7,7 +7,8 @@ import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
 import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
 import { buildRpmPublicContext, getRpmBenchmarkForTopic, type RpmBenchmarkResult, type RpmPublicContext } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
-import { authHeaders } from '@/src/lib/auth';
+import { authHeaders, getSession } from '@/src/lib/auth';
+import { loadProductionMaterializations, materializeLongformProduction, saveProductionMaterialization, type ProductionMaterialization } from '@/src/lib/production-materialization';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { buildTrendRadarHref, contextFromQuery, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 import { readResearchUrlState, writeResearchUrlState } from '@/src/lib/research-url-state';
@@ -332,7 +333,7 @@ function DataBoundary({ data, locale }: { data: LongformResponse; locale: UiLoca
   return <section className="longform-data-boundary" aria-label={zh ? '数据缺口与可信边界' : 'Data gaps and confidence boundaries'}><div className="longform-data-boundary-head"><div><span className="longform-kicker">DATA GAP · NO FALSE PRECISION</span><b>{zh ? '这些问题当前没有公开数据支持。' : 'These questions are not answered by public data yet.'}</b><small>{zh ? '缺失字段不会被 LLM 或默认值补齐；它们不会污染市场机会与执行适配。' : 'Missing fields are not filled by an LLM or default values, and do not contaminate market opportunity or execution fit.'}</small></div><strong>{data.availabilityAudit.coverage}%<small>{zh ? '字段可用率' : 'field coverage'}</small></strong></div><div className="longform-data-gap-grid">{unavailable.map(([key, field]) => { const label = labels[key] || { zh: key, en: key, actionZh: '暂不可用', actionEn: 'Unavailable' }; return <article key={key}><span>{zh ? label.zh : label.en}</span><b>{zh ? 'UNKNOWN' : 'UNKNOWN'}</b><small>{zh ? label.actionZh : label.actionEn}</small><em>{field.provenance}</em></article>; })}</div></section>;
 }
 
-function DecisionFirstBrief({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+function DecisionFirstBrief({ opportunity, locale, onCreateProduction, creating }: { opportunity: LongformOpportunity; locale: UiLocale; onCreateProduction: () => void; creating: boolean }) {
   const zh = locale === 'zh';
   const recommendation = recommendationFor(opportunity, locale);
   const format = zh
@@ -357,7 +358,7 @@ function DecisionFirstBrief({ opportunity, locale }: { opportunity: LongformOppo
   return <section className={`longform-decision-first ${recommendation.key}`} aria-label={zh ? '新手决策摘要' : 'Beginner decision summary'}>
     <div className="longform-decision-first-head"><div><span className="longform-kicker">START HERE · DECISION FIRST</span><h3>{recommendation.label}</h3><p>{reason}</p></div><span className={`longform-decision ${recommendation.key}`}>{zh ? '长视频评估' : 'LONG-FORM'}</span></div>
     <div className="longform-decision-first-grid"><div><small>{zh ? '更推荐的形态' : 'RECOMMENDED FORMAT'}</small><b>{format.primary}</b><span>{format.secondary}</span></div><div><small>{zh ? '竞争程度' : 'COMPETITION'}</small><b>{competition}</b><span>{openness === null ? (zh ? '公开代理不可用' : 'Public proxy unavailable') : (zh ? '由公开供给空位代理判断' : 'From public supply-gap proxy')}</span></div><div><small>{zh ? '制作起点' : 'STARTING POINT'}</small><b>{execution}</b><span>{zh ? `当前形式：${opportunity.productionType}` : `Current form: ${opportunity.productionType}`}</span></div><div><small>{zh ? '预估 RPM' : 'ESTIMATED RPM'}</small><b>{rpm}</b><span>{benchmark.lowUsd !== null ? (zh ? `${benchmark.confidence === 'MEDIUM' ? '中' : '低'}可信度 · 公开市场参考` : `${benchmark.confidence.toLowerCase()} confidence · public market reference`) : (zh ? '无可匹配公开基准' : 'No matching public benchmark')}</span></div></div>
-    <div className="longform-decision-first-actions"><button type="button" onClick={() => document.getElementById('research-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{zh ? '先看代表视频' : 'Review proof videos'}</button><button type="button" onClick={() => document.getElementById('research-pattern')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{zh ? '查看验证计划' : 'View validation plan'}</button><button type="button" onClick={() => routeNavigate(`/short-radar?topic=${encodeURIComponent(opportunity.topic)}`)}>{zh ? '用 Shorts 验证这个角度 →' : 'Validate this angle with Shorts →'}</button></div>
+    <div className="longform-decision-first-actions"><button type="button" className="production-action" onClick={onCreateProduction} disabled={creating}>{creating ? (zh ? '正在建立…' : 'Creating…') : (zh ? '创建制作方案' : 'Create production plan')}</button><button type="button" onClick={() => document.getElementById('research-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{zh ? '先看代表视频' : 'Review proof videos'}</button><button type="button" onClick={() => document.getElementById('research-pattern')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{zh ? '查看验证计划' : 'View validation plan'}</button><button type="button" onClick={() => routeNavigate(`/short-radar?topic=${encodeURIComponent(opportunity.topic)}`)}>{zh ? '用 Shorts 验证这个角度 →' : 'Validate this angle with Shorts →'}</button></div>
   </section>;
 }
 
@@ -705,7 +706,28 @@ function ExperimentValidationPanel({ opportunity, locale }: { opportunity: Longf
   </section>;
 }
 
-function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+function ProductionMaterializationPanel({ record, locale }: { record: ProductionMaterialization | null; locale: UiLocale }) {
+  if (!record) return null;
+  const zh = locale === 'zh';
+  const labels: Array<[string, string]> = [
+    [zh ? '创作简报' : 'Creative Brief', record.stages.creativeBrief.state],
+    [zh ? '脚本草稿' : 'Script Draft', record.stages.script.state],
+    [zh ? '分镜' : 'Storyboard', record.stages.storyboard.state],
+    [zh ? '首个镜头' : 'First Shot', record.stages.shot.state],
+    [zh ? '生成规格' : 'Generation Spec', record.stages.generationSpecification.state],
+    [zh ? '生成单元' : 'Generation Unit', record.stages.generationUnit.state],
+    [zh ? 'Provider 路由' : 'Provider route', record.stages.providerRouting.state],
+  ];
+  const stateLabel = record.state === 'INSUFFICIENT_UPSTREAM_DATA' ? (zh ? '上游数据不足' : 'Insufficient upstream data') : record.state === 'READY_FOR_MANUAL_SMOKE_TEST' ? (zh ? '可进行手动烟雾测试' : 'Ready for manual smoke test') : (zh ? '制作方案已阻塞' : 'Production plan blocked');
+  return <section className={`longform-production-materialization ${record.state.toLowerCase().replaceAll('_', '-')}`} id="production-materialization" aria-label={zh ? '长视频制作方案' : 'Long-form production plan'}>
+    <div className="longform-production-materialization-head"><div><span className="longform-kicker">PRODUCTION MATERIALIZATION · EXPLICIT ACTION</span><b>{zh ? '制作方案状态' : 'Production plan status'}</b><small>{zh ? '只保存当前选中方向；不会自动创建其他机会，也不会提交 Provider 任务。' : 'Only the selected direction is saved; no other opportunities are created and no provider task is submitted.'}</small></div><strong>{stateLabel}</strong></div>
+    <div className="longform-production-progress">{labels.map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
+    {record.blockers.length ? <p className="longform-production-blocker">{zh ? `当前阻塞：${record.blockers.join('、')}` : `Current blocker: ${record.blockers.join(', ')}`}</p> : <p className="longform-production-blocker clear">{zh ? '上游链路完整；下一步仍需通过运行时权限闸门。' : 'Upstream chain is complete; runtime access gates still apply before execution.'}</p>}
+    <small className="longform-production-lineage">{zh ? `制作草案 ${record.productionDraftId} · 来源 ${record.opportunityId}` : `Draft ${record.productionDraftId} · Source ${record.opportunityId}`}</small>
+  </section>;
+}
+
+function OpportunityCard({ opportunity, locale, materialization, onCreateProduction, creating }: { opportunity: LongformOpportunity; locale: UiLocale; materialization: ProductionMaterialization | null; onCreateProduction: () => void; creating: boolean }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
   const decision = recommendationFor(opportunity, locale);
@@ -726,7 +748,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><ExperimentValidationPanel opportunity={opportunity} locale={locale}/><IdeaIntelligencePanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
-    <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
+    <DecisionFirstBrief opportunity={opportunity} locale={locale} onCreateProduction={onCreateProduction} creating={creating}/><ProductionMaterializationPanel record={materialization} locale={locale}/>
     <CreativeBriefPanel opportunity={opportunity} locale={locale}/><CreativeDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptWritingPanel opportunity={opportunity} locale={locale}/><StoryboardPlanningPanel opportunity={opportunity} locale={locale}/><VisualAssetIntelligencePanel opportunity={opportunity} locale={locale}/><VisualGenerationSpecificationPanel opportunity={opportunity} locale={locale}/><ProviderRoutingPanel opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
@@ -751,6 +773,8 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const [researchContext, setResearchContext] = useState<NicheAnalysisContext | null>(null);
   const [contextReady, setContextReady] = useState(false);
   const [selectedOpportunityKey, setSelectedOpportunityKey] = useState<string | null>(null);
+  const [materializationOverride, setMaterializationOverride] = useState<ProductionMaterialization | null>(null);
+  const [materializing, setMaterializing] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
   const updateUrl = (patch: Parameters<typeof writeResearchUrlState>[1]) => {
@@ -811,6 +835,18 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
     }) || null;
   }, [data, researchContext]);
   const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || contextOpportunity || leadOpportunity;
+  const selectedOpportunityId = selectedOpportunity?.key || null;
+  const persistedMaterialization = selectedOpportunityId ? loadProductionMaterializations(getSession()).find(item => item.opportunityId === selectedOpportunityId) || null : null;
+  const materialization = materializationOverride?.opportunityId === selectedOpportunityId ? materializationOverride : persistedMaterialization;
+  const createProductionPlan = () => {
+    if (!selectedOpportunity || materializing) return;
+    setMaterializing(true);
+    const record = materializeLongformProduction({ opportunity: selectedOpportunity, capturedAt: data?.evidence?.capturedAt || data?.dataScope.latestCapturedAt || null, snapshotId: data?.evidence?.snapshotId || null });
+    saveProductionMaterialization(record, getSession());
+    setMaterializationOverride(record);
+    setMaterializing(false);
+    globalThis.setTimeout(() => document.getElementById('production-materialization')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
   const heroWindow = windowLabels[window] || windowLabels['28d'];
   const contextTrendSignals = researchContext?.trendSignals && typeof researchContext.trendSignals === 'object' ? researchContext.trendSignals as Record<string, unknown> : null;
   const contextBreakoutSignals = researchContext?.breakoutSignals && typeof researchContext.breakoutSignals === 'object' ? researchContext.breakoutSignals as Record<string, unknown> : null;
@@ -858,7 +894,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
           <div><span className="longform-kicker">DIRECTIONS</span><b>{zh ? '选择一个赛道深入研究' : 'Choose one direction to research'}</b><small>{zh ? '研究页只展开一个方向，避免把决策信息变成机会列表。' : 'Research stays focused on one direction instead of becoming another opportunity feed.'}</small></div>
           <div className="longform-direction-list">{opportunities.map((item, index) => { const selected = item.key === selectedOpportunity?.key; const recommendation = recommendationFor(item, locale); return <button type="button" key={item.key} className={selected ? 'active' : ''} onClick={() => { setSelectedOpportunityKey(item.key); updateUrl({ direction: item.key }); }} aria-current={selected ? 'true' : undefined}><span><b>{String(index + 1).padStart(2, '0')}</b><strong>{item.mechanism} · {item.productionType}</strong><small>{item.topic}</small></span><em className={recommendation.key}>{recommendation.label}</em></button>; })}</div>
         </aside>
-        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale}/> : <div className="longform-state"><b>{zh ? '当前没有可研究的方向' : 'No direction to research'}</b></div>}</div>
+        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale} materialization={materialization} onCreateProduction={createProductionPlan} creating={materializing}/> : <div className="longform-state"><b>{zh ? '当前没有可研究的方向' : 'No direction to research'}</b></div>}</div>
       </section>
     </> : <div className="longform-state"><b>{zh ? '当前窗口还没有足够的长视频样本' : 'Not enough long-form samples for this window'}</b><p>{zh ? '这不是演示数据。请扩大市场或时间窗口，等采集任务积累可比较的快照。' : 'This is not demo data. Expand the market or window and wait for comparable snapshots.'}</p></div>}
     <section className="longform-boundary"><div><span className="longform-kicker">READ THE SIGNAL</span><h2>{zh ? '哪些数据目前不能回答？' : 'What can this data not answer yet?'}</h2></div><div>{(data?.gaps || [zh ? '字幕、CTR、留存、RPM/CPM 和收入不属于公开字段。' : 'Transcripts, CTR, retention, RPM/CPM and revenue are not public fields.']).map(gap => <p key={gap}>→ {gap}</p>)}</div></section>
