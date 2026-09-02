@@ -13,6 +13,7 @@ import type { ExperimentValidationReport } from './experiment-validation.ts';
 import type { IdeaIntelligenceReport } from './idea-intelligence.ts';
 import type { CreativeBriefIntelligenceReport } from './creative-brief-intelligence.ts';
 import type { CreativeDevelopmentIntelligenceReport } from './creative-development.ts';
+import type { ScriptDevelopmentIntelligenceReport } from './script-development.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -61,6 +62,8 @@ export type LongformOpportunity = {
   creativeBriefIntelligence?: CreativeBriefIntelligenceReport;
   /** P3 Phase 3 deterministic Title / Hook / Outline intelligence; Long-form only. */
   creativeDevelopment?: CreativeDevelopmentIntelligenceReport;
+  /** P3 Phase 4 deterministic script architecture and semantic scene requirements; Long-form only. */
+  scriptDevelopment?: ScriptDevelopmentIntelligenceReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

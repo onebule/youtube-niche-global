@@ -11,6 +11,7 @@ import { buildExperimentValidationReport } from './experiment-validation.ts';
 import { buildIdeaIntelligence } from './idea-intelligence.ts';
 import { buildCreativeBriefIntelligence } from './creative-brief-intelligence.ts';
 import { buildCreativeDevelopmentIntelligence } from './creative-development.ts';
+import { buildScriptDevelopmentIntelligence } from './script-development.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -202,6 +203,14 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       capturedAt: nullableText(rawScope.latestCapturedAt),
       snapshotId: evidence.snapshotId || null,
     });
+    const scriptDevelopment = buildScriptDevelopmentIntelligence({
+      creativeDevelopment,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+      entryDecision: opportunity.entryDecision?.status || opportunityAssessment.decision.status,
+      strategyRole: contentStrategy?.primaryPatterns.some(pattern => pattern.patternId === opportunity.contentPatternTrend?.nicheFits[0]?.pattern.patternId) ? 'PRIMARY' : null,
+      validationFeedbackVersion: experimentValidation.observations.length ? experimentValidation.algorithmVersion : null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -213,6 +222,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       ideaIntelligence,
       creativeBriefIntelligence,
       creativeDevelopment,
+      scriptDevelopment,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
