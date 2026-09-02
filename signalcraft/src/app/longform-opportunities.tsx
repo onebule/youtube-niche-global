@@ -410,6 +410,30 @@ function ContentPatternPanel({ opportunity, locale }: { opportunity: LongformOpp
   </section>;
 }
 
+const patternTrendLabels: Record<string, { zh: string; en: string }> = {
+  ACCELERATING: { zh: '加速', en: 'Accelerating' }, GROWING: { zh: '增长', en: 'Growing' }, STABLE: { zh: '稳定', en: 'Stable' }, DILUTING: { zh: '稀释/拥挤', en: 'Diluting' }, DECLINING: { zh: '回落', en: 'Declining' }, INSUFFICIENT: { zh: '历史不足', en: 'Insufficient history' },
+  TOP_FIT: { zh: '顶级适配', en: 'Top fit' }, STRONG_FIT: { zh: '强适配', en: 'Strong fit' }, MODERATE_FIT: { zh: '中等适配', en: 'Moderate fit' }, WEAK_FIT: { zh: '弱适配', en: 'Weak fit' },
+};
+
+function trendChange(value: number | null, suffix = '%') {
+  if (value === null || !Number.isFinite(value)) return 'UNKNOWN';
+  const amount = Math.round(value * 100);
+  return `${amount > 0 ? '+' : ''}${amount}${suffix}`;
+}
+
+function PatternTrendPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const report = opportunity.contentPatternTrend;
+  if (!report) return null;
+  const shown = report.assessments.slice(0, 4);
+  const fitByPattern = new Map(report.nicheFits.map(fit => [fit.pattern.patternId, fit]));
+  return <section className="longform-pattern-trends" aria-label={zh ? '长视频内容模式趋势与赛道适配' : 'Long-form pattern trends and niche fit'}>
+    <div className="longform-pattern-trends-head"><div><span className="longform-kicker">P2 PHASE 2 · PATTERN TREND</span><b>{zh ? '模式趋势与赛道适配' : 'Pattern trend & niche fit'}</b><small>{report.comparableWindow.comparable ? (zh ? `${report.comparableWindow.current.key} 对比 ${report.comparableWindow.previous?.key || 'previous'}` : `${report.comparableWindow.current.key} vs ${report.comparableWindow.previous?.key || 'previous'}`) : (zh ? '历史窗口不可比，趋势保持未知' : 'Comparable history is unavailable; trend remains unknown')}</small></div><span>{report.comparableWindow.comparable ? (zh ? '可比窗口' : 'Comparable windows') : (zh ? '待补历史' : 'History needed')}</span></div>
+    {shown.length ? <div className="longform-pattern-trend-list">{shown.map(item => { const fit = fitByPattern.get(item.pattern.patternId); return <article key={item.pattern.patternId}><div className="longform-pattern-trend-title"><b>{item.pattern.label}</b><span className={`trend-state ${item.state.toLowerCase()}`}>{patternTrendLabels[item.state]?.[zh ? 'zh' : 'en'] || item.state}</span></div><div className="longform-pattern-trend-metrics"><span>{zh ? '采用' : 'Adoption'} <b>{trendChange(item.evidence.adoption.changePct)}</b></span><span>{zh ? '频道' : 'Creators'} <b>{trendChange(item.evidence.creatorBreadth.changePct)}</b></span><span>{zh ? '表现' : 'Performance'} <b>{trendChange(item.evidence.normalizedPerformance.changePct)}</b></span><span>{zh ? '突破' : 'Breakout'} <b>{trendChange(item.evidence.breakoutRate.delta)}</b></span>{fit ? <span>{zh ? '赛道适配' : 'Niche fit'} <b>{patternTrendLabels[fit.status]?.[zh ? 'zh' : 'en'] || fit.status}</b></span> : null}</div></article>; })}</div> : <p className="longform-pattern-trend-empty">{zh ? '当前没有可比较的 Pattern 历史。' : 'No comparable Pattern history is available yet.'}</p>}
+    <small className="longform-pattern-trend-note">{zh ? '趋势不等于赢面，赛道适配不等于策略。采用量上升但表现下降会标记为稀释；本阶段只提供后续选择证据，不生成选题或策略。' : 'Trend is not the same as winning, and niche fit is not a strategy. Rising adoption with weakening performance is marked as dilution; this phase only prepares selection evidence.'}</small>
+  </section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -430,7 +454,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
-    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
+    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>

@@ -5,6 +5,7 @@ import { normalizeNicheBreakoutSummary } from './niche-signals.ts';
 import { normalizeNicheLifecycleSummary } from './niche-lifecycle.ts';
 import { buildOpportunityAssessment } from './opportunity-engine.ts';
 import { buildContentPatternReport, normalizeContentPatternReport, type ContentPatternVideo } from './content-patterns.ts';
+import { buildContentPatternTrendReport, normalizeContentPatternTrendReport } from './content-pattern-trends.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -46,22 +47,25 @@ function normalizeOpportunity(value: unknown, index: number, capturedAt: string 
   const rawRecommendation = textOr(value.recommendation, '') as NonNullable<LongformOpportunity['recommendation']>;
   const representativeVideos = Array.isArray(value.representativeVideos) ? value.representativeVideos.map(normalizeRepresentativeVideo) : [];
   const upstreamContentPatterns = normalizeContentPatternReport(value.contentPatterns);
-  const contentPatterns = upstreamContentPatterns || (representativeVideos.length ? buildContentPatternReport({
+  const patternVideos = representativeVideos.map(video => ({
+    videoId: video.videoId,
+    creatorId: video.channelTitle || `unknown-creator-${video.videoId}`,
+    format: 'long',
+    title: video.title,
+    durationSeconds: video.durationSeconds,
+    views: video.views,
+    thumbnailUrl: video.thumbnail,
+    sourceUrl: video.sourceUrl,
+    normalizedPerformance: null,
+    breakoutClassification: null,
+    breakoutMultiple: null,
+  } satisfies ContentPatternVideo));
+  const contentPatterns = upstreamContentPatterns || (patternVideos.length ? buildContentPatternReport({
     capturedAt,
-    videos: representativeVideos.map(video => ({
-      videoId: video.videoId,
-      creatorId: video.channelTitle || `unknown-creator-${video.videoId}`,
-      format: 'long',
-      title: video.title,
-      durationSeconds: video.durationSeconds,
-      views: video.views,
-      thumbnailUrl: video.thumbnail,
-      sourceUrl: video.sourceUrl,
-      normalizedPerformance: null,
-      breakoutClassification: null,
-      breakoutMultiple: null,
-    } satisfies ContentPatternVideo)),
+    videos: patternVideos,
   }) : undefined);
+  const upstreamContentPatternTrend = normalizeContentPatternTrendReport(value.contentPatternTrend);
+  const contentPatternTrend = upstreamContentPatternTrend || (patternVideos.length ? buildContentPatternTrendReport({ current: { key: 'current', start: null, end: null, timeSemantics: 'CAPTURE_SNAPSHOT', videos: patternVideos, capturedAt } }) : undefined);
   const opportunity: LongformOpportunity = {
     key: textOr(value.key, `longform-direction-${index + 1}`),
     topic: textOr(value.topic, '未分类方向'),
@@ -83,6 +87,7 @@ function normalizeOpportunity(value: unknown, index: number, capturedAt: string 
     execution: { score: nullableNumber(execution.score), coverage: Math.max(0, Math.min(100, Math.round(numberOr(execution.coverage, 0)))), rationale: textOr(execution.rationale, '暂无执行适配说明。') },
     representativeVideos,
     contentPatterns,
+    contentPatternTrend,
   };
   return opportunity;
 }
