@@ -16,24 +16,24 @@ test('read-only model discovery grounds the internal proxy topology', () => {
   assert.ok(VIDEO_MODEL_DISCOVERY_FIXTURE.models.every(item => item.enabled === false));
 });
 
-test('model contracts preserve configured IDs while leaving capabilities unknown', () => {
+test('model contracts preserve downstream IDs and grounded capabilities while staying disabled', () => {
   const report = buildProviderVerificationReport();
   assert.equal(report.contractVersion, PROVIDER_CONTRACT_VERSION);
   assert.equal(report.modelContractVersion, MODEL_CONTRACT_VERSION);
-  assert.deepEqual(report.models.map(item => item.actualRequestModelId), ['seedance-2', 'seedance-2-5', 'minimax-h3']);
-  assert.ok(report.models.every(item => item.verification === 'CONFIGURED'));
-  assert.ok(report.models.every(item => item.executionReadiness === 'NEEDS_SCHEMA_VERIFICATION'));
-  assert.equal(report.coverage.verified, 0);
-  assert.equal(report.coverage.unknown, 45);
+  assert.deepEqual(report.models.map(item => item.actualRequestModelId), ['seedance-2.0', 'doubao-seedance-2.5', 'MiniMax-H3']);
+  assert.ok(report.models.every(item => item.verification === 'VERIFIED'));
+  assert.ok(report.models.every(item => item.executionReadiness === 'MODEL_DISABLED'));
+  assert.ok(report.coverage.verified > 0);
+  assert.ok(report.coverage.unknown > 0);
 });
 
-test('submission, polling and output remain unverified without downstream schema evidence', () => {
+test('submission, polling and output are grounded while output expiration remains unknown', () => {
   const report = buildProviderVerificationReport();
   const contract = report.contracts[0];
-  assert.equal(contract.operations.find(item => item.operation === 'VIDEO_SUBMISSION').state, 'UNVERIFIED');
-  assert.equal(contract.taskLifecycle.state, 'UNVERIFIED');
+  assert.equal(contract.operations.find(item => item.operation === 'VIDEO_SUBMISSION').state, 'VERIFIED');
+  assert.equal(contract.taskLifecycle.state, 'VERIFIED');
   assert.equal(contract.responses.outputUrlExpiration, 'UNKNOWN');
-  assert.equal(contract.executionReadiness, 'NEEDS_SCHEMA_VERIFICATION');
+  assert.equal(contract.executionReadiness, 'READY_FOR_EXECUTION_INTEGRATION');
 });
 
 test('verification report replay is deterministic and normalization is strict', () => {
