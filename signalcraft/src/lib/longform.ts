@@ -11,6 +11,7 @@ import type { ContentPatternTrendReport } from './content-pattern-trends.ts';
 import type { ContentStrategy } from './content-strategy.ts';
 import type { ExperimentValidationReport } from './experiment-validation.ts';
 import type { IdeaIntelligenceReport } from './idea-intelligence.ts';
+import type { CreativeBriefIntelligenceReport } from './creative-brief-intelligence.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -55,6 +56,8 @@ export type LongformOpportunity = {
   experimentValidation?: ExperimentValidationReport;
   /** P3 Phase 1 Case → Pattern → Idea intelligence; Long-form only. */
   ideaIntelligence?: IdeaIntelligenceReport;
+  /** P3 Phase 2 deterministic Idea Validation → Creative Brief hand-off; Long-form only. */
+  creativeBriefIntelligence?: CreativeBriefIntelligenceReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

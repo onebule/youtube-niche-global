@@ -9,6 +9,7 @@ import { buildContentPatternTrendReport, normalizeContentPatternTrendReport } fr
 import { buildContentStrategy } from './content-strategy.ts';
 import { buildExperimentValidationReport } from './experiment-validation.ts';
 import { buildIdeaIntelligence } from './idea-intelligence.ts';
+import { buildCreativeBriefIntelligence } from './creative-brief-intelligence.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -181,6 +182,19 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       capturedAt: nullableText(rawScope.latestCapturedAt),
       snapshotId: evidence.snapshotId || null,
     });
+    const creativeBriefIntelligence = buildCreativeBriefIntelligence({
+      nicheId: opportunity.contentPatternTrend?.nicheFits[0]?.nicheId || opportunity.key,
+      topic: opportunity.topic,
+      mechanism: opportunity.mechanism,
+      productionType: opportunity.productionType,
+      ideaIntelligence,
+      opportunityAssessment,
+      contentPatternTrend: opportunity.contentPatternTrend || null,
+      contentStrategy,
+      experimentValidation,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -190,6 +204,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       contentStrategy,
       experimentValidation,
       ideaIntelligence,
+      creativeBriefIntelligence,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
