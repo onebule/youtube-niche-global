@@ -7,6 +7,7 @@ import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
 import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
 import { buildRpmPublicContext, getRpmBenchmarkForTopic, type RpmBenchmarkResult, type RpmPublicContext } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
+import { authHeaders } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { buildTrendRadarHref, contextFromQuery, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 import { readResearchUrlState, writeResearchUrlState } from '@/src/lib/research-url-state';
@@ -642,13 +643,24 @@ function RoutingDecisionCard({ decision, locale }: { decision: ModelRoutingDecis
 
 function ProviderRoutingPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
+  const [runtimeContract, setRuntimeContract] = useState<{ contractVersion?: string; models?: Array<{ modelId: string; executionGate?: string; executionReadiness?: { executionState?: string; blockers?: string[] } }> } | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/video/capabilities', { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => { if (active && payload?.contract) setRuntimeContract(payload.contract); })
+      .catch(() => { /* Keep the verified static contract visible if runtime discovery is unavailable. */ });
+    return () => { active = false; };
+  }, []);
   const report: ProviderRoutingReport | undefined = opportunity.providerRouting;
   if (!report) return null;
   const decisions = report.routes.flatMap(route => route.decisions).slice(0, 6);
   const unverified = report.registry.models.filter(model => model.verification === 'UNVERIFIED').length;
   const verification = report.verification;
-  const readiness = verification?.executionReadiness.filter(item => item.state !== 'READY_FOR_EXECUTION_INTEGRATION').length || 0;
-  return <section className="longform-provider-routing" aria-label={zh ? '长视频模型路由' : 'Long-form model routing'}><div className="longform-provider-routing-head"><div><span className="longform-kicker">P4 PHASE 4.5C · EXECUTION READINESS</span><b>{zh ? '合同、权限、认证和启用状态分开判断' : 'Keep contract, access, authentication and enablement separate'}</b><small>{zh ? '提交、轮询、输出、错误和模型专属序列化已从后端源码验证；模型不会因页面加载、路由计算或选择器变化而自动执行。' : 'Submission, polling, output, errors and model-specific serialization are grounded in backend source; page load, routing and selector changes never execute a job.'}</small></div><div className="longform-provider-routing-verdict"><strong>{report.routes.length}</strong><span>{zh ? '个镜头路由' : 'routed specs'}</span><small>{verification ? (zh ? `能力已验证 ${verification.coverage.verified} · 未声明 ${verification.coverage.unknown}` : `${verification.coverage.verified} verified · ${verification.coverage.unknown} unknown`) : (zh ? `未验证模型 ${unverified}` : `${unverified} unverified models`)}</small></div></div>{verification ? <div className="longform-provider-verification-strip"><span>{zh ? '网关：内部代理 · 下游：APIMart' : 'Gateway: internal proxy · Downstream: APIMart'}</span><span>{zh ? `合同已验证 ${verification.models.length} 个模型` : `${verification.models.length} model contracts verified`}</span><span>{zh ? `执行闸门阻塞 ${readiness}` : `${readiness} execution gates blocked`}</span></div> : null}{decisions.length ? <div className="longform-provider-routing-grid">{decisions.map(decision => <RoutingDecisionCard key={decision.decisionId} decision={decision} locale={locale}/>)}</div> : <div className="longform-provider-routing-empty">{zh ? '当前没有可交给 provider 的生成路线；真实证据、截图、图表和人工拍摄会保持非生成路径。' : 'No provider route is available; real evidence, screenshots, charts and manual capture remain non-generative.'}</div>}</section>;
+  const runtimeModels = runtimeContract?.models || [];
+  const readiness = runtimeModels.length ? runtimeModels.filter(item => item.executionReadiness?.executionState !== 'EXECUTION_READY').length : verification?.executionReadiness.filter(item => item.state !== 'READY_FOR_EXECUTION_INTEGRATION').length || 0;
+  const runtimeBlocker = runtimeModels.find(item => item.executionReadiness?.blockers?.length)?.executionReadiness?.blockers?.[0];
+  return <section className="longform-provider-routing" aria-label={zh ? '长视频模型路由' : 'Long-form model routing'}><div className="longform-provider-routing-head"><div><span className="longform-kicker">P4 PHASE 4.5D · PRODUCTION READINESS</span><b>{zh ? '运行时权限决定能否进入手动测试' : 'Runtime access decides manual-test readiness'}</b><small>{zh ? '合同、能力和序列化来自已验证适配器；认证、Team 权限和启用状态以生产后端返回为准。页面不会自动提交任务。' : 'Contract, capability and serialization come from verified adapters; authentication, Team access and enablement come from the production backend. The page never submits a job automatically.'}</small></div><div className="longform-provider-routing-verdict"><strong>{report.routes.length}</strong><span>{zh ? '个镜头路由' : 'routed specs'}</span><small>{runtimeContract ? (zh ? `运行时闸门阻塞 ${readiness}` : `${readiness} runtime gates blocked`) : (verification ? (zh ? `合同能力已验证 ${verification.coverage.verified}` : `${verification.coverage.verified} contract capabilities verified`) : (zh ? `未验证模型 ${unverified}` : `${unverified} unverified models`))}</small></div></div><div className="longform-provider-verification-strip"><span>{zh ? `网关：内部代理 · ${runtimeContract?.contractVersion || '运行时状态读取中'}` : `Gateway: internal proxy · ${runtimeContract?.contractVersion || 'Reading runtime state'}`}</span><span>{zh ? '下游：APIMart · 服务端认证' : 'Downstream: APIMart · server-side auth'}</span><span>{runtimeBlocker ? (zh ? `当前阻塞：${runtimeBlocker}` : `Current blocker: ${runtimeBlocker}`) : (zh ? '当前未发现阻塞' : 'No blocker reported')}</span></div>{decisions.length ? <div className="longform-provider-routing-grid">{decisions.map(decision => <RoutingDecisionCard key={decision.decisionId} decision={decision} locale={locale}/>)}</div> : <div className="longform-provider-routing-empty">{zh ? '当前没有可交给 provider 的生成路线；真实证据、截图、图表和人工拍摄会保持非生成路径。' : 'No provider route is available; real evidence, screenshots, charts and manual capture remain non-generative.'}</div>}</section>;
 }
 
 function ExperimentValidationPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
