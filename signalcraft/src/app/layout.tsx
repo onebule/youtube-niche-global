@@ -15,6 +15,7 @@ import './owner-users.css';
 import './image-to-video-studio.css';
 import './video-canvas-studio.css';
 import './longform-opportunities.css';
+import './longform-visual-assets.css';
 import './opportunity-radar.css';
 import './opportunity-radar-history.css';
 import './longform-research-desk.css';

@@ -16,6 +16,7 @@ import type { CreativeDevelopmentIntelligenceReport } from './creative-developme
 import type { ScriptDevelopmentIntelligenceReport } from './script-development.ts';
 import type { ScriptWritingIntelligenceReport } from './script-writing.ts';
 import type { StoryboardIntelligenceReport } from './storyboard-planning.ts';
+import type { VisualAssetIntelligenceReport } from './visual-asset-intelligence.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -72,6 +73,8 @@ export type LongformOpportunity = {
   scriptDraft?: ScriptWritingIntelligenceReport;
   /** P4 Phase 1 model-independent Storyboard and Shot Planning; Long-form only. */
   storyboardIntelligence?: StoryboardIntelligenceReport;
+  /** P4 Phase 2 canonical visual asset/reference intelligence; Long-form only. */
+  visualAssetIntelligence?: VisualAssetIntelligenceReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

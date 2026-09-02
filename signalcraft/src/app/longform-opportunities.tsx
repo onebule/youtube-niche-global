@@ -16,6 +16,7 @@ import type { CreativeDevelopmentIntelligenceReport, CreativeDevelopmentReadines
 import type { ScriptDevelopmentIntelligenceReport, ScriptDevelopmentReadiness } from '@/src/lib/script-development';
 import type { ScriptDraft, ScriptReadiness, ScriptWritingIntelligenceReport } from '@/src/lib/script-writing';
 import type { StoryboardIntelligenceReport, StoryboardReadiness } from '@/src/lib/storyboard-planning';
+import type { AssetPackageReadiness, VisualAssetIntelligenceReport } from '@/src/lib/visual-asset-intelligence';
 
 const formatNumber = (value: number | null, locale: UiLocale) => {
   if (value === null || !Number.isFinite(value)) return locale === 'zh' ? '未知' : 'Unknown';
@@ -583,6 +584,32 @@ function StoryboardPlanningPanel({ opportunity, locale }: { opportunity: Longfor
   </section>;
 }
 
+const visualAssetReadinessLabels: Record<AssetPackageReadiness, { zh: string; en: string }> = {
+  READY_FOR_PROMPT_PLANNING: { zh: '可进入提示词规划', en: 'Ready for prompt planning' },
+  READY_WITH_CAUTION: { zh: '谨慎进入提示词规划', en: 'Ready with caution' },
+  NEEDS_ASSETS: { zh: '需要补齐资产', en: 'Needs assets' },
+  NEEDS_RIGHTS_REVIEW: { zh: '需要权利复核', en: 'Needs rights review' },
+  NEEDS_REVISION: { zh: '需要修改', en: 'Needs revision' },
+  BLOCKED: { zh: '已阻塞', en: 'Blocked' },
+  INSUFFICIENT: { zh: '资料不足', en: 'Insufficient' },
+};
+
+function VisualAssetIntelligencePanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const report: VisualAssetIntelligenceReport | undefined = opportunity.visualAssetIntelligence;
+  if (!report) return null;
+  const pkg = report.packages[0] || report.blockedPackages[0];
+  const readiness = pkg?.readiness || 'INSUFFICIENT';
+  const label = visualAssetReadinessLabels[readiness]?.[zh ? 'zh' : 'en'] || readiness;
+  const assetCount = pkg?.assets.length || 0;
+  const availableCount = pkg?.assets.filter(asset => asset.availability === 'AVAILABLE').length || 0;
+  const evidenceCount = pkg?.assets.filter(asset => asset.assetType === 'EVIDENCE_IMAGE' || asset.assetType === 'SCREENSHOT').length || 0;
+  return <section className="longform-visual-assets" aria-label={zh ? '长视频视觉资产与参考智能' : 'Long-form visual asset and reference intelligence'}>
+    <div className="longform-visual-assets-head"><div><span className="longform-kicker">P4 PHASE 2 · VISUAL ASSET INTELLIGENCE</span><b>{zh ? '先把资产身份与参考准备清楚' : 'Make asset identity and references explicit first'}</b><small>{zh ? '资产、参考、连续性、来源与权利状态均可追溯；描述不等于图片，不会自动生成媒体或把证据替换成合成画面。' : 'Assets, references, continuity, provenance and rights stay traceable; descriptions are not images and evidence is never replaced by synthetic media.'}</small></div><div className={`visual-assets-verdict ${readiness.toLowerCase()}`}><strong>{label}</strong><span>{zh ? `资产 ${assetCount} · 可用 ${availableCount}` : `${assetCount} assets · ${availableCount} available`}</span><small>{zh ? `阻塞 ${pkg?.blockers.length || 0}` : `${pkg?.blockers.length || 0} blockers`}</small></div></div>
+    {pkg ? <><div className="longform-visual-assets-summary"><span>{zh ? '参考包' : 'Reference packs'} <b>{pkg.referencePacks.length}</b></span><span>{zh ? '连续性锁' : 'Continuity locks'} <b>{pkg.continuityLocks.length}</b></span><span>{zh ? '证据资产' : 'Evidence assets'} <b>{evidenceCount}</b></span><span>{zh ? '待补缺口' : 'Gaps'} <b>{pkg.missingAssets.length}</b></span><span>{zh ? '权利复核' : 'Rights reviews'} <b>{pkg.rightsReviews.length}</b></span></div><div className="longform-visual-assets-grid">{pkg.assets.slice(0, 6).map(asset => <article key={asset.assetId}><div><b>{asset.identity.label}</b><span>{asset.assetType}</span></div><p>{zh ? `可用性：${asset.availability} · 参考：${asset.referenceState}` : `Availability: ${asset.availability} · Reference: ${asset.referenceState}`}</p><small>{asset.generationEligibility === 'NOT_ELIGIBLE' || asset.generationEligibility === 'NOT_RECOMMENDED' ? (zh ? '不以生成替代来源' : 'Source required; generation is not a substitute') : asset.generationEligibility === 'REFERENCE_REQUIRED' ? (zh ? '需先提供参考' : 'Reference required first') : (zh ? '可评估后续制作路径' : 'Production route can be evaluated')}</small></article>)}</div>{pkg.missingAssets.length ? <p className="longform-visual-assets-note">{zh ? `下一步：${pkg.missingAssets.slice(0, 2).map(gap => gap.message).join('；')}` : `Next: ${pkg.missingAssets.slice(0, 2).map(gap => gap.message).join('; ')}`}</p> : null}</> : <div className="longform-visual-assets-empty"><b>{zh ? '暂无可建立的视觉资产包' : 'No visual asset package is available'}</b><span>{zh ? '需要先完成脚本与分镜，系统才会建立可追溯的资产身份。' : 'Script and storyboard inputs are required before a traceable asset registry can be built.'}</span></div>}
+  </section>;
+}
+
 function ExperimentValidationPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const report = opportunity.experimentValidation;
@@ -619,7 +646,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><ExperimentValidationPanel opportunity={opportunity} locale={locale}/><IdeaIntelligencePanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
-    <CreativeBriefPanel opportunity={opportunity} locale={locale}/><CreativeDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptWritingPanel opportunity={opportunity} locale={locale}/><StoryboardPlanningPanel opportunity={opportunity} locale={locale}/>
+    <CreativeBriefPanel opportunity={opportunity} locale={locale}/><CreativeDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptWritingPanel opportunity={opportunity} locale={locale}/><StoryboardPlanningPanel opportunity={opportunity} locale={locale}/><VisualAssetIntelligencePanel opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
     {nicheSignals ? <section className="longform-niche-signals" aria-label={zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}><div className="longform-evidence-heading"><b>{zh ? '跨创作者赛道信号' : 'Cross-creator niche signals'}</b><small>{zh ? `${nicheSignals.eligibleCreators} 个独立创作者 · ${nicheSignals.eligibleVideos} 条可比较视频` : `${nicheSignals.eligibleCreators} independent creators · ${nicheSignals.eligibleVideos} eligible videos`}</small></div><div className="longform-niche-signal-list">{nicheSignals.signals.filter(signal => signal.strength !== 'INSUFFICIENT').map(signal => <span key={signal.type} className={`signal-${signal.strength.toLowerCase()}`}>{signalLabels[signal.type] || signal.type} · {strengthLabels[signal.strength] || signal.strength}</span>)}</div><div className="longform-niche-signal-metrics"><span>{zh ? '突破密度' : 'Breakout density'} {nicheSignals.breakoutDensity === null ? '—' : `${Math.round(nicheSignals.breakoutDensity * 100)}%`}</span><span>{zh ? '重复突破创作者' : 'Repeated-breakout creators'} {nicheSignals.repeatedBreakoutCreators}</span><span>{zh ? 'Top 3 播放占比' : 'Top 3 view share'} {nicheSignals.concentration.top3Share === null ? '—' : `${Math.round(nicheSignals.concentration.top3Share * 100)}%`}</span></div><small className="longform-niche-signal-note">{zh ? '这是跨创作者证据，不等于机会分数或进入建议。阈值状态：需校准。' : 'Cross-creator evidence only; not an opportunity score or entry recommendation. Thresholds require calibration.'}</small></section> : null}
