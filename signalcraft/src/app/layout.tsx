@@ -17,6 +17,7 @@ import './video-canvas-studio.css';
 import './longform-opportunities.css';
 import './longform-visual-assets.css';
 import './longform-generation-spec.css';
+import './longform-provider-routing.css';
 import './opportunity-radar.css';
 import './opportunity-radar-history.css';
 import './longform-research-desk.css';

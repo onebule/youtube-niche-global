@@ -16,6 +16,7 @@ import { buildScriptWritingIntelligence } from './script-writing.ts';
 import { buildStoryboardIntelligence } from './storyboard-planning.ts';
 import { buildVisualAssetIntelligence } from './visual-asset-intelligence.ts';
 import { buildVisualGenerationSpecifications } from './visual-generation-specification.ts';
+import { buildProviderRoutingReport } from './provider-routing.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -240,6 +241,12 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       capturedAt: nullableText(rawScope.latestCapturedAt),
       snapshotId: evidence.snapshotId || null,
     });
+    const providerRouting = buildProviderRoutingReport({
+      specifications: visualGenerationSpecifications.specifications,
+      blockedSpecifications: visualGenerationSpecifications.blockedSpecifications,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -257,6 +264,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       storyboardIntelligence,
       visualAssetIntelligence,
       visualGenerationSpecifications,
+      providerRouting,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,

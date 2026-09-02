@@ -18,6 +18,7 @@ import type { ScriptWritingIntelligenceReport } from './script-writing.ts';
 import type { StoryboardIntelligenceReport } from './storyboard-planning.ts';
 import type { VisualAssetIntelligenceReport } from './visual-asset-intelligence.ts';
 import type { VisualGenerationSpecificationReport } from './visual-generation-specification.ts';
+import type { ProviderRoutingReport } from './provider-routing.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -78,6 +79,8 @@ export type LongformOpportunity = {
   visualAssetIntelligence?: VisualAssetIntelligenceReport;
   /** P4 Phase 3 provider-independent generation intent; Long-form only. */
   visualGenerationSpecifications?: VisualGenerationSpecificationReport;
+  /** P4 Phase 4 provider compatibility/routing; Long-form only and execution-free. */
+  providerRouting?: ProviderRoutingReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;
