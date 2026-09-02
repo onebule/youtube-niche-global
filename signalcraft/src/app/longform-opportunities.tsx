@@ -10,6 +10,7 @@ import { clientErrorMessage } from '@/src/lib/client-error';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { buildTrendRadarHref, contextFromQuery, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 import { readResearchUrlState, writeResearchUrlState } from '@/src/lib/research-url-state';
+import type { StrategyPatternRole } from '@/src/lib/content-strategy';
 
 const formatNumber = (value: number | null, locale: UiLocale) => {
   if (value === null || !Number.isFinite(value)) return locale === 'zh' ? '未知' : 'Unknown';
@@ -434,6 +435,30 @@ function PatternTrendPanel({ opportunity, locale }: { opportunity: LongformOppor
   </section>;
 }
 
+const strategyRoleLabels: Record<StrategyPatternRole, { zh: string; en: string }> = {
+  PRIMARY: { zh: '主推', en: 'Primary' }, TEST: { zh: '测试', en: 'Test' }, WATCH: { zh: '观察', en: 'Watch' }, DEPRIORITIZE: { zh: '降优先级', en: 'Deprioritize' }, AVOID: { zh: '回避', en: 'Avoid' }, INSUFFICIENT: { zh: '证据不足', en: 'Insufficient' },
+};
+const strategyStatusLabels: Record<string, { zh: string; en: string }> = {
+  ACTIONABLE: { zh: '可进入验证', en: 'Actionable' }, VALIDATION: { zh: '受控验证', en: 'Validation' }, RESEARCH_ONLY: { zh: '仅供研究', en: 'Research only' }, BLOCKED: { zh: '上游阻塞', en: 'Blocked' }, INSUFFICIENT: { zh: '证据不足', en: 'Insufficient' },
+};
+
+function ContentStrategyPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const report = opportunity.contentStrategy;
+  if (!report) return null;
+  const all = [...report.primaryPatterns, ...report.testPatterns, ...report.watchPatterns, ...report.deprioritizedPatterns, ...report.avoidedPatterns, ...report.insufficientPatterns];
+  const shown = all.slice(0, 6);
+  const status = strategyStatusLabels[report.strategyStatus]?.[zh ? 'zh' : 'en'] || report.strategyStatus;
+  const decision = report.opportunityContext.decision;
+  return <section className="longform-content-strategy" aria-label={zh ? '长视频内容策略' : 'Long-form content strategy'}>
+    <div className="longform-content-strategy-head"><div><span className="longform-kicker">P2 PHASE 3 · CONTENT STRATEGY</span><b>{zh ? '证据驱动内容策略' : 'Evidence-backed content strategy'}</b><small>{zh ? '策略只选择模式角色与验证边界，不生成选题、脚本或画面。' : 'Roles and validation guardrails only; no ideas, scripts or creative assets are generated.'}</small></div><div className="strategy-verdict"><strong>{status}</strong><span>{zh ? `机会上下文：${decision}` : `Opportunity: ${decision}`}</span><span>{zh ? `策略置信度：${report.confidence}` : `Strategy confidence: ${report.confidence}`}</span></div></div>
+    <div className="longform-content-strategy-summary"><span>{zh ? '主推' : 'Primary'} <b>{report.primaryPatterns.length}</b></span><span>{zh ? '测试' : 'Test'} <b>{report.testPatterns.length}</b></span><span>{zh ? '观察' : 'Watch'} <b>{report.watchPatterns.length}</b></span><span>{zh ? '降级' : 'Deprioritized'} <b>{report.deprioritizedPatterns.length}</b></span><span>{zh ? '回避' : 'Avoid'} <b>{report.avoidedPatterns.length}</b></span></div>
+    {shown.length ? <div className="longform-content-strategy-list">{shown.map(item => <article key={item.patternId}><div><b>{item.pattern.label}</b><span className={`strategy-role ${item.role.toLowerCase()}`}>{strategyRoleLabels[item.role]?.[zh ? 'zh' : 'en'] || item.role}</span></div><small>{item.patternStatus} · {item.trendState} · {item.fitStatus || (zh ? '适配未知' : 'fit unknown')} · {item.repeatability}</small><p>{item.reasons[0]?.message || item.blockers[0]?.message || (zh ? '暂无可展示依据。' : 'No reason available.')}</p></article>)}</div> : <p className="longform-content-strategy-empty">{zh ? '当前没有可分配的模式。' : 'No patterns are eligible for a strategy role yet.'}</p>}
+    <div className="longform-content-strategy-positioning"><b>{zh ? '结构性定位' : 'Structural positioning'}</b><span>{report.positioning.summary}</span><small>{zh ? `实验计划：${report.experimentPlan.status} · 最少 ${report.experimentPlan.minimumEligibleSample} 条合格长视频样本（阈值需校准）` : `Experiment plan: ${report.experimentPlan.status} · minimum ${report.experimentPlan.minimumEligibleSample} eligible Long-form videos (calibration required)`}</small></div>
+    {report.risks.length ? <small className="longform-content-strategy-note">{zh ? `风险：${report.risks.slice(0, 2).map(item => item.message).join('；')}` : `Risks: ${report.risks.slice(0, 2).map(item => item.message).join('; ')}`}</small> : null}
+  </section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -454,7 +479,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
-    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
+    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>

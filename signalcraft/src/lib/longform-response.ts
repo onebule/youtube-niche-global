@@ -6,6 +6,7 @@ import { normalizeNicheLifecycleSummary } from './niche-lifecycle.ts';
 import { buildOpportunityAssessment } from './opportunity-engine.ts';
 import { buildContentPatternReport, normalizeContentPatternReport, type ContentPatternVideo } from './content-patterns.ts';
 import { buildContentPatternTrendReport, normalizeContentPatternTrendReport } from './content-pattern-trends.ts';
+import { buildContentStrategy } from './content-strategy.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -155,12 +156,19 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       nicheSignals: opportunity.nicheSignals,
       nicheLifecycle: opportunity.nicheLifecycle,
     });
+    const contentStrategy = buildContentStrategy({
+      nicheId: opportunity.contentPatternTrend?.nicheFits[0]?.nicheId || opportunity.key,
+      opportunityAssessment,
+      contentPatterns: opportunity.contentPatterns,
+      contentPatternTrend: opportunity.contentPatternTrend,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
       performance: assessment.performance,
       entryDecision: assessment.decision,
       opportunityAssessment,
+      contentStrategy,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,

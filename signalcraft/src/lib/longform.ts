@@ -8,6 +8,7 @@ import type { NicheLifecycleSummary } from './niche-lifecycle.ts';
 import type { OpportunityAssessment } from './opportunity-engine.ts';
 import type { ContentPatternReport } from './content-patterns.ts';
 import type { ContentPatternTrendReport } from './content-pattern-trends.ts';
+import type { ContentStrategy } from './content-strategy.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -46,6 +47,8 @@ export type LongformOpportunity = {
   contentPatterns?: ContentPatternReport;
   /** Optional P2 Phase 2 pattern history/trend and niche-fit evidence. */
   contentPatternTrend?: ContentPatternTrendReport;
+  /** Canonical P2 Phase 3 strategy; Long-form only. */
+  contentStrategy?: ContentStrategy;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;
