@@ -7,6 +7,7 @@ export const PRODUCTION_MATERIALIZATION_STORAGE_KEY = 'signalcraft-longform-prod
 
 export type ProductionMaterializationState =
   | 'READY_FOR_MANUAL_SMOKE_TEST'
+  | 'LLM_MATERIALIZER_UNAVAILABLE'
   | 'INSUFFICIENT_UPSTREAM_DATA'
   | 'REFERENCE_ASSET_REQUIRED'
   | 'RESEARCH_REQUIRED'
@@ -49,6 +50,58 @@ export type ProductionMaterialization = {
     execution: string;
   };
 };
+
+/** Convert the server's canonical draft envelope into the compact UI record. */
+export function normalizeServerProductionMaterialization(value: unknown): ProductionMaterialization | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  type JsonRecord = Record<string, unknown>;
+  const asRecord = (item: unknown): JsonRecord => item && typeof item === 'object' && !Array.isArray(item) ? item as JsonRecord : {};
+  const valueAt = (record: JsonRecord, key: string) => record[key];
+  const stageValue = (key: string) => asRecord(valueAt(asRecord(raw.stages), key));
+  const context = asRecord(raw.productionContext);
+  const source = asRecord(raw.sourceOpportunity);
+  const textValue = (record: JsonRecord, key: string, fallback: string) => typeof record[key] === 'string' && record[key] ? record[key] as string : fallback;
+  const brief = stageValue('creativeBrief');
+  const script = stageValue('script');
+  const storyboard = stageValue('storyboard');
+  const shot = stageValue('shot');
+  const assets = stageValue('visualAssets');
+  const spec = stageValue('generationSpecification');
+  const unit = stageValue('generationUnit');
+  const routing = stageValue('providerRouting');
+  const facts = Array.isArray(context.facts) ? context.facts : [];
+  const fact = (key: string, fallback: unknown) => { const found = facts.find(item => item && typeof item === 'object' && (item as JsonRecord).field === key); return found && typeof found === 'object' ? (found as JsonRecord).value ?? fallback : fallback; };
+  const artifactRecord = (item: unknown) => asRecord(item);
+  const state = typeof raw.state === 'string' ? raw.state : 'LONG-FORM PRODUCTION MATERIALIZATION BLOCKED';
+  const allowed: ProductionMaterializationState[] = ['READY_FOR_MANUAL_SMOKE_TEST', 'LLM_MATERIALIZER_UNAVAILABLE', 'INSUFFICIENT_UPSTREAM_DATA', 'REFERENCE_ASSET_REQUIRED', 'RESEARCH_REQUIRED', 'RIGHTS_REVIEW_REQUIRED', 'NO_COMPATIBLE_PROVIDER_ROUTE', 'LONG-FORM PRODUCTION MATERIALIZATION BLOCKED'];
+  const uiState = allowed.includes(state as ProductionMaterializationState) ? state as ProductionMaterializationState : 'LONG-FORM PRODUCTION MATERIALIZATION BLOCKED';
+  if (typeof raw.productionDraftId !== 'string' || typeof raw.opportunityId !== 'string') return null;
+  return {
+    schemaVersion: PRODUCTION_MATERIALIZATION_VERSION,
+    productionDraftId: raw.productionDraftId,
+    opportunityId: raw.opportunityId,
+    selection: 'EXPLICIT_USER_SELECTED',
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
+    sourceSnapshotId: typeof context.snapshotId === 'string' ? context.snapshotId : null,
+    sourceCapturedAt: typeof context.capturedAt === 'string' ? context.capturedAt : null,
+    state: uiState,
+    blockers: Array.isArray(raw.blockers) ? raw.blockers.filter((item): item is string => typeof item === 'string') : [],
+    context: { topic: String(source.topic || ''), mechanism: String(source.mechanism || ''), productionType: String(source.productionType || ''), sampleSize: Number(fact('sampleSize', 0)) || 0, channelCount: Number(fact('channelCount', 0)) || 0 },
+    stages: {
+      creativeBrief: stage(textValue(brief, 'id', ''), textValue(brief, 'state', 'NOT_CREATED')),
+      script: { ...stage(textValue(script, 'id', ''), textValue(script, 'state', 'NOT_CREATED')), architectureId: textValue(stageValue('scriptArchitecture'), 'id', '') || null },
+      storyboard: { ...stage(textValue(storyboard, 'id', ''), textValue(storyboard, 'state', 'NOT_CREATED')), sceneCount: Number((artifactRecord(storyboard.artifact).scenes as unknown[] | undefined)?.length || 0) },
+      shot: stage(textValue(shot, 'id', ''), textValue(shot, 'state', 'NOT_CREATED')),
+      visualAssets: { state: String(assets.state || 'NOT_CREATED'), required: Number((artifactRecord(assets.artifact).assets as unknown[] | undefined)?.length || 0), available: Number(((artifactRecord(assets.artifact).assets as unknown[] | undefined) || []).filter(item => artifactRecord(item).availability === 'AVAILABLE').length), references: Number((artifactRecord(assets.artifact).references as unknown[] | undefined)?.length || 0), rightsReviews: Number((artifactRecord(assets.artifact).rightsReviews as unknown[] | undefined)?.length || 0) },
+      generationSpecification: stage(textValue(spec, 'id', ''), textValue(spec, 'state', 'NOT_CREATED')),
+      generationUnit: { ...stage(textValue(unit, 'id', ''), textValue(unit, 'state', 'NOT_CREATED')), references: Number((artifactRecord(unit.artifact).referenceDependencyIds as unknown[] | undefined)?.length || 0) },
+      providerRouting: { state: String(routing.state || 'NOT_AVAILABLE'), availableRoutes: Number((artifactRecord(routing.artifact).decisions as unknown[] | undefined)?.length || (artifactRecord(routing.artifact).routes as unknown[] | undefined)?.length || 0), compatibleModels: (Array.isArray(artifactRecord(routing.artifact).compatibleModels) ? artifactRecord(routing.artifact).compatibleModels as unknown[] : []).filter((item): item is string => typeof item === 'string') },
+      serialization: textValue(routing, 'state', '') === 'AVAILABLE' ? 'VERIFIED_BY_PROVIDER_ROUTER' : 'NOT_RUN',
+      execution: uiState === 'READY_FOR_MANUAL_SMOKE_TEST' ? 'READY_FOR_MANUAL_SMOKE_TEST' : 'NOT_READY',
+    },
+  };
+}
 
 const clean = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const list = (value: unknown) => Array.isArray(value) ? value : [];

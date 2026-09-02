@@ -8,7 +8,7 @@ import { buildLongformValidationPlan } from '@/src/lib/longform-validation';
 import { buildRpmPublicContext, getRpmBenchmarkForTopic, type RpmBenchmarkResult, type RpmPublicContext } from '@/src/lib/rpm-benchmarks';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import { authHeaders, getSession } from '@/src/lib/auth';
-import { loadProductionMaterializations, materializeLongformProduction, saveProductionMaterialization, type ProductionMaterialization } from '@/src/lib/production-materialization';
+import { loadProductionMaterializations, normalizeServerProductionMaterialization, saveProductionMaterialization, type ProductionMaterialization } from '@/src/lib/production-materialization';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { buildTrendRadarHref, contextFromQuery, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 import { readResearchUrlState, writeResearchUrlState } from '@/src/lib/research-url-state';
@@ -718,7 +718,7 @@ function ProductionMaterializationPanel({ record, locale }: { record: Production
     [zh ? '生成单元' : 'Generation Unit', record.stages.generationUnit.state],
     [zh ? 'Provider 路由' : 'Provider route', record.stages.providerRouting.state],
   ];
-  const stateLabel = record.state === 'INSUFFICIENT_UPSTREAM_DATA' ? (zh ? '上游数据不足' : 'Insufficient upstream data') : record.state === 'READY_FOR_MANUAL_SMOKE_TEST' ? (zh ? '可进行手动烟雾测试' : 'Ready for manual smoke test') : (zh ? '制作方案已阻塞' : 'Production plan blocked');
+  const stateLabel = record.state === 'LLM_MATERIALIZER_UNAVAILABLE' ? (zh ? '创作物生成服务不可用' : 'LLM materializer unavailable') : record.state === 'INSUFFICIENT_UPSTREAM_DATA' ? (zh ? '上游数据不足' : 'Insufficient upstream data') : record.state === 'READY_FOR_MANUAL_SMOKE_TEST' ? (zh ? '可进行手动烟雾测试' : 'Ready for manual smoke test') : (zh ? '制作方案已阻塞' : 'Production plan blocked');
   return <section className={`longform-production-materialization ${record.state.toLowerCase().replaceAll('_', '-')}`} id="production-materialization" aria-label={zh ? '长视频制作方案' : 'Long-form production plan'}>
     <div className="longform-production-materialization-head"><div><span className="longform-kicker">PRODUCTION MATERIALIZATION · EXPLICIT ACTION</span><b>{zh ? '制作方案状态' : 'Production plan status'}</b><small>{zh ? '只保存当前选中方向；不会自动创建其他机会，也不会提交 Provider 任务。' : 'Only the selected direction is saved; no other opportunities are created and no provider task is submitted.'}</small></div><strong>{stateLabel}</strong></div>
     <div className="longform-production-progress">{labels.map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
@@ -775,6 +775,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const [selectedOpportunityKey, setSelectedOpportunityKey] = useState<string | null>(null);
   const [materializationOverride, setMaterializationOverride] = useState<ProductionMaterialization | null>(null);
   const [materializing, setMaterializing] = useState(false);
+  const [materializationError, setMaterializationError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
   const updateUrl = (patch: Parameters<typeof writeResearchUrlState>[1]) => {
@@ -838,14 +839,26 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
   const selectedOpportunityId = selectedOpportunity?.key || null;
   const persistedMaterialization = selectedOpportunityId ? loadProductionMaterializations(getSession()).find(item => item.opportunityId === selectedOpportunityId) || null : null;
   const materialization = materializationOverride?.opportunityId === selectedOpportunityId ? materializationOverride : persistedMaterialization;
-  const createProductionPlan = () => {
+  const createProductionPlan = async () => {
     if (!selectedOpportunity || materializing) return;
     setMaterializing(true);
-    const record = materializeLongformProduction({ opportunity: selectedOpportunity, capturedAt: data?.evidence?.capturedAt || data?.dataScope.latestCapturedAt || null, snapshotId: data?.evidence?.snapshotId || null });
-    saveProductionMaterialization(record, getSession());
-    setMaterializationOverride(record);
-    setMaterializing(false);
-    globalThis.setTimeout(() => document.getElementById('production-materialization')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    setMaterializationError(null);
+    try {
+      const response = await fetch('/api/longform-production', {
+        method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ opportunity: selectedOpportunity, capturedAt: data?.evidence?.capturedAt || data?.dataScope.latestCapturedAt || null, snapshotId: data?.evidence?.snapshotId || null }), cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => ({}));
+      const serverRecord = normalizeServerProductionMaterialization(payload?.productionMaterialization);
+      if (!response.ok || !serverRecord) throw new Error(typeof payload?.error === 'string' ? payload.error : '制作方案服务暂时不可用，请稍后重试。');
+      saveProductionMaterialization(serverRecord, getSession());
+      setMaterializationOverride(serverRecord);
+      globalThis.setTimeout(() => document.getElementById('production-materialization')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    } catch (error) {
+      // Do not save a browser-only record: production objects must come from
+      // the authenticated server persistence boundary.
+      setMaterializationError(error instanceof Error ? error.message : '制作方案服务暂时不可用，请稍后重试。');
+    } finally { setMaterializing(false); }
   };
   const heroWindow = windowLabels[window] || windowLabels['28d'];
   const contextTrendSignals = researchContext?.trendSignals && typeof researchContext.trendSignals === 'object' ? researchContext.trendSignals as Record<string, unknown> : null;
@@ -894,7 +907,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
           <div><span className="longform-kicker">DIRECTIONS</span><b>{zh ? '选择一个赛道深入研究' : 'Choose one direction to research'}</b><small>{zh ? '研究页只展开一个方向，避免把决策信息变成机会列表。' : 'Research stays focused on one direction instead of becoming another opportunity feed.'}</small></div>
           <div className="longform-direction-list">{opportunities.map((item, index) => { const selected = item.key === selectedOpportunity?.key; const recommendation = recommendationFor(item, locale); return <button type="button" key={item.key} className={selected ? 'active' : ''} onClick={() => { setSelectedOpportunityKey(item.key); updateUrl({ direction: item.key }); }} aria-current={selected ? 'true' : undefined}><span><b>{String(index + 1).padStart(2, '0')}</b><strong>{item.mechanism} · {item.productionType}</strong><small>{item.topic}</small></span><em className={recommendation.key}>{recommendation.label}</em></button>; })}</div>
         </aside>
-        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale} materialization={materialization} onCreateProduction={createProductionPlan} creating={materializing}/> : <div className="longform-state"><b>{zh ? '当前没有可研究的方向' : 'No direction to research'}</b></div>}</div>
+        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{materializationError ? <div className="longform-production-error" role="alert">{materializationError}</div> : null}{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale} materialization={materialization} onCreateProduction={createProductionPlan} creating={materializing}/> : <div className="longform-state"><b>{zh ? '当前没有可研究的方向' : 'No direction to research'}</b></div>}</div>
       </section>
     </> : <div className="longform-state"><b>{zh ? '当前窗口还没有足够的长视频样本' : 'Not enough long-form samples for this window'}</b><p>{zh ? '这不是演示数据。请扩大市场或时间窗口，等采集任务积累可比较的快照。' : 'This is not demo data. Expand the market or window and wait for comparable snapshots.'}</p></div>}
     <section className="longform-boundary"><div><span className="longform-kicker">READ THE SIGNAL</span><h2>{zh ? '哪些数据目前不能回答？' : 'What can this data not answer yet?'}</h2></div><div>{(data?.gaps || [zh ? '字幕、CTR、留存、RPM/CPM 和收入不属于公开字段。' : 'Transcripts, CTR, retention, RPM/CPM and revenue are not public fields.']).map(gap => <p key={gap}>→ {gap}</p>)}</div></section>
