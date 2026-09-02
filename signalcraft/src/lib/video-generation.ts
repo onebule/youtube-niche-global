@@ -336,6 +336,56 @@ export type VideoGeneration = {
   generationSpec?: GenerationSpecV2 | null;
 };
 
+export type GenerationJobState = 'CREATED' | 'VALIDATING' | 'READY' | 'SUBMITTING' | 'SUBMITTED' | 'QUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCEL_REQUESTED' | 'CANCELLED' | 'TIMED_OUT' | 'UNKNOWN';
+
+export type GenerationJob = {
+  id: string;
+  specificationId: string;
+  generationUnitId: string;
+  routingDecisionId: string;
+  providerId: string | null;
+  modelId: Exclude<VideoModelId, 'auto'>;
+  executionMode: 'MANUAL_SINGLE_JOB';
+  state: GenerationJobState;
+  attempt: number;
+  internalGenerationId: string | null;
+  providerTaskId: string | null;
+  submittedAt: string | null;
+  processingAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  outputIds: string[];
+  error: { code: string; message: string; retryable: boolean; failureStage?: string | null } | null;
+  executionGateSnapshot: { executionState?: string; smokeTestState?: string; blockers?: string[] } | null;
+  requestSnapshot: Record<string, unknown> | null;
+  provenance: Record<string, unknown> | null;
+  clientActionId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GeneratedOutput = {
+  id: string;
+  generationJobId: string;
+  providerId: string | null;
+  modelId: string | null;
+  mediaType: 'IMAGE' | 'VIDEO';
+  internalAssetId: string | null;
+  providerAssetId: string | null;
+  url: string | null;
+  expiresAt: string | null;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  state: 'AVAILABLE' | 'UNAVAILABLE';
+  provenance: Record<string, unknown>;
+};
+
+export const GENERATION_JOB_POLL_INTERVAL_MS = 15_000;
+export const GENERATION_JOB_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
 export type VideoGenerationPlan = {
   kind: 'video-generation-plan';
   director: { id: 'gpt' | 'claude'; label: string; model: string; mode: string; provider?: string | null };
@@ -566,6 +616,56 @@ export async function createVideoGeneration(input: {
     body: JSON.stringify({ ...input, idempotencyKey, generationSpec }),
   });
   return payload.generation;
+}
+
+export type ManualGenerationJobInput = {
+  specificationId: string;
+  generationUnitId: string;
+  routingDecisionId: string;
+  selectedModelId: Exclude<VideoModelId, 'auto'>;
+  executionMode?: 'MANUAL_SINGLE_JOB';
+  clientActionId: string;
+  generationSpec: GenerationSpecV2;
+};
+
+/** Explicit P4 Phase 5 action. Nothing calls this from render/effects. */
+export async function createManualGenerationJob(input: ManualGenerationJobInput) {
+  const payload = await request<{ job: GenerationJob; generation: VideoGeneration | null; reused: boolean }>('jobs', {
+    method: 'POST',
+    body: JSON.stringify({ ...input, executionMode: 'MANUAL_SINGLE_JOB' }),
+  });
+  return payload;
+}
+
+export async function refreshGenerationJob(jobId: string) {
+  const payload = await request<{ job: GenerationJob; generation: VideoGeneration | null; output?: GeneratedOutput | null }>(`jobs/${encodeURIComponent(jobId)}`);
+  return payload;
+}
+
+export async function cancelGenerationJob(jobId: string) {
+  const payload = await request<{ job: GenerationJob; generation: VideoGeneration | null; providerCancellation: VideoGenerationCancellation }>('job-cancel', {
+    method: 'POST',
+    body: JSON.stringify({ jobId }),
+  });
+  return payload;
+}
+
+export async function pollGenerationJob(jobId: string, options: { signal?: AbortSignal; intervalMs?: number; timeoutMs?: number; onUpdate?: (job: GenerationJob) => void } = {}) {
+  const intervalMs = Math.max(1000, Number(options.intervalMs) || GENERATION_JOB_POLL_INTERVAL_MS);
+  const timeoutMs = Math.max(intervalMs, Number(options.timeoutMs) || GENERATION_JOB_POLL_TIMEOUT_MS);
+  const startedAt = Date.now();
+  let latest = await refreshGenerationJob(jobId);
+  options.onUpdate?.(latest.job);
+  while (!['SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT', 'UNKNOWN'].includes(latest.job.state)) {
+    if (Date.now() - startedAt >= timeoutMs) return { ...latest, timedOutLocally: true };
+    await new Promise<void>((resolve, reject) => {
+      const timer = globalThis.setTimeout(resolve, intervalMs);
+      options.signal?.addEventListener('abort', () => { globalThis.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+    });
+    latest = await refreshGenerationJob(jobId);
+    options.onUpdate?.(latest.job);
+  }
+  return { ...latest, timedOutLocally: false };
 }
 
 export async function refreshVideoGeneration(generationId: string) {
