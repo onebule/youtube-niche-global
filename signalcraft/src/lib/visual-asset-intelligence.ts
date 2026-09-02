@@ -33,7 +33,7 @@ export type LockStrength = 'HARD' | 'SOFT';
 export type ProductionRoute = 'REUSE_EXISTING' | 'CAPTURE' | 'SOURCE' | 'LICENSE' | 'GENERATE_LATER' | 'CREATE_GRAPHIC' | 'RESEARCH_FIRST' | 'BLOCKED';
 export type AssetGapType = 'NO_REFERENCE' | 'NO_SOURCE_ASSET' | 'NO_EVIDENCE_SOURCE' | 'RIGHTS_UNKNOWN' | 'REFERENCE_INCOMPLETE' | 'USER_INPUT_REQUIRED' | 'VISION_REQUIRED' | 'RESEARCH_REQUIRED' | 'GENERATION_REFERENCE_REQUIRED' | 'FRAME_EXTRACTION_REQUIRED' | 'CRITICAL_REFERENCE_MISSING' | 'KNOWN_RIGHTS_BLOCKER';
 export type AssetPackageReadiness = 'READY_FOR_PROMPT_PLANNING' | 'READY_WITH_CAUTION' | 'NEEDS_ASSETS' | 'NEEDS_RIGHTS_REVIEW' | 'NEEDS_REVISION' | 'BLOCKED' | 'INSUFFICIENT';
-export type AssetDataAuditState = 'AVAILABLE' | 'DERIVABLE' | 'PARTIAL' | 'REQUIRES_VISION' | 'REQUIRES_ASSET' | 'REQUIRES_RESEARCH' | 'REQUIRES_RIGHTS_REVIEW' | 'REQUIRES_USER_INPUT' | 'UNAVAILABLE';
+export type AssetDataAuditState = 'AVAILABLE' | 'DERIVABLE' | 'PARTIAL' | 'REQUIRES_REFERENCE' | 'REQUIRES_VISION' | 'REQUIRES_ASSET' | 'REQUIRES_RESEARCH' | 'REQUIRES_RIGHTS_REVIEW' | 'REQUIRES_USER_INPUT' | 'UNAVAILABLE';
 
 export type VisualAssetProvenance = { storyboardId: string | null; sceneIds: string[]; shotIds: string[]; scriptId: string | null; claimIds: string[]; evidenceIds: string[]; sourceAssetId: string | null; sourceUrl: string | null; algorithmVersion: string; capturedAt: string | null; snapshotId: string | null };
 export type VisualAssetIdentity = { entityId: string; label: string; continuityRole: 'RECURRING_CHARACTER' | 'RECURRING_ENVIRONMENT' | 'RECURRING_PROP' | 'EVIDENCE_SOURCE' | 'ONE_OFF' | 'UNKNOWN'; state: string | null; variants: string[] };
