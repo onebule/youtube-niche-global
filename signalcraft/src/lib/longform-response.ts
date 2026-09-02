@@ -13,6 +13,7 @@ import { buildCreativeBriefIntelligence } from './creative-brief-intelligence.ts
 import { buildCreativeDevelopmentIntelligence } from './creative-development.ts';
 import { buildScriptDevelopmentIntelligence } from './script-development.ts';
 import { buildScriptWritingIntelligence } from './script-writing.ts';
+import { buildStoryboardIntelligence } from './storyboard-planning.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -218,6 +219,12 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       snapshotId: evidence.snapshotId || null,
       validationFeedbackVersion: experimentValidation.observations.length ? experimentValidation.algorithmVersion : null,
     });
+    const storyboardIntelligence = buildStoryboardIntelligence({
+      scriptDraft: scriptWriting.drafts[0] || null,
+      scriptDevelopment,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -232,6 +239,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       scriptDevelopment,
       scriptWriting,
       scriptDraft: scriptWriting,
+      storyboardIntelligence,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
