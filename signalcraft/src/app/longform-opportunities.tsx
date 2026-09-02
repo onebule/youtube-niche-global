@@ -459,6 +459,24 @@ function ContentStrategyPanel({ opportunity, locale }: { opportunity: LongformOp
   </section>;
 }
 
+const validationStateLabels: Record<string, { zh: string; en: string }> = {
+  VALIDATED: { zh: '已验证', en: 'Validated' }, PARTIALLY_VALIDATED: { zh: '部分验证', en: 'Partially validated' }, INCONCLUSIVE: { zh: '尚无定论', en: 'Inconclusive' }, UNDERPERFORMING: { zh: '表现不足', en: 'Underperforming' }, FAILED: { zh: '失败', en: 'Failed' }, INSUFFICIENT: { zh: '样本不足', en: 'Insufficient' },
+};
+
+function ExperimentValidationPanel({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const report = opportunity.experimentValidation;
+  if (!report) return null;
+  const validation = validationStateLabels[report.strategyValidation.state]?.[zh ? 'zh' : 'en'] || report.strategyValidation.state;
+  const sample = report.sampleSufficiency;
+  return <section className="longform-experiment-validation" aria-label={zh ? '长视频策略验证' : 'Long-form strategy validation'}>
+    <div className="longform-experiment-validation-head"><div><span className="longform-kicker">P2 PHASE 4 · VALIDATION</span><b>{zh ? '策略验证' : 'Strategy validation'}</b><small>{zh ? '只接受真实观察；没有观察时保持“未开始/样本不足”，不会改写历史策略。' : 'Only real observations count; without observations this remains planned/insufficient and never rewrites history.'}</small></div><div className="validation-verdict"><strong>{validation}</strong><span>{zh ? `实验状态：${report.status}` : `Experiment: ${report.status}`}</span><span>{zh ? `置信度：${report.confidence}` : `Confidence: ${report.confidence}`}</span></div></div>
+    <div className="longform-experiment-validation-summary"><span>{zh ? '合格观察' : 'Eligible observations'} <b>{sample.eligibleVideos}</b></span><span>{zh ? '独立频道' : 'Creators'} <b>{sample.eligibleCreators}</b></span><span>{zh ? '样本状态' : 'Sample'} <b>{sample.state}</b></span><span>{zh ? '模式结果' : 'Pattern results'} <b>{report.patternValidation.length}</b></span></div>
+    {report.patternValidation.length ? <div className="longform-experiment-validation-list">{report.patternValidation.slice(0, 4).map(item => <article key={item.patternId}><div><b>{item.patternId}</b><span>{validationStateLabels[item.state]?.[zh ? 'zh' : 'en'] || item.state}</span></div><small>{zh ? `合格 ${item.eligibleVideos} 条 · ${item.eligibleCreators} 个频道 · 高于/达到 ${item.aboveExpectation + item.meetsExpectation} 条` : `${item.eligibleVideos} eligible · ${item.eligibleCreators} creators · ${item.aboveExpectation + item.meetsExpectation} at/above expectation`}</small></article>)}</div> : <p className="longform-experiment-validation-empty">{zh ? '尚无实验观察。先创建实验并接入公开视频快照；当前仅保留策略快照与期望。' : 'No experiment observations yet. Start an experiment and attach public observation snapshots; strategy and expectations are preserved for now.'}</p>}
+    {report.blockers.length ? <small className="longform-experiment-validation-note">{zh ? `阻塞：${report.blockers.slice(0, 2).join('、')}` : `Blockers: ${report.blockers.slice(0, 2).join(', ')}`}</small> : null}
+  </section>;
+}
+
 function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportunity; locale: UiLocale }) {
   const zh = locale === 'zh';
   const representativeCount = opportunity.representativeVideos.length;
@@ -479,7 +497,7 @@ function OpportunityCard({ opportunity, locale }: { opportunity: LongformOpportu
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
-    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
+    <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><ExperimentValidationPanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
     <DecisionFirstBrief opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>

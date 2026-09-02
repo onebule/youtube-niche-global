@@ -9,6 +9,7 @@ import type { OpportunityAssessment } from './opportunity-engine.ts';
 import type { ContentPatternReport } from './content-patterns.ts';
 import type { ContentPatternTrendReport } from './content-pattern-trends.ts';
 import type { ContentStrategy } from './content-strategy.ts';
+import type { ExperimentValidationReport } from './experiment-validation.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -49,6 +50,8 @@ export type LongformOpportunity = {
   contentPatternTrend?: ContentPatternTrendReport;
   /** Canonical P2 Phase 3 strategy; Long-form only. */
   contentStrategy?: ContentStrategy;
+  /** P2 Phase 4 validation; empty until real Long-form observations arrive. */
+  experimentValidation?: ExperimentValidationReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;

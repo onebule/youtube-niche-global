@@ -15,6 +15,8 @@ test('partial long-form responses normalize to safe unknown states', () => {
   assert.equal(result.opportunities[0].representativeVideos[0].channelAvatar, null);
   assert.equal(result.dataScope.window, '28d');
   assert.equal(result.availabilityAudit.coverage, 0);
+  assert.equal(result.opportunities[0].experimentValidation?.scope, 'LONG_FORM');
+  assert.equal(result.opportunities[0].experimentValidation?.status, 'PLANNED');
 });
 
 test('normalized responses preserve real fields and reject invalid scores', () => {

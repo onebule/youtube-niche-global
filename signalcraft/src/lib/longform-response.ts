@@ -7,6 +7,7 @@ import { buildOpportunityAssessment } from './opportunity-engine.ts';
 import { buildContentPatternReport, normalizeContentPatternReport, type ContentPatternVideo } from './content-patterns.ts';
 import { buildContentPatternTrendReport, normalizeContentPatternTrendReport } from './content-pattern-trends.ts';
 import { buildContentStrategy } from './content-strategy.ts';
+import { buildExperimentValidationReport } from './experiment-validation.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -162,6 +163,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       contentPatterns: opportunity.contentPatterns,
       contentPatternTrend: opportunity.contentPatternTrend,
     });
+    const experimentValidation = buildExperimentValidationReport({ strategy: contentStrategy, evaluatedAt: nullableText(rawScope.latestCapturedAt) || '1970-01-01T00:00:00.000Z' });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -169,6 +171,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       entryDecision: assessment.decision,
       opportunityAssessment,
       contentStrategy,
+      experimentValidation,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
