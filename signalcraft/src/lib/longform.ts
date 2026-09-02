@@ -10,6 +10,7 @@ import type { ContentPatternReport } from './content-patterns.ts';
 import type { ContentPatternTrendReport } from './content-pattern-trends.ts';
 import type { ContentStrategy } from './content-strategy.ts';
 import type { ExperimentValidationReport } from './experiment-validation.ts';
+import type { IdeaIntelligenceReport } from './idea-intelligence.ts';
 
 export type LongformOpportunity = {
   key: string;
@@ -52,11 +53,13 @@ export type LongformOpportunity = {
   contentStrategy?: ContentStrategy;
   /** P2 Phase 4 validation; empty until real Long-form observations arrive. */
   experimentValidation?: ExperimentValidationReport;
+  /** P3 Phase 1 Case → Pattern → Idea intelligence; Long-form only. */
+  ideaIntelligence?: IdeaIntelligenceReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
   lanes: string[];
   metrics: Record<string, number | null>;
   execution: { score: number | null; coverage: number; rationale: string };
-  representativeVideos: Array<{ videoId: string; title: string; titleZh?: string | null; channelTitle: string | null; thumbnail: string | null; channelAvatar: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
+  representativeVideos: Array<{ videoId: string; title: string; titleZh?: string | null; topic?: string | null; channelTitle: string | null; thumbnail: string | null; channelAvatar: string | null; views: number | null; durationSeconds: number | null; sourceMarket: string | null; growthRate: number | null; breakoutScore: number | null; sourceUrl: string | null }>;
 };
 
 export type LongformResponse = {

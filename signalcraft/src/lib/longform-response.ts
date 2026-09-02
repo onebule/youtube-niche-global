@@ -8,6 +8,7 @@ import { buildContentPatternReport, normalizeContentPatternReport, type ContentP
 import { buildContentPatternTrendReport, normalizeContentPatternTrendReport } from './content-pattern-trends.ts';
 import { buildContentStrategy } from './content-strategy.ts';
 import { buildExperimentValidationReport } from './experiment-validation.ts';
+import { buildIdeaIntelligence } from './idea-intelligence.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const textOr = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -25,6 +26,7 @@ function normalizeRepresentativeVideo(value: unknown, index: number): LongformOp
     videoId: textOr(raw.videoId, `unknown-video-${index + 1}`),
     title: textOr(raw.title, 'Untitled public video'),
     titleZh: nullableText(raw.titleZh),
+    topic: nullableText(raw.topic),
     channelTitle: nullableText(raw.channelTitle),
     thumbnail: nullableText(raw.thumbnail),
     channelAvatar: nullableText(raw.channelAvatar),
@@ -54,6 +56,7 @@ function normalizeOpportunity(value: unknown, index: number, capturedAt: string 
     creatorId: video.channelTitle || `unknown-creator-${video.videoId}`,
     format: 'long',
     title: video.title,
+    topic: video.topic,
     durationSeconds: video.durationSeconds,
     views: video.views,
     thumbnailUrl: video.thumbnail,
@@ -164,6 +167,20 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       contentPatternTrend: opportunity.contentPatternTrend,
     });
     const experimentValidation = buildExperimentValidationReport({ strategy: contentStrategy, evaluatedAt: nullableText(rawScope.latestCapturedAt) || '1970-01-01T00:00:00.000Z' });
+    const ideaIntelligence = buildIdeaIntelligence({
+      nicheId: opportunity.contentPatternTrend?.nicheFits[0]?.nicheId || opportunity.key,
+      topic: opportunity.topic,
+      mechanism: opportunity.mechanism,
+      productionType: opportunity.productionType,
+      opportunityAssessment,
+      contentPatterns: opportunity.contentPatterns,
+      contentPatternTrend: opportunity.contentPatternTrend,
+      contentStrategy,
+      experimentValidation,
+      representativeVideos: opportunity.representativeVideos,
+      capturedAt: nullableText(rawScope.latestCapturedAt),
+      snapshotId: evidence.snapshotId || null,
+    });
     return {
       ...opportunity,
       confidenceLevel: assessment.confidence,
@@ -172,6 +189,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
       opportunityAssessment,
       contentStrategy,
       experimentValidation,
+      ideaIntelligence,
       upstreamAssessment: {
         source: 'UPSTREAM_OPAQUE' as const,
         algorithmVersion: evidence.algorithmVersion || null,
