@@ -253,3 +253,48 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 @media(max-width:980px){.watchlists-page{max-width:none}.watchlists-form-grid{grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(110px,.7fr)) auto}}
 @media(max-width:760px){.watchlists-status{grid-template-columns:auto minmax(0,1fr);align-items:start}.watchlists-status button{grid-column:2;width:max-content}.watchlists-form-head{flex-direction:column}.watchlists-form-note{align-self:flex-start}.watchlists-form-grid{grid-template-columns:1fr 1fr}.watchlists-field-name{grid-column:1/-1}.watchlists-submit{grid-column:1/-1;width:100%}}
 @media(max-width:480px){.watchlists-page{padding-bottom:52px}.watchlists-status{padding:12px}.watchlists-empty{min-height:104px;padding:18px}.watchlists-form{padding:17px 14px}.watchlists-form-grid{grid-template-columns:1fr}.watchlists-field-name,.watchlists-submit{grid-column:auto}.watchlists-submit{width:100%}}
+
+/* Automated analysis adapter: evidence command deck */
+.viral-case-analysis-strip{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:14px 20px;padding:18px 20px 16px;background:#edf4f1;border-left-width:4px}
+.viral-case-analysis-head{grid-column:1/-1;min-width:0}
+.viral-case-analysis-title-row{display:flex;align-items:center;gap:10px;min-height:18px}
+.viral-case-analysis-title-row .eyebrow{margin:0}
+.viral-case-analysis-status{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #b7d2c9;border-radius:999px;background:#f7fbf9;color:#30675b;font:800 10px/1 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.04em;white-space:nowrap}
+.viral-case-analysis-status i{display:block;width:6px;height:6px;border-radius:50%;background:#30675b}
+.viral-case-analysis-status.status-running{border-color:#e4c58c;background:#fff8e9;color:#95651d}
+.viral-case-analysis-status.status-running i{background:#efb65d;box-shadow:0 0 0 3px rgba(239,182,93,.18);animation:viral-analysis-pulse 1.2s ease-in-out infinite}
+.viral-case-analysis-status.status-error{border-color:#e2aaa0;background:#fff1ed;color:#b7503b}
+.viral-case-analysis-status.status-error i{background:#c9372c}
+.viral-case-analysis-strip h2{margin:5px 0 6px;font-size:23px}
+.viral-case-analysis-strip p{max-width:900px}
+.viral-case-analysis-rail{display:grid;grid-column:1/-1;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin:0;background:#c8d9d2}
+.viral-case-analysis-rail>div{display:grid;gap:5px;min-height:55px;padding:10px 12px;background:rgba(255,253,249,.78)}
+.viral-case-analysis-rail span{color:#6f817a;font:800 10px/1 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.08em;text-transform:uppercase}
+.viral-case-analysis-rail b{color:#202a2f;font-size:12px;font-weight:700;line-height:1.35}
+.viral-case-analysis-progress{display:grid;grid-column:1/-1;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.viral-case-analysis-progress li{display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 9px;border:1px solid #d8e3de;background:rgba(255,253,249,.64);color:#8b8278;font-size:11px;line-height:1.2}
+.viral-case-analysis-progress li>span{display:grid;place-items:center;width:19px;height:19px;border:1px solid #c6d3ce;border-radius:50%;color:#7a8a84;font:800 9px/1 ui-monospace,"Cascadia Mono",monospace}
+.viral-case-analysis-progress li.is-active{border-color:#8fb8aa;background:#f7fbf9;color:#24584e;font-weight:700}
+.viral-case-analysis-progress li.is-active>span{border-color:#30675b;background:#30675b;color:#fff}
+.viral-case-analysis-progress li.is-done{border-color:#b7d2c9;color:#30675b}
+.viral-case-analysis-progress li.is-done>span{border-color:#30675b;color:#30675b}
+.viral-case-analysis-controls{grid-column:1/-1;align-items:flex-end;margin-top:0}
+.viral-case-analysis-action{display:grid;align-items:end;gap:5px}
+.viral-case-analysis-action small{color:#6f817a;font-size:10px;line-height:1.3;white-space:nowrap}
+.viral-case-analysis-error{grid-column:1/-1;max-width:none!important;margin:0!important;padding:9px 11px;border-left:3px solid #c9372c;background:#fff1ed;color:#a2382d!important;font-size:11px!important}
+.viral-case-analysis-strip.is-running{border-left-color:#efb65d}
+@keyframes viral-analysis-pulse{50%{opacity:.42;transform:scale(.78)}}
+[data-theme="dark"] .viral-case-analysis-strip{background:#1a2724}
+[data-theme="dark"] .viral-case-analysis-status{border-color:#416b60;background:#20342f;color:#9dd0bf}
+[data-theme="dark"] .viral-case-analysis-status.status-running{border-color:#72582b;background:#302920;color:#efc777}
+[data-theme="dark"] .viral-case-analysis-status.status-error{border-color:#78443b;background:#35231f;color:#f0a394}
+[data-theme="dark"] .viral-case-analysis-rail{background:var(--desk-line)}
+[data-theme="dark"] .viral-case-analysis-rail>div{background:#2b2520}
+[data-theme="dark"] .viral-case-analysis-rail span{color:#a89c90}
+[data-theme="dark"] .viral-case-analysis-rail b{color:var(--desk-ink)}
+[data-theme="dark"] .viral-case-analysis-progress li{border-color:var(--desk-line);background:#211d1a;color:#9e9388}
+[data-theme="dark"] .viral-case-analysis-progress li.is-active{border-color:#416b60;background:#20342f;color:#b8dfd2}
+[data-theme="dark"] .viral-case-analysis-progress li.is-done{border-color:#416b60;color:#9dd0bf}
+[data-theme="dark"] .viral-case-analysis-action small{color:#a89c90}
+[data-theme="dark"] .viral-case-analysis-error{border-color:#9d5146;background:#35231f;color:#f0a394!important}
+@media(max-width:620px){.viral-case-analysis-strip{grid-template-columns:1fr;gap:13px;padding:16px}.viral-case-analysis-title-row{align-items:flex-start;flex-direction:column;gap:7px}.viral-case-analysis-rail,.viral-case-analysis-progress{grid-template-columns:1fr}.viral-case-analysis-controls{align-items:stretch;flex-direction:column}.viral-case-analysis-action{width:100%}.viral-case-analysis-action small{white-space:normal}.viral-case-analysis-action button{width:100%}}

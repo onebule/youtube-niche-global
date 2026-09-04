@@ -52,6 +52,8 @@ const initialStore: ViralCaseStore = { version: 2, analysisModel: DEFAULT_VIRAL_
 const beatLabels = ['0–3 秒 · 截停', '3–8 秒 · 规则', '8–17 秒 · 加码', '结尾 · 收口'] as const;
 const corpusBucketOptions = ['S', 'A', 'B', 'C'] as const;
 const corpusBucketPriority: Record<string, number> = { S: 0, A: 1, B: 2, C: 3 };
+const analysisSteps = ['读取公开证据', '提炼观看机制', '写入分析卡'] as const;
+type AnalysisStep = 0 | 1 | 2;
 
 const videoTitle = (video: Video, locale: UiLocale) => locale === 'zh' && video.titleZh?.trim() ? video.titleZh : video.title;
 
@@ -90,6 +92,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   });
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [analysisState, setAnalysisState] = useState<'idle' | 'running'>('idle');
+  const [analysisStep, setAnalysisStep] = useState<AnalysisStep>(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [h3Prompt, setH3Prompt] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
@@ -120,6 +123,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
   const notes = selectedVideo ? normalizeViralCaseNotes(store.notesByVideoId[selectedVideo.id]) : emptyViralCaseNotes();
   const signal = selectedVideo ? getOpportunity(selectedVideo) : null;
   const embedId = selectedVideo ? youtubeVideoId(selectedVideo.sourceUrl) : null;
+  const analysisStatus = analysisState === 'running' ? 'running' : analysisError ? 'error' : notes.analysis ? 'success' : 'ready';
   const canCreateIdea = Boolean(notes.reusableMechanism.trim());
   const activePattern = getViralPattern(activePatternId) || viralPatternLibrary[0] || null;
   const deferredCorpusQuery = useDeferredValue(corpusQuery);
@@ -177,6 +181,11 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     }
     setAnalysisError(null);
     setAnalysisState('running');
+    setAnalysisStep(0);
+    const progressTimers = [
+      window.setTimeout(() => setAnalysisStep(1), 1200),
+      window.setTimeout(() => setAnalysisStep(2), 3000),
+    ];
     try {
       const result = await requestViralCaseAnalysis(selectedVideo, store.analysisModel);
       setStore(current => {
@@ -196,7 +205,9 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       setAnalysisError(message);
       notify(message);
     } finally {
+      progressTimers.forEach(timer => window.clearTimeout(timer));
       setAnalysisState('idle');
+      setAnalysisStep(0);
     }
   };
 
@@ -442,15 +453,32 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
         <p className="viral-case-evidence-note">可验证：{signal.reasons.join('；')}。{selectedVideo.snapshots.length > 1 ? '当前已具备多次公开快照，可观察采集期间的变化；仍不等同于留存、CTR 或实际收益。' : '当前只有一次公开快照，只能看累计相对信号，不能判断真实增长趋势、留存、CTR 或收益。'}</p>
       </section>
 
-      <section className="viral-case-analysis-strip" aria-label="自动视频分析">
-        <div>
-          <span className="eyebrow">AUTOMATED ANALYSIS ADAPTER</span>
-          <h2>{notes.analysis ? '自动报告已返回，仍需人工复核。' : '让服务端替你先做一轮粗拆解。'}</h2>
-          <p>{notes.analysis ? `来源：${notes.analysis.provider} · 置信度：${notes.analysis.confidence === 'high' ? '高' : notes.analysis.confidence === 'medium' ? '中' : '低'} · ${new Date(notes.analysis.generatedAt).toLocaleString('zh-CN')}` : '默认先分析标题、时长和 YouTube 缩略图；不会把推测写成逐帧、字幕或音频结论。接入独立视频服务后才会升级完整能力。'}</p>
+      <section className={`viral-case-analysis-strip ${analysisState === 'running' ? 'is-running' : ''}`} aria-label="自动视频分析">
+        <div className="viral-case-analysis-head">
+          <div className="viral-case-analysis-title-row">
+            <span className="eyebrow">AUTOMATED ANALYSIS ADAPTER</span>
+            <span className={`viral-case-analysis-status status-${analysisStatus}`} aria-live="polite">
+              <i aria-hidden="true" />
+              {analysisStatus === 'running' ? '正在整理证据' : analysisStatus === 'success' ? '已完成 · 待复核' : analysisStatus === 'error' ? '需要处理' : '就绪 · 公开证据'}
+            </span>
+          </div>
+          <h2>{notes.analysis ? '自动报告已返回，逐项对照原视频。' : '先把公开证据整理成一张可复核的分析卡。'}</h2>
+          <p>{notes.analysis ? `来源：${notes.analysis.provider} · 置信度：${notes.analysis.confidence === 'high' ? '高' : notes.analysis.confidence === 'medium' ? '中' : '低'} · ${new Date(notes.analysis.generatedAt).toLocaleString('zh-CN')}` : '只读取标题、时长和缩略图；输出 Hook、观看规则、4 段节拍与视觉线索。时间点、字幕、音频仍由你在原视频中核对。'}</p>
         </div>
+        <div className="viral-case-analysis-rail" aria-label="自动分析范围">
+          <div><span>输入</span><b>标题 · 时长 · 缩略图</b></div>
+          <div><span>输出</span><b>8 项结构化字段</b></div>
+          <div><span>边界</span><b>低置信度 · 人工复核</b></div>
+        </div>
+        {analysisState === 'running' && <ol className="viral-case-analysis-progress" aria-label="分析进度" aria-live="polite">
+          {analysisSteps.map((step, index) => <li key={step} className={index < analysisStep ? 'is-done' : index === analysisStep ? 'is-active' : ''} aria-current={index === analysisStep ? 'step' : undefined}><span aria-hidden="true">{index < analysisStep ? '✓' : String(index + 1).padStart(2, '0')}</span>{step}</li>)}
+        </ol>}
         <div className="viral-case-analysis-controls">
-          <label><span>分析模型</span><select aria-label="自动分析模型" value={store.analysisModel} onChange={event => { setAnalysisError(null); setStore(current => ({ ...current, analysisModel: event.target.value as ViralCaseAnalysisModelId })); }}>{VIRAL_CASE_ANALYSIS_MODELS.map(model => <option key={model.id} value={model.id}>{model.label} · {model.provider}</option>)}</select><small>服务端会按所选模型调用对应 Key；失败不会自动切换模型。</small></label>
-          <button type="button" className="primary" onClick={requestAnalysis} disabled={analysisState === 'running' || !selectedVideo.sourceUrl}>{analysisState === 'running' ? '分析中…' : notes.analysis ? '重新分析' : '请求自动分析'}</button>
+          <label><span>分析模型</span><select aria-label="自动分析模型" value={store.analysisModel} onChange={event => { setAnalysisError(null); setStore(current => ({ ...current, analysisModel: event.target.value as ViralCaseAnalysisModelId })); }}>{VIRAL_CASE_ANALYSIS_MODELS.map(model => <option key={model.id} value={model.id}>{model.label} · {model.provider}</option>)}</select><small>服务端按所选模型调用对应 Key；失败不会自动切换或重试。</small></label>
+          <div className="viral-case-analysis-action">
+            <button type="button" className="primary" onClick={requestAnalysis} disabled={analysisState === 'running' || !selectedVideo.sourceUrl}>{analysisState === 'running' ? '分析中…' : notes.analysis ? '重新分析' : '请求自动分析'}</button>
+            {notes.analysis && analysisState !== 'running' && <small>上次结果已写入当前账号</small>}
+          </div>
         </div>
         {analysisError && <p className="viral-case-analysis-error" role="alert">分析失败：{analysisError}</p>}
       </section>
