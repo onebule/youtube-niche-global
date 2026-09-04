@@ -713,8 +713,12 @@ type StructuredDiagnosticUiState =
   | { state: 'FAIL'; message: string };
 
 function ProductionMaterializationPanel({ record, locale, diagnostic, onDiagnostic }: { record: ProductionMaterialization | null; locale: UiLocale; diagnostic: StructuredDiagnosticUiState; onDiagnostic: () => void }) {
-  if (!record) return null;
   const zh = locale === 'zh';
+  if (!record) return <section className="longform-production-materialization longform-structured-diagnostic-only" id="production-materialization" aria-label={zh ? '长视频文本模型诊断' : 'Long-form text model diagnostic'}>
+    <div className="longform-production-materialization-head"><div><span className="longform-kicker">STRUCTURED OUTPUT · SAFE CHECK</span><b>{zh ? '先验证文本模型契约' : 'Verify the text-model contract first'}</b><small>{zh ? '当前还没有制作方案记录；诊断只发送 1 次最小 JSON 文本请求，不创建草案，也不生成图片或视频。' : 'No production plan is saved yet; this check sends one minimal JSON text request only. It creates no draft, image or video.'}</small></div><strong>{diagnostic.state === 'PASS' ? (zh ? '已通过' : 'Passed') : diagnostic.state === 'RUNNING' ? (zh ? '验证中' : 'Checking') : (zh ? '未验证' : 'Not checked')}</strong></div>
+    <div className="longform-structured-diagnostic"><div className="longform-structured-diagnostic-copy"><strong>{zh ? '结构化输出诊断' : 'Structured output diagnostic'}</strong><span>{zh ? '验证 JSON Schema / 解析 / 截断安全边界，结果不会自动继续到 CreativeBrief。' : 'Checks JSON Schema, parsing and truncation safety; it never continues to CreativeBrief automatically.'}</span></div><button type="button" onClick={onDiagnostic} disabled={diagnostic.state === 'RUNNING' || diagnostic.state === 'PASS'}>{diagnostic.state === 'RUNNING' ? (zh ? '验证中…' : 'Checking…') : diagnostic.state === 'PASS' ? (zh ? '已验证' : 'Verified') : (zh ? '验证结构化输出' : 'Verify structured output')}</button>{diagnostic.state === 'FAIL' ? <small className="longform-structured-diagnostic-error">{diagnostic.message}</small> : null}</div>
+    {diagnostic.state === 'PASS' ? <p className="longform-structured-diagnostic-pass">{zh ? `最小结构化诊断已通过（${diagnostic.realCallsUsed || 1} 次文本请求，${diagnostic.mode || 'json_schema'}）。如需继续，再手动点击“创建制作方案”。` : `Minimal structured diagnostic passed (${diagnostic.realCallsUsed || 1} text request, ${diagnostic.mode || 'json_schema'}). Manually click “Create production plan” if you want to continue.`}</p> : null}
+  </section>;
   const labels: Array<[string, string]> = [
     [zh ? '创作简报' : 'Creative Brief', record.stages.creativeBrief.state],
     [zh ? '脚本草稿' : 'Script Draft', record.stages.script.state],
