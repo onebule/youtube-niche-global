@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { sanitizeHfError } from './normalizer.ts';
 
 export type HfBridgeCheck = {
@@ -30,7 +29,9 @@ export type HfZeroGpuBridge = {
   smoke: (input: { space: string; token: string; invocation: unknown; maxWaitSeconds: number }) => Promise<HfBridgeSmoke>;
 };
 
-const bridgePath = fileURLToPath(new URL('../../../../services/hf-zerogpu/gradio_bridge.py', import.meta.url));
+// Keep the path explicit so Next/Turbopack does not trace the whole workspace.
+// Production workers may override it with an absolute server-side path.
+const bridgePath = process.env.HF_ZEROGPU_BRIDGE_PATH?.trim() || 'services/hf-zerogpu/gradio_bridge.py';
 const command = process.env.PYTHON || (process.platform === 'win32' ? 'py' : 'python3');
 const argsFor = (action: string) => process.platform === 'win32' && !process.env.PYTHON ? ['-3', bridgePath, '--action', action] : [bridgePath, '--action', action];
 
