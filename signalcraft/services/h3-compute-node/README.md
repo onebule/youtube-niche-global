@@ -21,3 +21,14 @@ node server.mjs
 ```
 
 `H3HardwareProfile`、DRAFT/FINAL presets 和成本阈值都在主站的 compute-broker 配置中集中管理，并带有 `CALIBRATION_REQUIRED` 标记。
+
+## Phase 1.5 · Modal 生产边界
+
+真实 H3 运行时被隔离在 `modal/`：
+
+- `modal_app.py::prepare_model` 只在 CPU 函数中用官方 Diffusers `ModularPipeline` 准备 `t2va` 组件，并写入持久 Volume；不加载 `transformer_ref`。
+- `modal_app.py::smoke` 是唯一的 A100 GPU 入口，固定单次 T2VA、5 秒、24 fps、原生音频，且必须通过免费额度/费用/真实 GPU 闸门。
+- `scripts/h3-check.mjs` 只读检查 Modal/HF/ffprobe/节点状态；`scripts/h3-prepare.mjs` 与 `scripts/h3-smoke.mjs` 默认不执行远程操作。
+- 生成后的 MP4 必须经过 `scripts/validate-h3-output.mjs` 的 ffprobe 检查，失败状态为 `FAILED_OUTPUT_VALIDATION`。
+
+当前没有在本机执行准备或生成：没有 Modal 认证、Hugging Face 认证、CUDA/Diffusers 运行时或 ffprobe 时，状态必须保持阻塞，不能将环境变量手工改成 ready。

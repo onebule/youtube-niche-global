@@ -12,6 +12,15 @@ const inferenceReady = inferenceReadySignal && (!modelCacheDir || modelCacheRead
 const modelCacheState = inferenceReady ? 'MODEL_READY' : modelCacheLoading ? 'MODEL_LOADING' : 'MODEL_MISSING';
 const jobs = new Map();
 const supportedWorkflows = ['T2V', 'I2V'];
+const hardwareProfile = String(process.env.H3_MODAL_PROFILE || 'H3_MODAL_RELIABLE').trim() || 'H3_MODAL_RELIABLE';
+const precision = String(process.env.H3_PRECISION || 'BF16').trim() || 'BF16';
+const resolution = String(process.env.H3_SMOKE_RESOLUTION || '768x1344').trim() || '768x1344';
+const durationSeconds = Number(process.env.H3_SMOKE_DURATION_SECONDS || 5);
+const cudaReady = String(process.env.H3_CUDA_READY || 'false').toLowerCase() === 'true';
+const runtimeReady = String(process.env.H3_RUNTIME_READY || 'false').toLowerCase() === 'true';
+const serializationReady = String(process.env.H3_SERIALIZATION_READY || 'false').toLowerCase() === 'true';
+const outputValidationReady = String(process.env.H3_OUTPUT_VALIDATION_READY || 'false').toLowerCase() === 'true';
+const executionReady = inferenceReady && cudaReady && runtimeReady && serializationReady && outputValidationReady;
 
 const json = (response, status, payload) => {
   const body = JSON.stringify(payload);
@@ -31,7 +40,20 @@ function capabilities() {
     service: 'h3-compute-node',
     model: 'MiniMax-H3',
     implementationState: 'INTEGRATION_READY',
+    serviceState: 'SERVICE_READY',
+    runtimeState: runtimeReady ? 'RUNTIME_READY' : 'RUNTIME_UNVERIFIED',
+    cudaState: cudaReady ? 'CUDA_READY' : 'CUDA_UNVERIFIED',
     inferenceState: modelCacheState,
+    gpuState: cudaReady ? 'GPU_READY' : 'GPU_UNVERIFIED',
+    executionState: executionReady ? 'READY_FOR_MANUAL_SMOKE_TEST' : 'BLOCKED_BY_CALIBRATION',
+    hardwareProfile,
+    precision,
+    quantization: 'NONE',
+    supportedResolution: resolution,
+    supportedDurationSeconds: { min: 5, max: 15, smoke: Number.isFinite(durationSeconds) ? durationSeconds : 5 },
+    audio: { enabled: true, mode: 'JOINT_DENOISE_NATIVE_AUDIO', postHocMixing: false },
+    serializationState: serializationReady ? 'SERIALIZATION_VERIFIED' : 'SERIALIZATION_UNVERIFIED',
+    outputValidationState: outputValidationReady ? 'FFPROBE_VERIFIED' : 'FFPROBE_UNVERIFIED',
     modelCache: {
       modelId: 'MiniMax-H3',
       version: modelVersion,

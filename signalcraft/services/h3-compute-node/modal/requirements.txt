@@ -1,0 +1,11 @@
+# Pinned deployment dependencies for the isolated H3 Modal app.
+# This file is not imported by the Next.js app and is not installed locally
+# during normal checks. GPU/runtime verification remains a separate gate.
+modal==1.1.2
+diffusers==0.40.0
+torch==2.8.0
+transformers==4.57.1
+accelerate==1.10.1
+torchao==0.13.0
+safetensors==0.6.2
+av==15.1.0
