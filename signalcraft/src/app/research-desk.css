@@ -64,6 +64,16 @@ button,input,select{font-family:inherit}.site-header{height:74px;background:rgba
 @media(max-width:640px){.site-header{height:auto;gap:8px;padding:10px 16px}.brand{font-size:20px}.head-actions{margin-left:auto}.head-actions .ghost{display:none}.site-nav{order:3;flex:0 0 100%;width:100%;display:flex;gap:0;padding-top:7px;border-top:1px solid var(--desk-line);overflow:visible}.site-nav button{flex:1;padding:7px 0;font-size:12px}.site-nav button:nth-child(n+4){display:none}.page{padding-top:29px}.page-intro h1{font-size:37px}.filters{border-radius:0}.result-toolbar .primary{width:100%}.mini-grid{grid-template-columns:1fr}.evidence-strip b{width:100%;margin-left:0}.card-actions{grid-template-columns:1fr}.card-actions button:last-child:nth-child(3){grid-column:auto}.radar-tabs{overflow-x:auto}.radar-tabs button{white-space:nowrap}.cluster{padding:15px}.cluster-head{align-items:flex-start;flex-direction:column}.hero{background:#fffdf9}.studio-nav{top:auto}}
 @media(prefers-reduced-motion:reduce){.video-card,.primary{transition:none}.video-card:hover,.primary:hover{transform:none}}
 
+/* Keep saved-video media inside its frame on Studio research pages. The
+   intrinsic 480×270 image dimensions must never push into the card body or
+   let the loading placeholder cover only part of the thumbnail. */
+.video-card .thumb{position:relative;overflow:hidden;isolation:isolate}
+.video-card .thumb>img.video-card-image{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;object-fit:cover}
+.video-card .thumb>img.video-card-image.is-hidden{display:none}
+.video-card .thumb.thumb-portrait>img.video-card-image{object-fit:contain;background:#f3ece4}
+.video-card .thumb-fallback{z-index:0;transition:opacity .16s ease,visibility .16s ease}
+.video-card .thumb-fallback.is-hidden{visibility:hidden;opacity:0;pointer-events:none}
+
 /* Radar refinement: a scanning record, not another dashboard. */
 .page:has(.radar-tabs){max-width:1360px;position:relative;padding-top:51px}
 .page:has(.radar-tabs) .page-intro{display:grid;grid-template-columns:minmax(0,1.28fr) minmax(270px,.72fr);column-gap:56px;align-items:end;max-width:none;padding:0 0 30px;border-bottom:1px solid #cfc8bf}
