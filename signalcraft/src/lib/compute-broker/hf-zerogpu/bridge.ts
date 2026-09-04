@@ -4,7 +4,7 @@ import { sanitizeHfError } from './normalizer.ts';
 
 export type HfBridgeCheck = {
   ok: boolean;
-  auth: 'AUTH_VERIFIED' | 'AUTH_REQUIRED' | 'AUTH_INVALID' | 'UNKNOWN';
+  auth: 'AUTH_VERIFIED' | 'AUTH_REQUIRED' | 'AUTH_INVALID' | 'AUTH_UNVERIFIED' | 'UNKNOWN';
   reachability: 'REACHABLE' | 'UNREACHABLE' | 'SLEEPING' | 'BUILDING' | 'ERROR' | 'UNKNOWN';
   runtime: string | null;
   hardware: string | null;

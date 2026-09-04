@@ -66,6 +66,23 @@ def space_metadata(space: str, token: str) -> dict[str, Any]:
         return {"metadataError": classify(str(error)), "metadataMessage": clean(str(error))}
 
 
+def verify_token(token: str) -> tuple[bool, str | None]:
+    """Verify the read token itself before treating a public Space as ready."""
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request("https://huggingface.co/api/whoami-v2", headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            if response.status == 200:
+                return True, None
+            return False, "HF_AUTH_INVALID"
+    except urllib.error.HTTPError as error:
+        return False, "HF_AUTH_INVALID" if error.code in (401, 403) else "HF_AUTH_UNVERIFIED"
+    except Exception:
+        return False, "HF_AUTH_UNVERIFIED"
+
+
 def client_for(space: str, token: str):
     try:
         from gradio_client import Client
@@ -89,6 +106,9 @@ def check(payload: dict[str, Any]) -> dict[str, Any]:
     if not token:
         return {"ok": False, "auth": "AUTH_REQUIRED", "reachability": "UNKNOWN", "runtime": None, "hardware": None, "quota": "UNKNOWN", "apiInfo": None, "code": "HF_AUTH_REQUIRED"}
     try:
+        verified, auth_code = verify_token(token)
+        if not verified:
+            return {"ok": False, "auth": "AUTH_INVALID" if auth_code == "HF_AUTH_INVALID" else "UNKNOWN", "reachability": "UNKNOWN", "runtime": None, "hardware": None, "quota": "UNKNOWN", "apiInfo": None, "code": auth_code or "HF_AUTH_UNVERIFIED", "message": "HF Token 仍未完成只读身份验证。"}
         metadata = space_metadata(space, token)
         client = client_for(space, token)
         api_info = clean(view_api(client))
