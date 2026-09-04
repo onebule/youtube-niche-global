@@ -1,0 +1,8 @@
+{
+  "name": "signalcraft-h3-compute-node",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
