@@ -52,6 +52,15 @@ export type ComputeBrokerConfig = {
   modal: { endpoint: string | null; token: string | null; model: string; costPerSecondUsd: number | null; hardware: keyof typeof H3_HARDWARE_PROFILES };
   cheapGpu: { endpoint: string | null; apiKey: string | null; model: string; costPerSecondUsd: number | null; hardware: keyof typeof H3_HARDWARE_PROFILES };
   h3Api: { endpoint: string; token: string | null; model: string; costPerSecondUsd: number | null };
+  hfZeroGpu: {
+    enabled: boolean;
+    smokeOnly: boolean;
+    allowRealGeneration: boolean;
+    space: string;
+    maxWaitSeconds: number | null;
+    expectedDailyQuotaMinutes: number | null;
+    token: string | null;
+  };
 };
 
 /**
@@ -89,7 +98,16 @@ export function readComputeBrokerConfig(env: NodeJS.ProcessEnv = process.env): C
       model: env.H3_API_MODEL?.trim() || 'minimax-h3',
       costPerSecondUsd: numberEnv(env.H3_API_COST_PER_SECOND_USD, null),
     },
+    hfZeroGpu: {
+      enabled: boolEnv(env.HF_ZEROGPU_H3_ENABLED, false),
+      smokeOnly: boolEnv(env.HF_ZEROGPU_H3_SMOKE_ONLY, true),
+      allowRealGeneration: boolEnv(env.ALLOW_HF_ZEROGPU_REAL_GENERATION, false),
+      space: env.HF_ZEROGPU_H3_SPACE?.trim() || 'MiniMaxAI/MiniMax-H3-Turbo-Lora',
+      maxWaitSeconds: numberEnv(env.HF_ZEROGPU_MAX_WAIT_SECONDS, null),
+      expectedDailyQuotaMinutes: numberEnv(env.HF_ZEROGPU_EXPECTED_DAILY_QUOTA_MINUTES, 5),
+      token: optionalEnv(env.HF_TOKEN || env.HUGGINGFACE_HUB_TOKEN),
+    },
   };
 }
 
-export const providerPriority: ProviderType[] = ['MODAL_GPU', 'CHEAP_GPU', 'API'];
+export const providerPriority: ProviderType[] = ['FREE_GPU', 'MODAL_GPU', 'CHEAP_GPU', 'API'];

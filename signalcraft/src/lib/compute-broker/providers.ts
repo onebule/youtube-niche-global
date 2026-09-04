@@ -12,6 +12,7 @@ import {
   type VideoGenerationRequest,
   type Workflow,
 } from './types.ts';
+import { HFZeroGpuH3Provider } from './hf-zerogpu/provider.ts';
 
 const nowIso = () => new Date().toISOString();
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -238,5 +239,5 @@ export class H3ApiProvider extends HttpH3Provider {
 }
 
 export function createDefaultProviders(config = readComputeBrokerConfig()): VideoComputeProvider[] {
-  return [new ModalH3Provider(config.modal), new SpotGpuProvider(config.cheapGpu), new H3ApiProvider(config.h3Api)];
+  return [new HFZeroGpuH3Provider(config.hfZeroGpu), new ModalH3Provider(config.modal), new SpotGpuProvider(config.cheapGpu), new H3ApiProvider(config.h3Api)];
 }

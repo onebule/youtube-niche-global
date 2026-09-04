@@ -9,3 +9,4 @@ export * from './broker.ts';
 export * from './model-cache.ts';
 export * from './mock.ts';
 export * from './conditioning-cache.ts';
+export * from './hf-zerogpu/index.ts';

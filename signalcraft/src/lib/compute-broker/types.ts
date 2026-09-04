@@ -7,13 +7,13 @@
 export const COMPUTE_BROKER_SCHEMA_VERSION = 'compute-broker.v1';
 
 export type ProviderType = 'LOCAL_GPU' | 'FREE_GPU' | 'SPOT_GPU' | 'API' | 'MODAL_GPU' | 'CHEAP_GPU';
-export type ProviderCostClass = 'FREE_CREDIT' | 'CHEAP_GPU' | 'API';
+export type ProviderCostClass = 'FREE_CREDIT' | 'FREE_QUOTA' | 'CHEAP_GPU' | 'API';
 export type Workflow = 'T2V' | 'I2V' | 'FL2V' | 'REF2V';
 export type QualityPreset = 'DRAFT' | 'FINAL';
 export type GenerationMode = 'AUTO' | 'FREE_FIRST' | 'LOWEST_COST' | 'FASTEST' | 'BEST_QUALITY' | 'CUSTOM';
 export type HardwareProfileId = 'H3_ULTRA' | 'H3_HIGH' | 'H3_ECO' | 'H3_SURVIVAL';
 export type ProviderHealthState = 'AVAILABLE' | 'DEGRADED' | 'OFFLINE' | 'NOT_CONFIGURED' | 'UNKNOWN';
-export type ProviderJobState = 'QUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'UNKNOWN';
+export type ProviderJobState = 'QUEUED' | 'REMOTE_QUEUE' | 'PROCESSING' | 'RUNNING' | 'DOWNLOADING' | 'VALIDATING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'UNKNOWN';
 export type JobStatus = 'QUEUED' | 'ROUTING' | 'STARTING_PROVIDER' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'RETRYING' | 'FALLBACK';
 
 export type FailureReason =
@@ -31,6 +31,18 @@ export type FailureReason =
   | 'USER_CANCELLED'
   | 'BUDGET_EXCEEDED'
   | 'PROVIDER_NOT_CONFIGURED'
+  | 'HF_AUTH_REQUIRED'
+  | 'HF_AUTH_INVALID'
+  | 'HF_SPACE_UNREACHABLE'
+  | 'HF_SPACE_SLEEPING'
+  | 'HF_SPACE_BUILDING'
+  | 'HF_SPACE_ERROR'
+  | 'HF_ZERO_GPU_QUOTA_EXHAUSTED'
+  | 'HF_ZERO_GPU_QUEUE_BUSY'
+  | 'HF_API_CHANGED'
+  | 'HF_API_INCOMPATIBLE'
+  | 'DOWNLOAD_TIMEOUT'
+  | 'OUTPUT_VALIDATION_FAILED'
   | 'UNKNOWN_PROVIDER_ERROR';
 
 export type AssetInputs = {
@@ -77,6 +89,7 @@ export type ProviderHealth = {
   latencyMs: number | null;
   modelState: 'MODEL_READY' | 'MODEL_LOADING' | 'MODEL_MISSING' | 'UNKNOWN';
   reason: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 export type CostEstimate = {
@@ -84,7 +97,7 @@ export type CostEstimate = {
   effectiveCostUsd: number | null;
   successRate: number | null;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-  source: 'ENVIRONMENT' | 'BENCHMARK' | 'TELEMETRY' | 'UNKNOWN';
+  source: 'ENVIRONMENT' | 'BENCHMARK' | 'TELEMETRY' | 'INCLUDED_QUOTA' | 'UNKNOWN';
   notes: string[];
 };
 

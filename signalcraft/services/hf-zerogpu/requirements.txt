@@ -1,0 +1,2 @@
+# Python 3.10+; pinned so Client.view_api/submit behavior is reproducible.
+gradio_client==1.13.3
