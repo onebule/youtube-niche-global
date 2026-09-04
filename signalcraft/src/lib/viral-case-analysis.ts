@@ -11,6 +11,8 @@ import {
 export type ViralCaseAnalysisResponse = {
   analysis: ViralCaseAnalysis;
   source: 'configured-provider';
+  requestId?: string;
+  diagnostics?: { errorType?: string; provider?: string; protocol?: string; responseShape?: string };
 };
 
 /**
@@ -30,9 +32,15 @@ export async function requestViralCaseAnalysis(video: Video, model: ViralCaseAna
       model,
     }),
   });
-  const payload = await response.json().catch(() => null) as { analysis?: unknown; source?: unknown; error?: unknown } | null;
-  if (!response.ok) throw new Error(clientErrorMessage(payload?.error, '视频自动分析暂不可用。'));
+  const payload = await response.json().catch(() => null) as { analysis?: unknown; source?: unknown; error?: unknown; errorType?: unknown; requestId?: unknown; diagnostics?: ViralCaseAnalysisResponse['diagnostics'] } | null;
+  if (!response.ok) {
+    const message = clientErrorMessage(payload?.error, '视频自动分析暂不可用。');
+    const errorType = typeof payload?.errorType === 'string' ? payload.errorType : '';
+    const requestId = typeof payload?.requestId === 'string' ? payload.requestId : '';
+    const trace = [errorType && `错误类型：${errorType}`, requestId && `请求 ID：${requestId}`].filter(Boolean).join(' · ');
+    throw new Error(trace ? `${message}（${trace}）` : message);
+  }
   const analysis = normalizeViralCaseAnalysis(payload?.analysis);
   if (!analysis) throw new Error('分析服务返回的数据不完整，未写入拆解报告。');
-  return { analysis, source: 'configured-provider' };
+  return { analysis, source: 'configured-provider', requestId: typeof payload?.requestId === 'string' ? payload.requestId : undefined, diagnostics: payload?.diagnostics };
 }
