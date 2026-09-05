@@ -3,6 +3,12 @@ import { clientErrorMessage } from './client-error.ts';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 import type { ConfidenceLevel } from './entry-decision.ts';
 
+// Keep the Shorts radar on the same verified API origin as the long-form
+// radar. This prevents a broken frontend proxy from looking like an empty
+// opportunity set while preserving the signed-in Authorization header.
+const SHORTFORM_OPPORTUNITY_RADAR_ENDPOINT = process.env.NEXT_PUBLIC_SHORTFORM_OPPORTUNITY_RADAR_URL
+  || 'https://youtube-niche-global-api.vercel.app/api/shortform-opportunity-radar';
+
 export type ShortformRadarEvent = {
   id: string;
   eventType: 'SHORTS_BREAKOUT' | 'SHORTS_EMERGING' | 'SHORTS_CROWDED';
@@ -104,12 +110,21 @@ export function normalizeShortformRadarResponse(payload: unknown): ShortformRada
 export async function fetchShortformOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
-  const response = await fetch(`/api/shortform-opportunity-radar?${params.toString()}`, {
+  const response = await fetch(`${SHORTFORM_OPPORTUNITY_RADAR_ENDPOINT}?${params.toString()}`, {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
     signal: options.signal,
   });
-  const payload = await response.json().catch(() => ({})) as ShortformRadarResponse & { error?: unknown };
+  const body = await response.text();
+  let payload = {} as ShortformRadarResponse & { error?: unknown; code?: string };
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as ShortformRadarResponse & { error?: unknown; code?: string };
+  } catch {
+    throw new Error(response.status >= 500
+      ? 'Shorts 趋势雷达服务暂时不可用，请稍后重试。'
+      : 'Shorts 趋势雷达返回了无法识别的响应。');
+  }
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, 'Shorts 趋势雷达数据暂时不可用。'));
   return normalizeShortformRadarResponse(payload);
 }

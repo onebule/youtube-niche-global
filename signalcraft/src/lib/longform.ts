@@ -20,6 +20,14 @@ import type { VisualAssetIntelligenceReport } from './visual-asset-intelligence.
 import type { VisualGenerationSpecificationReport } from './visual-generation-specification.ts';
 import type { ProviderRoutingReport } from './provider-routing.ts';
 
+// The production frontend is served from niqivo.top while the verified data
+// gateway lives on the API deployment. Calling it directly avoids the stale
+// same-origin Next proxy returning a Vercel HTML error page. The backend CORS
+// boundary allows the browser Authorization header and keeps credentials
+// server-side.
+const LONGFORM_OPPORTUNITIES_ENDPOINT = process.env.NEXT_PUBLIC_LONGFORM_OPPORTUNITIES_URL
+  || 'https://youtube-niche-global-api.vercel.app/api/longform-opportunities';
+
 export type LongformOpportunity = {
   key: string;
   topic: string;
@@ -107,8 +115,17 @@ export async function fetchLongformOpportunities(input: { market: string; window
   if (input.locale) params.set('locale', input.locale);
   if (input.category && input.category !== 'all') params.set('category', input.category);
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
-  const response = await fetch(`/api/longform-opportunities?${params.toString()}`, { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store', signal: options.signal });
-  const payload = await response.json().catch(() => ({})) as LongformResponse & { error?: unknown };
+  const response = await fetch(`${LONGFORM_OPPORTUNITIES_ENDPOINT}?${params.toString()}`, { headers: { accept: 'application/json', ...authHeaders() }, cache: 'no-store', signal: options.signal });
+  const body = await response.text();
+  let payload = {} as LongformResponse & { error?: unknown; code?: string };
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as LongformResponse & { error?: unknown; code?: string };
+  } catch {
+    throw new Error(response.status >= 500
+      ? '长视频机会数据服务暂时不可用，请稍后重试。'
+      : '长视频机会数据返回了无法识别的响应。');
+  }
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, '长视频机会数据暂时不可用。'));
   return normalizeLongformResponse(payload);
 }
