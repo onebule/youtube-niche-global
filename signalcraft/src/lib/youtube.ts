@@ -62,13 +62,11 @@ const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','�
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
 const displayRegion:Record<string,string>={all:'全部国家',US:'美国',GB:'英国',JP:'日本',BR:'巴西',MX:'墨西哥',IN:'印度',ID:'印度尼西亚'};
 // Use the project alias rather than an immutable Vercel deployment URL. The
-// alias survives redeployments and is the only backend origin the frontend
-// should depend on in production.
+// backend explicitly allows authenticated browser requests (Authorization is
+// forwarded by its CORS boundary), so the data surface is not blocked when a
+// stale frontend deployment has a broken same-origin function runtime.
 const productionEndpoint=process.env.NEXT_PUBLIC_YOUTUBE_SIGNALS_URL||'https://youtube-niche-global-api.vercel.app/api/youtube-signals';
-// Route browser requests through our own deployment. This removes browser CORS
-// from the equation and returns useful upstream errors instead of TypeError:
-// Failed to fetch.
-const endpoint='/api/youtube-signals';
+const endpoint=productionEndpoint;
 const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/api/thumbnail');
 
 /** Public YouTube data only. A single fetch is deliberately kept as one snapshot,

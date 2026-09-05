@@ -410,6 +410,12 @@ export type VideoGenerationPlan = {
 
 type ApiErrorPayload = { error?: unknown; code?: string; retryable?: boolean; failureStage?: string | null };
 
+// The backend's CORS boundary explicitly permits the browser session's
+// Authorization header. Calling the verified backend origin directly keeps
+// read-only capability discovery and the single manual generation submit
+// usable even when the frontend's legacy same-origin proxy is unavailable.
+const VIDEO_GATEWAY_ENDPOINT = process.env.NEXT_PUBLIC_VIDEO_GATEWAY_URL || 'https://youtube-niche-global-api.vercel.app/api/video';
+
 export type ScriptOcrResult = {
   text: string;
   provider: string | null;
@@ -425,7 +431,7 @@ export class VideoGenerationClientError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/video/${path}`, {
+  const response = await fetch(`${VIDEO_GATEWAY_ENDPOINT}/${path}`, {
     ...init,
     headers: {
       accept: 'application/json',
