@@ -134,10 +134,9 @@ function Empty({title,body,action}:{title:string;body:string;action?:React.React
 
 function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange,isOwner}:{path:string;onTheme:()=>void;account:AccountSession|null;onSignIn:()=>void;onSignOut:()=>void;locale:UiLocale;onLocaleChange:(locale:UiLocale)=>void;isOwner:boolean}){
   const isApp=path.startsWith('/app');
-  // Keep the route discoverable for signed-in users even if the lightweight
-  // owner probe is temporarily unavailable. The owner console performs the
-  // authoritative server-side check and shows an access-denied state.
-  const showOwnerEntry = Boolean(account) || isOwner;
+  // The management control belongs to the management surface only. The
+  // console still performs the authoritative server-side owner check.
+  const showOwnerEntry = path === '/owner' && (Boolean(account) || isOwner);
   const copy=languageCopy[locale];
   // The audited product surfaces are explicit here. Legacy routes remain
   // reachable (for example /discover and /longform) but are no longer mixed
