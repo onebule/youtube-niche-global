@@ -13,6 +13,7 @@ import { DiscoveryProfileProvider } from './discovery-workbench';
 import type { ProductionHandoff } from '@/src/lib/product-convergence';
 import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
+import { hasOwnerAccess } from '@/src/lib/owner-admin';
 import { getRecordedGrowth } from '@/src/lib/growth';
 import { createMonitorRule, loadMonitorRules, updateMonitorRule } from '@/src/lib/monitoring';
 import type { OpportunityRadarEvent } from '@/src/lib/opportunity-radar';
@@ -131,7 +132,7 @@ function Sparkline({video}:{video:Video}){const data=video.snapshots.map(s=>s.vi
 function ScorePill({value}:{value:number}){return <span className={cn('score',value>=80?'excellent':value>=65?'good':'watch')}>{value}<small>/100</small></span>}
 function Empty({title,body,action}:{title:string;body:string;action?:React.ReactNode}){return <div className="empty"><div className="empty-icon">◇</div><b>{title}</b><p>{body}</p>{action}</div>}
 
-function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange}:{path:string;onTheme:()=>void;account:AccountSession|null;onSignIn:()=>void;onSignOut:()=>void;locale:UiLocale;onLocaleChange:(locale:UiLocale)=>void}){
+function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange,isOwner}:{path:string;onTheme:()=>void;account:AccountSession|null;onSignIn:()=>void;onSignOut:()=>void;locale:UiLocale;onLocaleChange:(locale:UiLocale)=>void;isOwner:boolean}){
   const isApp=path.startsWith('/app');
   const copy=languageCopy[locale];
   // The audited product surfaces are explicit here. Legacy routes remain
@@ -141,7 +142,7 @@ function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange}:
   const publicItems=[[ '/', primary.home ],['/rankings',primary.rankings],['/radar',primary.radar],['/longform',primary.research],['/doctor',primary.doctor],['/app/watchlists',primary.monitor],['/app',primary.studio]];
   const appItems=[['/app',copy.studioNav[0]],['/app/research',copy.studioNav[1]],['/app/ideas',copy.studioNav[2]]];
   const items=isApp?appItems:publicItems;
-  return <><header className="site-header"><Link className="brand" href="/" onClick={event=>handleInternalNavigation(event,'/')} aria-label={copy.backHome}><span className="brand-glyph">SC</span><span>{BRAND}<small>CONTENT INTELLIGENCE</small></span></Link><nav className="site-nav" aria-label={locale==='zh'?'主导航':'Main navigation'}>{items.map(([href,label])=><a href={href} key={href} className={path===href?'active':''} aria-current={path===href?'page':undefined} onClick={event=>handleInternalNavigation(event,href)}>{label}</a>)}</nav><div className="head-actions"><div className="locale-toggle" role="group" aria-label={copy.interfaceLanguage}><button type="button" className={locale==='zh'?'active':''} aria-pressed={locale==='zh'} onClick={()=>onLocaleChange('zh')}>中文</button><button type="button" className={locale==='en'?'active':''} aria-pressed={locale==='en'} onClick={()=>onLocaleChange('en')}>EN</button></div><button className="icon-btn" onClick={onTheme} aria-label={copy.theme}>◐</button><button className="ghost" onClick={()=>navigate(isApp?'/discover':'/app')}>{isApp?copy.publicDiscovery:copy.enterStudio}</button><button className="ghost header-pricing" onClick={()=>navigate('/pricing')}>{primary.pricing}</button>{path==='/owner'&&<span className="owner-link owner-link-current" aria-current="page">{locale==='zh'?'站点管理':'Site admin'}</span>}{account?<button className="account-chip" onClick={onSignOut} title={copy.signOut}><span>●</span>{account.email}</button>:<button className="google-login" onClick={onSignIn} title={copy.signInTitle}><span>G</span>{copy.signIn}</button>}</div></header>{isApp&&<StudioNav path={path} locale={locale}/>}</>
+  return <><header className="site-header"><Link className="brand" href="/" onClick={event=>handleInternalNavigation(event,'/')} aria-label={copy.backHome}><span className="brand-glyph">SC</span><span>{BRAND}<small>CONTENT INTELLIGENCE</small></span></Link><nav className="site-nav" aria-label={locale==='zh'?'主导航':'Main navigation'}>{items.map(([href,label])=><a href={href} key={href} className={path===href?'active':''} aria-current={path===href?'page':undefined} onClick={event=>handleInternalNavigation(event,href)}>{label}</a>)}</nav><div className="head-actions"><div className="locale-toggle" role="group" aria-label={copy.interfaceLanguage}><button type="button" className={locale==='zh'?'active':''} aria-pressed={locale==='zh'} onClick={()=>onLocaleChange('zh')}>中文</button><button type="button" className={locale==='en'?'active':''} aria-pressed={locale==='en'} onClick={()=>onLocaleChange('en')}>EN</button></div><button className="icon-btn" onClick={onTheme} aria-label={copy.theme}>◐</button><button className="ghost" onClick={()=>navigate(isApp?'/discover':'/app')}>{isApp?copy.publicDiscovery:copy.enterStudio}</button><button className="ghost header-pricing" onClick={()=>navigate('/pricing')}>{primary.pricing}</button>{isOwner&&<button className="owner-link" onClick={()=>navigate('/owner')}>{locale==='zh'?'站点管理':'Site admin'}</button>}{account?<button className="account-chip" onClick={onSignOut} title={copy.signOut}><span>●</span>{account.email}</button>:<button className="google-login" onClick={onSignIn} title={copy.signInTitle}><span>G</span>{copy.signIn}</button>}</div></header>{isApp&&<StudioNav path={path} locale={locale}/>}</>
 }
 function StudioNav({path,locale}:{path:string;locale:UiLocale}){const copy=languageCopy[locale];const primary=copy.primaryNav;const groups=[
   {label:locale==='zh'?'研究':'RESEARCH',items:[['/app',locale==='zh'?'概览':'Overview'],['/app/research',copy.studioNav[1]],['/app/library/channels',locale==='zh'?'竞品频道':'Competitor channels'],['/app/library/videos',locale==='zh'?'研究资料':'Research library'],['/app/thumbnails',locale==='zh'?'缩略图研究':'Thumbnail research'],['/app/benchmarks',locale==='zh'?'竞品对标':'Benchmarking']]},
@@ -429,7 +430,20 @@ export default function SignalCraftApp() {
   const [state, setState] = usePersisted(account);
   const [drawer, setDrawer] = useState<Video | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const accessToken = account?.accessToken;
   const accountScope = accountStorageScope(account);
+
+  useEffect(() => {
+    let active = true;
+    if (!accessToken) return () => { active = false; };
+    void hasOwnerAccess().then(value => {
+      if (active) setIsOwner(value);
+    }).catch(() => {
+      if (active) setIsOwner(false);
+    });
+    return () => { active = false; };
+  }, [accessToken]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -657,6 +671,7 @@ export default function SignalCraftApp() {
       onSignOut={endSession}
       locale={locale}
       onLocaleChange={setLocale}
+      isOwner={isOwner}
     />
     {['/radar', '/radar/all', '/short-radar', '/longform', '/shortform-evaluation'].includes(path)
       ? <DiscoveryProfileProvider key={accountScope} scope={accountScope}>{content}</DiscoveryProfileProvider>
