@@ -490,6 +490,7 @@ export default function VideoCanvasStudio({
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [models, setModels] = useState<VideoModel[]>([]);
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
+  const [capabilitiesRetry, setCapabilitiesRetry] = useState(0);
   const [error, setError] = useState('');
   const [prompt, setPrompt] = useState('');
   const [h3Brief, setH3Brief] = useState('');
@@ -1354,7 +1355,7 @@ export default function VideoCanvasStudio({
       setError(clientMessage(cause));
     });
     return () => { cancelled = true; };
-  }, [account?.accessToken, hasAccount]);
+  }, [account?.accessToken, capabilitiesRetry, hasAccount]);
 
   useEffect(() => {
     if (effectiveAccess !== 'ready') return;
@@ -2899,6 +2900,7 @@ export default function VideoCanvasStudio({
 
   if (effectiveAccess === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
   if (effectiveAccess === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
+  if (effectiveAccess === 'error') return <main className="app-page video-canvas-access denied"><span>AI CANVAS</span><h1>{zh ? '暂时无法读取视频服务状态。' : 'Video service status is unavailable.'}</h1><p>{error || (zh ? '请检查网络或部署状态后重试。' : 'Check the network or deployment status, then try again.')}</p><button type="button" className="primary" onClick={() => { setError(''); setCapabilitiesRetry(value => value + 1); }}>{zh ? '重新读取服务状态' : 'Retry service status'}</button></main>;
 
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
@@ -2908,7 +2910,7 @@ export default function VideoCanvasStudio({
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
       <span className="video-canvas-model-mark" aria-hidden="true">✦</span>
-      <span className="video-canvas-model-copy"><b>{modelName(model)}</b><small>{selectedModel?.enabled ? (zh ? '已就绪 · Team 可用' : 'Ready · Team access') : (zh ? '待配置服务端模型' : 'Provider configuration required')}</small></span>
+      <span className="video-canvas-model-copy"><b>{modelName(model)}</b><small>{selectedModel?.enabled ? (zh ? '已就绪 · Team 可用' : 'Ready · Team access') : selectedModel?.reason || (zh ? '服务端未返回模型状态' : 'Model status unavailable')}</small></span>
       <span className={'video-canvas-model-state ' + (selectedModel?.enabled ? 'ready' : 'pending')}><i />{selectedModel?.enabled ? (zh ? '已上线' : 'Online') : (zh ? '待配置' : 'Pending')}</span>
       <span className="video-canvas-model-spec">{duration} · {resolution}</span>
     </div>

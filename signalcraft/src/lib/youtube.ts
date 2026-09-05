@@ -43,8 +43,20 @@ type ApiResponse = {
   nextPageToken?:string|null;
   dataScope?:PublicRankingScope;
   error?:unknown;
+  code?:string;
   quota?:{allowed:boolean;remaining?:number|null;used?:number;daily_limit?:number|null;configured?:boolean;owner?:boolean;authenticated?:boolean;access_tier?:'guest'|'signed-in'|'opened'|'owner';ranking_limit?:number|null;ranking_unlimited?:boolean;account?:{email?:string}|null};
 };
+
+export class YouTubeSignalsClientError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'YouTubeSignalsClientError';
+    this.status = status;
+    this.code = code;
+  }
+}
 
 const languageCode:Record<string,string>={ '英语':'en','西班牙语':'es','葡萄牙语':'pt','all':'en' };
 const displayLanguage=(code?:string)=>{const normalized=String(code||'').toLowerCase();if(normalized.startsWith('en'))return '英语';if(normalized.startsWith('es'))return '西班牙语';if(normalized.startsWith('pt'))return '葡萄牙语';if(normalized.startsWith('zh'))return '中文';if(normalized.startsWith('ja'))return '日语';if(normalized.startsWith('ko'))return '韩语';if(normalized.startsWith('hi'))return '印地语';if(normalized.startsWith('ar'))return '阿拉伯语';return '未标注'};
@@ -79,8 +91,21 @@ export async function searchYouTubeSignals(input:{query:string;language:string;l
   if(input.limit) params.set('limit',String(Math.min(Math.max(Math.round(input.limit),1),100)));
   if(input.pageToken) params.set('pageToken',input.pageToken);
   const response=await fetch(`${endpoint}?${params}`,{headers:{accept:'application/json',...authHeaders()}});
-  const payload=await response.json() as ApiResponse;
-  if(!response.ok) throw new Error(clientErrorMessage(payload.error,'YouTube 公开数据请求失败。'));
+  const body=await response.text();
+  let payload: ApiResponse = {};
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload=parsed as ApiResponse;
+  } catch {
+    throw new YouTubeSignalsClientError(
+      response.status >= 500
+        ? '排行榜数据服务暂时不可用，请稍后点击“更新排行榜”重试。'
+        : 'YouTube 公开数据返回了无法识别的响应。',
+      response.status,
+      'UPSTREAM_NON_JSON',
+    );
+  }
+  if(!response.ok) throw new YouTubeSignalsClientError(clientErrorMessage(payload.error,'YouTube 公开数据请求失败。'),response.status,payload.code);
   const candidates=[...(payload.longOpportunities||[]),...(payload.shortOpportunities||[])];
   // Identity is the only hard requirement here. Channel enrichment (channel
   // id/title/url/subscriber count) is optional public metadata and must not

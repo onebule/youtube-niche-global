@@ -70,6 +70,24 @@ test('YouTube normalizer retains valid incomplete rows and never creates a singl
   }
 });
 
+test('YouTube client turns an upstream HTML error into an actionable typed error', async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<!DOCTYPE html><title>500</title>', {
+    status: 500,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+  try {
+    await assert.rejects(
+      () => searchYouTubeSignals({ query: '', language: '英语', format: 'short', locale: 'zh', region: 'US', window: '28d', ranking: true }),
+      error => error?.name === 'YouTubeSignalsClientError'
+        && error.code === 'UPSTREAM_NON_JSON'
+        && !String(error.message).includes('<!DOCTYPE'),
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test('Shorts scoring path remains the legacy calculation when shared types gain metadata', () => {
   const video = {
     id: 'short-1', channelId: 'short-channel', title: 'Short', topic: '人物生活', language: '英语', region: 'US', format: 'short', publishedAt: '2026-08-30T00:00:00.000Z', durationSeconds: 20, thumbnail: '', risk: 'low', tags: [],

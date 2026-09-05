@@ -435,7 +435,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
     cache: 'no-store',
   });
-  const payload = await response.json().catch(() => ({})) as T & ApiErrorPayload;
+  const body = await response.text();
+  let payload = {} as T & ApiErrorPayload;
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as T & ApiErrorPayload;
+  } catch {
+    throw new VideoGenerationClientError(
+      response.status >= 500
+        ? '视频服务代理暂时不可用，请刷新页面后重试。'
+        : '视频服务返回了无法识别的响应。',
+      response.status,
+      'UPSTREAM_NON_JSON',
+    );
+  }
   if (!response.ok) throw new VideoGenerationClientError(clientErrorMessage(payload.error, '视频生成服务暂时不可用。'), response.status, payload.code);
   return payload;
 }

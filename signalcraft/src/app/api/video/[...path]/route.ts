@@ -5,6 +5,17 @@ export const runtime = 'nodejs';
 
 const upstream = 'https://youtube-niche-global-api.vercel.app/api/video';
 
+function jsonObject(body: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
@@ -28,10 +39,25 @@ async function proxy(request: NextRequest, context: RouteContext) {
       body,
       cache: 'no-store',
     });
-    return new Response(await response.text(), {
+    const responseBody = await response.text();
+    const upstreamContentType = response.headers.get('content-type') || '';
+    const payload = jsonObject(responseBody);
+    if (!payload || !/application\/json/i.test(upstreamContentType)) {
+      return Response.json(
+        {
+          error: response.ok
+            ? '视频服务返回了无法识别的响应，请稍后重试。'
+            : `视频服务暂时不可用（HTTP ${response.status}）。`,
+          code: response.ok ? 'UPSTREAM_NON_JSON' : 'UPSTREAM_NON_JSON_ERROR',
+          upstreamStatus: response.status,
+        },
+        { status: response.ok ? 502 : (response.status >= 500 ? 502 : response.status), headers: { 'cache-control': 'no-store' } },
+      );
+    }
+    return new Response(responseBody, {
       status: response.status,
       headers: {
-        'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8',
+        'content-type': upstreamContentType || 'application/json; charset=utf-8',
         'cache-control': 'no-store',
       },
     });
