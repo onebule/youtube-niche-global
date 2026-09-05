@@ -3,6 +3,13 @@ import { clientErrorMessage } from './client-error.ts';
 import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 import type { ConfidenceLevel } from './entry-decision.ts';
 
+// Trend Radar uses the long-form opportunity engine through the backend's
+// compatibility route. Keep this browser request on the verified API origin
+// so a broken same-origin proxy cannot turn a real quota response into an
+// empty radar.
+const OPPORTUNITY_RADAR_ENDPOINT = process.env.NEXT_PUBLIC_OPPORTUNITY_RADAR_URL
+  || 'https://youtube-niche-global-api.vercel.app/api/opportunity-radar';
+
 export type RadarEventType = 'EMERGING_TOPIC' | 'SMALL_CREATOR_BREAKOUT' | 'FORMAT_MIGRATION' | 'SUPPLY_GAP' | 'SATURATION_WARNING';
 export type RadarLifecycle = 'WATCH' | 'EMERGING' | 'CONFIRMED' | 'CROWDED' | 'SATURATING' | 'DECLINING';
 /** Shared confidence vocabulary; Radar payloads still omit INSUFFICIENT for compatibility. */
@@ -105,12 +112,21 @@ export function normalizeOpportunityRadarResponse(payload: unknown): Opportunity
 export async function fetchOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
-  const response = await fetch(`/api/opportunity-radar?${params.toString()}`, {
+  const response = await fetch(`${OPPORTUNITY_RADAR_ENDPOINT}?${params.toString()}`, {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
     signal: options.signal,
   });
-  const payload = await response.json().catch(() => ({})) as OpportunityRadarResponse & { error?: unknown };
+  const body = await response.text();
+  let payload = {} as OpportunityRadarResponse & { error?: unknown; code?: string };
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as OpportunityRadarResponse & { error?: unknown; code?: string };
+  } catch {
+    throw new Error(response.status >= 500
+      ? '长视频趋势雷达服务暂时不可用，请稍后重试。'
+      : '长视频趋势雷达返回了无法识别的响应。');
+  }
   if (!response.ok) throw new Error(clientErrorMessage(payload.error, '长视频趋势雷达数据暂时不可用。'));
   return normalizeOpportunityRadarResponse(payload);
 }
