@@ -8759,6 +8759,12 @@
 .image-generation-panel-head h2 { margin: 0; font: 760 24px/1.1 var(--canvas-font-serif, Georgia, serif); }
 .image-generation-panel-head small { color: #6e7775; font-size: 12px; }
 .image-generation-close { width: 34px; height: 34px; border: 1px solid #d3dbd8; border-radius: 50%; background: #f3f5f2; color: #172127; font-size: 22px; cursor: pointer; }
+.image-generation-readiness { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: 16px 24px 0; padding: 10px 12px; border: 1px solid #c9ddd5; border-radius: 10px; background: #eff8f4; color: #24675d; }
+.image-generation-readiness > span { display: grid; width: 22px; height: 22px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.image-generation-readiness p { margin: 0; font-size: 12px; line-height: 1.45; }
+.image-generation-readiness button { padding: 5px 8px; border: 1px solid currentColor; border-radius: 7px; background: transparent; color: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.image-generation-readiness.is-checking { border-color: #d6d8c8; background: #faf8ef; color: #8b6a24; }
+.image-generation-readiness.is-blocked { border-color: #edc8c2; background: #fff5f1; color: #ae3c32; }
 .image-generation-field { display: grid; gap: 8px; }
 .image-generation-field > span { color: #52615e; font: 760 12px/1.2 var(--canvas-font-sans, Arial, sans-serif); }
 .image-generation-panel > .image-generation-field { padding: 20px 24px 0; }
@@ -8830,7 +8836,7 @@
   .image-generation-panel { max-height: calc(100vh - 24px); border-radius: 16px; }
   .image-generation-options { grid-template-columns: 1fr; }
   .image-generation-panel-head, .image-generation-panel-foot { padding: 16px 18px; }
-  .image-generation-panel > .image-generation-field, .image-generation-options, .image-generation-note, .image-generation-history, .image-generation-result { margin-left: 18px; margin-right: 18px; }
+  .image-generation-panel > .image-generation-field, .image-generation-options, .image-generation-note, .image-generation-history, .image-generation-result, .image-generation-readiness { margin-left: 18px; margin-right: 18px; }
   .image-generation-panel > .image-generation-field { padding-left: 0; padding-right: 0; }
 }
 

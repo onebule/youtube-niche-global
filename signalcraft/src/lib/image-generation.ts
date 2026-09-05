@@ -108,8 +108,13 @@ export function upsertImageGenerationHistory(items: ImageGeneration[], task: Ima
 
 type ApiErrorPayload = { error?: unknown; code?: string };
 
+// Keep image generation on the same verified backend origin as video
+// generation. The legacy same-origin Next proxy can return an HTML 500 page
+// in production, which hides the real auth/model error from the panel.
+const IMAGE_GATEWAY_ENDPOINT = (process.env.NEXT_PUBLIC_VIDEO_GATEWAY_URL || 'https://youtube-niche-global-api.vercel.app/api/video').replace(/\/$/, '');
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/video/${path}`, {
+  const response = await fetch(`${IMAGE_GATEWAY_ENDPOINT}/${path}`, {
     ...init,
     headers: {
       accept: 'application/json',
@@ -119,7 +124,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
     cache: 'no-store',
   });
-  const payload = await response.json().catch(() => ({})) as T & ApiErrorPayload;
+  const body = await response.text();
+  let payload = {} as T & ApiErrorPayload;
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as T & ApiErrorPayload;
+  } catch {
+    throw new VideoGenerationClientError(
+      response.status >= 500
+        ? '图片服务代理暂时不可用，请刷新页面后重试。'
+        : '图片服务返回了无法识别的响应。',
+      response.status,
+      'UPSTREAM_NON_JSON',
+    );
+  }
   if (!response.ok) throw new VideoGenerationClientError(clientErrorMessage(payload.error, '图片生成服务暂时不可用。'), response.status, payload.code);
   return payload;
 }

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   createImageGeneration,
+  loadImageModels,
   readImageGenerationHistory,
   refreshImageGeneration,
   type ImageGeneration,
@@ -69,8 +70,35 @@ export default function ImageGenerationPanel({
   const [history, setHistory] = useState<ImageGeneration[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [modelState, setModelState] = useState<'checking' | 'ready' | 'blocked'>('checking');
+  const [modelReason, setModelReason] = useState('');
+  const [modelCheckVersion, setModelCheckVersion] = useState(0);
   const completionNotified = useRef<string | null>(null);
   const pollingHandle = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setModelState('checking');
+      setModelReason('');
+      void loadImageModels().then(models => {
+        if (cancelled) return;
+        const model = models.find(item => item.id === 'gpt-image-2');
+        if (!model?.enabled) {
+          setModelState('blocked');
+          setModelReason(model?.reason || (zh ? 'GPT-Image-2 尚未配置完成。' : 'GPT-Image-2 is not configured yet.'));
+          return;
+        }
+        setModelState('ready');
+      }).catch(cause => {
+        if (cancelled) return;
+        setModelState('blocked');
+        setModelReason(clientMessage(cause, zh));
+      });
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [modelCheckVersion, open, zh]);
 
   useEffect(() => {
     if (!open || task) return;
@@ -195,6 +223,11 @@ export default function ImageGenerationPanel({
         <div><span>{zh ? 'AI 创作工具' : 'AI CREATION TOOL'}</span><h2 id="image-generation-title">{zh ? 'AI 生图' : 'AI image generation'}</h2><small>GPT-Image-2 · {zh ? '异步生成' : 'Async generation'}</small></div>
         <button type="button" className="image-generation-close" onClick={onClose} aria-label={zh ? '关闭 AI 生图' : 'Close AI image generation'}>×</button>
       </header>
+      <div className={'image-generation-readiness is-' + modelState} role={modelState === 'blocked' ? 'status' : undefined}>
+        <span aria-hidden="true">{modelState === 'ready' ? '✓' : modelState === 'checking' ? '…' : '!'}</span>
+        <p>{modelState === 'ready' ? (zh ? 'GPT-Image-2 已就绪，可以生成并自动保存到当前账号。' : 'GPT-Image-2 is ready. Results will be saved to the current account.') : modelState === 'checking' ? (zh ? '正在检查图片模型与账号权限…' : 'Checking image model and account access…') : modelReason}</p>
+        {modelState === 'blocked' && <button type="button" onClick={() => setModelCheckVersion(value => value + 1)}>{zh ? '重新检查' : 'Check again'}</button>}
+      </div>
       <label className="image-generation-field"><span>{zh ? '描述你要生成的画面' : 'Describe the image'}</span><textarea value={prompt} maxLength={2000} rows={5} onChange={event => setPrompt(event.target.value)} placeholder={zh ? '例如：暖色胶片质感的东京街角，雨后反光，人物站在霓虹灯下…' : 'For example: a warm filmic Tokyo street after rain, a person under neon lights…'} /></label>
       <div className="image-generation-options">
         <label className="image-generation-field"><span>{zh ? '画面比例' : 'Aspect ratio'}</span><select value={size} onChange={event => setSize(event.target.value as ImageGenerationSize)}>{SIZE_OPTIONS.map(option => <option value={option.value} key={option.value}>{zh ? option.label : option.value}</option>)}</select></label>
@@ -219,7 +252,7 @@ export default function ImageGenerationPanel({
         {task.status === 'failed' && <p>{task.errorMessage || (zh ? '图片生成失败，请调整描述后重试。' : 'Generation failed. Adjust the prompt and try again.')}</p>}
         {task.status === 'completed' && task.imageAssetId && task.imageUrl && <div className="image-generation-result-actions"><button type="button" className="is-primary" onClick={() => onUseAsReference(task.imageAssetId!, task.imageUrl!)}>{zh ? '加入当前画布参考' : 'Use in current canvas'}</button><a href={task.imageUrl} target="_blank" rel="noreferrer">{zh ? '打开高清图' : 'Open full image'}</a></div>}
       </section>}
-      <footer className="image-generation-panel-foot"><button type="button" className="image-generation-cancel" onClick={onClose}>{zh ? '稍后再做' : 'Do later'}</button><button type="button" className="image-generation-submit" onClick={() => void generate()} disabled={busy || !prompt.trim()}>{busy ? (zh ? '生成中…' : 'Generating…') : (zh ? '生成图片' : 'Generate image')}<span aria-hidden="true">→</span></button></footer>
+      <footer className="image-generation-panel-foot"><button type="button" className="image-generation-cancel" onClick={onClose}>{zh ? '稍后再做' : 'Do later'}</button><button type="button" className="image-generation-submit" onClick={() => void generate()} disabled={busy || modelState !== 'ready' || !prompt.trim()}>{busy ? (zh ? '生成中…' : 'Generating…') : modelState === 'checking' ? (zh ? '检查模型…' : 'Checking model…') : (zh ? '生成图片' : 'Generate image')}<span aria-hidden="true">→</span></button></footer>
     </aside>
   </div>;
 }
