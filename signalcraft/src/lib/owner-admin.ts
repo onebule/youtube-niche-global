@@ -1,5 +1,8 @@
 import { authHeaders } from './auth';
 
+const OWNER_STATUS_ENDPOINT = (process.env.NEXT_PUBLIC_OWNER_STATUS_URL || 'https://youtube-niche-global-api.vercel.app/api/owner-status').replace(/\/$/, '');
+const OWNER_ACCESS_ENDPOINT = (process.env.NEXT_PUBLIC_OWNER_ACCESS_URL || OWNER_STATUS_ENDPOINT).replace(/\/$/, '');
+
 export type OwnerOverview = {
   owner: { email: string; ownerCount: number };
   users: {
@@ -64,7 +67,7 @@ async function readJson<T extends { error?: string }>(response: Response): Promi
 }
 
 export async function loadOwnerOverview(): Promise<OwnerOverview> {
-  const response = await fetch('/api/owner-status', {
+  const response = await fetch(OWNER_STATUS_ENDPOINT, {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
   });
@@ -80,7 +83,7 @@ export async function loadOwnerOverview(): Promise<OwnerOverview> {
 }
 
 export async function hasOwnerAccess(): Promise<boolean> {
-  const response = await fetch('/api/owner-status?view=access', {
+  const response = await fetch(`${OWNER_STATUS_ENDPOINT}?view=access`, {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
   });
@@ -98,7 +101,7 @@ export async function updateVideoTeamAccess({
   plan?: AccountPlan;
   duration?: TeamAccessDuration;
 }): Promise<void> {
-  const response = await fetch('/api/owner-access', {
+  const response = await fetch(`${OWNER_ACCESS_ENDPOINT}?view=team-access`, {
     method: action === 'grant' ? 'POST' : 'DELETE',
     headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ email, ...(action === 'grant' ? { plan: plan || 'team', duration } : {}) }),
