@@ -18,12 +18,17 @@ async function forward(request: NextRequest) {
       body: await request.text(),
       cache: 'no-store',
     });
-    return new Response(await response.text(), {
+    const body = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('json')) {
+      return Response.json(
+        { error: '账号授权服务返回了无法识别的响应，请检查后端管理接口部署状态。' },
+        { status: response.ok ? 502 : response.status, headers: { 'cache-control': 'no-store' } },
+      );
+    }
+    return new Response(body, {
       status: response.status,
-      headers: {
-        'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8',
-        'cache-control': 'no-store',
-      },
+      headers: { 'content-type': contentType || 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     });
   } catch {
     return Response.json(

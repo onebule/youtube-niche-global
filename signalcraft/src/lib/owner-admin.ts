@@ -53,13 +53,29 @@ export class OwnerOverviewError extends Error {
   }
 }
 
+async function readJson<T extends { error?: string }>(response: Response): Promise<T | null> {
+  const text = await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadOwnerOverview(): Promise<OwnerOverview> {
   const response = await fetch('/api/owner-status', {
     headers: { accept: 'application/json', ...authHeaders() },
     cache: 'no-store',
   });
-  const payload = await response.json() as OwnerOverview & { error?: string };
-  if (!response.ok) throw new OwnerOverviewError(payload.error || '无法读取站点管理概览。', response.status);
+  const payload = await readJson<OwnerOverview & { error?: string }>(response);
+  if (!response.ok) {
+    throw new OwnerOverviewError(
+      payload?.error || '管理服务返回了无法识别的响应，请检查后端管理接口部署状态。',
+      response.status || 502,
+    );
+  }
+  if (!payload) throw new OwnerOverviewError('管理服务返回了无法识别的响应，请稍后重试。', 502);
   return payload;
 }
 
@@ -88,6 +104,6 @@ export async function updateVideoTeamAccess({
     body: JSON.stringify({ email, ...(action === 'grant' ? { plan: plan || 'team', duration } : {}) }),
     cache: 'no-store',
   });
-  const payload = await response.json() as { error?: string };
-  if (!response.ok) throw new OwnerOverviewError(payload.error || '无法更新 Team 权限。', response.status);
+  const payload = await readJson<{ error?: string }>(response);
+  if (!response.ok) throw new OwnerOverviewError(payload?.error || '账号授权服务返回了无法识别的响应，请稍后重试。', response.status || 502);
 }
