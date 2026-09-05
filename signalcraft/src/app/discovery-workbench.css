@@ -22,3 +22,7 @@
 .discovery-profile-fields input{font:inherit;padding:10px;border:1px solid #ded7cc;border-radius:6px;min-width:0;width:100%;box-sizing:border-box;background:#fffdfa;color:#252420}
 .convergence-longform .longform-research-navigation{display:none}.convergence-longform .longform-opportunity{padding:0;border:0;background:transparent}.convergence-longform .longform-direction-index h3{font-size:17px}.convergence-longform .longform-state .decision-workbench{text-align:left;margin-bottom:20px}
 @media(prefers-color-scheme:dark){[data-theme=dark] .discovery-workbench,[data-theme=dark] .decision-workbench{--dw-surface:#242521;--dw-ink:#f4f0e8;--dw-line:#4e5048;--dw-teal:#87b5a7}}
+.discovery-video-evidence { border-block: 1px solid #ded8cf; padding: 14px 0; margin: 14px 0; }
+.discovery-video-evidence ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 12px; }
+.discovery-video-evidence a { color: #236759; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }
+.discovery-video-evidence small { display: block; margin-top: 4px; }

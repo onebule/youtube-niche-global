@@ -46,6 +46,9 @@ export type TestDirection = {
 };
 export type OpportunityUnit = {
   id: string; format: ContentFormat; niche: string; subNiche: string | null;
+  sourceTitle?: string;
+  durationBucket?: string;
+  representativeVideos?: Array<{ videoId: string; title: string; channelTitle: string | null; views: number | null }>;
   pattern: { id: string; label: string; trend: PatternTrendState; provenance: string } | null;
   market: { videos: number; creators: number; previousVideos: number; windowDays: number | null;
     growth: number | null; concentration: number | null; lifecycle: string; confidence: string;
@@ -56,12 +59,15 @@ export type OpportunityUnit = {
 };
 const specific = (value: string | undefined | null) => Boolean(value?.trim() && !/^(unknown|unidentified|short_form|long_form|uncertain)$/i.test(value.trim()) && !/未知|未识别|待识别/.test(value));
 export function fromRadar(event: OpportunityRadarEvent | ShortformRadarEvent, format: ContentFormat): OpportunityUnit {
-  const mechanism = 'mechanism' in event ? event.mechanism : event.format;
-  const pattern = specific(mechanism) ? { id: `${format}:${mechanism}`, label: mechanism, trend: 'INSUFFICIENT' as const, provenance: 'RADAR_CLASSIFICATION_NOT_TEMPORAL_PATTERN_EVIDENCE' } : null;
+  // Long-form format is a duration bucket, not a content mechanism.
+  const mechanism = 'mechanism' in event ? event.mechanism : null;
+  const pattern = mechanism && specific(mechanism) ? { id: `${format}:${mechanism}`, label: mechanism, trend: 'INSUFFICIENT' as const, provenance: 'RADAR_CLASSIFICATION_NOT_TEMPORAL_PATTERN_EVIDENCE' } : null;
   // The source does not expose a verified sub-niche taxonomy. Do not invent one
   // from a broad category or pretend that a generated event label is a sub-niche.
   return {
     id: event.id, format, niche: event.topic, subNiche: null, pattern,
+    sourceTitle: event.title, durationBucket: format === 'LONG_FORM' ? event.format : undefined,
+    representativeVideos: (event.representativeVideos || []).filter(video => /^[A-Za-z0-9_-]{11}$/.test(video.videoId)).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     market: { videos: event.sampleVideoCount, creators: event.independentChannelCount, previousVideos: event.baseline.previousSampleCount,
       windowDays: event.baseline.windowDays, growth: event.metrics.demandProxyGrowth ?? null,
       concentration: event.creatorConcentrationTop3 ?? null, lifecycle: event.lifecycle, confidence: event.confidence,
@@ -92,6 +98,7 @@ export function fromLongform(opportunity: LongformOpportunity): OpportunityUnit 
   }));
   return {
     id: opportunity.key, format: 'LONG_FORM', niche: opportunity.topic, subNiche: specific(candidate?.concept.subject) && candidate?.concept.subject !== opportunity.topic ? candidate!.concept.subject : null,
+    representativeVideos: opportunity.representativeVideos.filter(video => /^[A-Za-z0-9_-]{11}$/.test(video.videoId)).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     pattern: pattern ? { id: pattern.patternId, label: pattern.label, trend: trend?.state || 'INSUFFICIENT', provenance: aggregation!.provenance.algorithmVersion } : null,
     market: { videos: opportunity.sampleSize, creators: opportunity.channelCount,
       previousVideos: opportunity.contentPatternTrend?.previousReport?.input.longFormVideos || 0, windowDays: null,

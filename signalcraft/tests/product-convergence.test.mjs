@@ -116,6 +116,26 @@ test('radar does not invent sub-niches, patterns, originality, or tests', () => 
   const a = fromRadar(e, 'LONG_FORM');
   assert.equal(a.subNiche, null); assert.equal(a.pattern, null); assert.equal(a.originality.risk, 'UNKNOWN'); assert.deepEqual(a.tests, []);
 });
+
+test('profile mismatch hides personal priorities but preserves real market leads', () => {
+  const lead = unit('long', 'LONG_FORM');
+  const feed = recommend([lead], { format: 'SHORTS' }, 'LONG_FORM');
+  assert.equal(feed.top.length, 0);
+  assert.equal(feed.explore, null);
+  assert.equal(feed.market.length, 1);
+  assert.equal(feed.market[0].unit, lead);
+  assert.equal(feed.market[0].fit.whyNot[0].field, 'format');
+});
+
+test('duration buckets are not mechanisms and representative evidence survives radar mapping', () => {
+  const event = { id: 'e', title: 'Public trend', topic: 'Pets', format: '15_30M', lifecycle: 'CONFIRMED', sampleVideoCount: 8, independentChannelCount: 4, baseline: { previousSampleCount: 4, windowDays: 14 }, metrics: {}, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public' }, representativeVideos: [{ videoId: 'aaaaaaaaaaa', title: '', channelTitle: 'A', views: 123 }, { videoId: 'javascript:alert(1)', title: 'invalid', views: 0 }] };
+  const result = fromRadar(event, 'LONG_FORM');
+  assert.equal(result.pattern, null);
+  assert.equal(result.durationBucket, '15_30M');
+  assert.equal(result.sourceTitle, event.title);
+  assert.deepEqual(result.representativeVideos, [{ videoId: 'aaaaaaaaaaa', title: '', channelTitle: 'A', views: 123 }]);
+  assert.equal(event.representativeVideos.length, 2);
+});
 test('account-scoped handoff rejects another identity, same-title different format, or different event', () => {
   const oldWindow = globalThis.window, oldStorage = globalThis.localStorage;
   const local = new Map(), session = new Map();
