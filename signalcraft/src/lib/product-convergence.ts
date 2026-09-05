@@ -67,7 +67,7 @@ export function fromRadar(event: OpportunityRadarEvent | ShortformRadarEvent, fo
   return {
     id: event.id, format, niche: event.topic, subNiche: null, pattern,
     sourceTitle: event.title, durationBucket: format === 'LONG_FORM' ? event.format : undefined,
-    representativeVideos: (event.representativeVideos || []).filter(video => /^[A-Za-z0-9_-]{11}$/.test(video.videoId)).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
+    representativeVideos: (event.representativeVideos || []).filter((video, index, all) => /^[A-Za-z0-9_-]{11}$/.test(video.videoId) && all.findIndex(item => item.videoId === video.videoId) === index).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     market: { videos: event.sampleVideoCount, creators: event.independentChannelCount, previousVideos: event.baseline.previousSampleCount,
       windowDays: event.baseline.windowDays, growth: event.metrics.demandProxyGrowth ?? null,
       concentration: event.creatorConcentrationTop3 ?? null, lifecycle: event.lifecycle, confidence: event.confidence,
@@ -98,7 +98,7 @@ export function fromLongform(opportunity: LongformOpportunity): OpportunityUnit 
   }));
   return {
     id: opportunity.key, format: 'LONG_FORM', niche: opportunity.topic, subNiche: specific(candidate?.concept.subject) && candidate?.concept.subject !== opportunity.topic ? candidate!.concept.subject : null,
-    representativeVideos: opportunity.representativeVideos.filter(video => /^[A-Za-z0-9_-]{11}$/.test(video.videoId)).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
+    representativeVideos: opportunity.representativeVideos.filter((video, index, all) => /^[A-Za-z0-9_-]{11}$/.test(video.videoId) && all.findIndex(item => item.videoId === video.videoId) === index).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     pattern: pattern ? { id: pattern.patternId, label: pattern.label, trend: trend?.state || 'INSUFFICIENT', provenance: aggregation!.provenance.algorithmVersion } : null,
     market: { videos: opportunity.sampleSize, creators: opportunity.channelCount,
       previousVideos: opportunity.contentPatternTrend?.previousReport?.input.longFormVideos || 0, windowDays: null,

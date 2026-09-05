@@ -128,13 +128,13 @@ test('profile mismatch hides personal priorities but preserves real market leads
 });
 
 test('duration buckets are not mechanisms and representative evidence survives radar mapping', () => {
-  const event = { id: 'e', title: 'Public trend', topic: 'Pets', format: '15_30M', lifecycle: 'CONFIRMED', sampleVideoCount: 8, independentChannelCount: 4, baseline: { previousSampleCount: 4, windowDays: 14 }, metrics: {}, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public' }, representativeVideos: [{ videoId: 'aaaaaaaaaaa', title: '', channelTitle: 'A', views: 123 }, { videoId: 'javascript:alert(1)', title: 'invalid', views: 0 }] };
+  const event = { id: 'e', title: 'Public trend', topic: 'Pets', format: '15_30M', lifecycle: 'CONFIRMED', sampleVideoCount: 8, independentChannelCount: 4, baseline: { previousSampleCount: 4, windowDays: 14 }, metrics: {}, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public' }, representativeVideos: [{ videoId: 'aaaaaaaaaaa', title: '', channelTitle: 'A', views: 123 }, { videoId: 'aaaaaaaaaaa', title: 'repeated snapshot', channelTitle: 'A', views: 100 }, { videoId: 'javascript:alert(1)', title: 'invalid', views: 0 }] };
   const result = fromRadar(event, 'LONG_FORM');
   assert.equal(result.pattern, null);
   assert.equal(result.durationBucket, '15_30M');
   assert.equal(result.sourceTitle, event.title);
   assert.deepEqual(result.representativeVideos, [{ videoId: 'aaaaaaaaaaa', title: '', channelTitle: 'A', views: 123 }]);
-  assert.equal(event.representativeVideos.length, 2);
+  assert.equal(event.representativeVideos.length, 3);
 });
 test('account-scoped handoff rejects another identity, same-title different format, or different event', () => {
   const oldWindow = globalThis.window, oldStorage = globalThis.localStorage;
