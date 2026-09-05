@@ -11,7 +11,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!readComputeBrokerConfig().enabled) return Response.json({ code: 'COMPUTE_BROKER_DISABLED', error: 'Compute Broker 当前关闭。' }, { status: 404 });
   const { jobId } = await context.params;
   const job = await createComputeBroker().getJob(jobId);
-  return job ? Response.json({ job }, { headers: { 'cache-control': 'no-store' } }) : Response.json({ code: 'JOB_NOT_FOUND', error: '算力任务不存在。' }, { status: 404 });
+  return job ? Response.json({ job, ...(job.error?.details?.publicCode ? { code: job.error.details.publicCode } : {}) }, { headers: { 'cache-control': 'no-store' } }) : Response.json({ code: 'JOB_NOT_FOUND', error: '算力任务不存在。' }, { status: 404 });
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {

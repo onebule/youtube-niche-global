@@ -41,6 +41,49 @@ export const H3_PRESETS = Object.freeze({
   },
 });
 
+export type HfH3FreeSpaceKind = 'H3_ULTRA_FAST_ZERO' | 'H3_OFFICIAL_ZERO';
+export type HfH3FreeSpaceRole = 'PRIMARY' | 'SECONDARY';
+export type HfH3FreeSpaceCandidate = {
+  providerId: string;
+  space: string;
+  kind: HfH3FreeSpaceKind;
+  role: HfH3FreeSpaceRole;
+  enabled: boolean;
+};
+
+export const DEFAULT_HF_H3_FREE_SPACES: readonly HfH3FreeSpaceCandidate[] = Object.freeze([
+  { providerId: 'HF_H3_ULTRA_FAST_ZERO', space: 'mrfakename/minimax-h3-ultra-fast', kind: 'H3_ULTRA_FAST_ZERO', role: 'PRIMARY', enabled: true },
+  { providerId: 'HF_ZEROGPU_H3', space: 'MiniMaxAI/MiniMax-H3-Turbo-Lora', kind: 'H3_OFFICIAL_ZERO', role: 'SECONDARY', enabled: true },
+]);
+
+function parseHfH3FreeSpaces(env: NodeJS.ProcessEnv): HfH3FreeSpaceCandidate[] {
+  const configured = env.HF_H3_FREE_SPACES?.trim();
+  if (!configured) {
+    const legacySpace = env.HF_ZEROGPU_H3_SPACE?.trim();
+    return DEFAULT_HF_H3_FREE_SPACES.map(candidate => candidate.kind === 'H3_OFFICIAL_ZERO' && legacySpace ? { ...candidate, space: legacySpace } : { ...candidate });
+  }
+  try {
+    const parsed = JSON.parse(configured) as unknown;
+    if (!Array.isArray(parsed)) return DEFAULT_HF_H3_FREE_SPACES.map(candidate => ({ ...candidate }));
+    const candidates = parsed.map((item, index) => {
+      const value = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      const space = typeof value.space === 'string' ? value.space.trim() : '';
+      const kind = value.kind === 'H3_ULTRA_FAST_ZERO' ? value.kind : value.kind === 'H3_OFFICIAL_ZERO' ? value.kind : null;
+      if (!space || !kind) return null;
+      return {
+        providerId: typeof value.providerId === 'string' && value.providerId.trim() ? value.providerId.trim() : index === 0 ? 'HF_H3_ULTRA_FAST_ZERO' : `HF_ZEROGPU_H3_${index}`,
+        space,
+        kind,
+        role: value.role === 'PRIMARY' ? 'PRIMARY' : 'SECONDARY',
+        enabled: value.enabled !== false,
+      } satisfies HfH3FreeSpaceCandidate;
+    }).filter((candidate): candidate is HfH3FreeSpaceCandidate => Boolean(candidate));
+    return candidates.length ? candidates : DEFAULT_HF_H3_FREE_SPACES.map(candidate => ({ ...candidate }));
+  } catch {
+    return DEFAULT_HF_H3_FREE_SPACES.map(candidate => ({ ...candidate }));
+  }
+}
+
 export type ComputeBrokerConfig = {
   enabled: boolean;
   dryRun: boolean;
@@ -60,6 +103,7 @@ export type ComputeBrokerConfig = {
     maxWaitSeconds: number | null;
     expectedDailyQuotaMinutes: number | null;
     token: string | null;
+    spaces: HfH3FreeSpaceCandidate[];
   };
 };
 
@@ -106,6 +150,7 @@ export function readComputeBrokerConfig(env: NodeJS.ProcessEnv = process.env): C
       maxWaitSeconds: numberEnv(env.HF_ZEROGPU_MAX_WAIT_SECONDS, null),
       expectedDailyQuotaMinutes: numberEnv(env.HF_ZEROGPU_EXPECTED_DAILY_QUOTA_MINUTES, 5),
       token: optionalEnv(env.HF_TOKEN || env.HUGGINGFACE_HUB_TOKEN),
+      spaces: parseHfH3FreeSpaces(env),
     },
   };
 }

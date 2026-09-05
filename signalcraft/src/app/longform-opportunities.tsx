@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CreatorProfileFilters, DecisionWorkbench } from './discovery-workbench';
+import { fromLongform, type ProductionHandoff } from '@/src/lib/product-convergence';
 import { fetchLongformOpportunities, type LongformOpportunity, type LongformResponse } from '@/src/lib/longform';
 import { buildLongformEvidenceLayer, type LongformEvidenceSignal, type LongformRiskFlag } from '@/src/lib/longform-intelligence';
 import { calculateLongformIncomeScenario } from '@/src/lib/longform-planner';
@@ -728,7 +730,7 @@ function ProductionMaterializationPanel({ record, locale, diagnostic, onDiagnost
     [zh ? '生成单元' : 'Generation Unit', record.stages.generationUnit.state],
     [zh ? 'Provider 路由' : 'Provider route', record.stages.providerRouting.state],
   ];
-  const stateLabel = record.state === 'LLM_MATERIALIZER_UNAVAILABLE' ? (zh ? '创作物生成服务不可用' : 'LLM materializer unavailable') : record.state === 'INSUFFICIENT_UPSTREAM_DATA' ? (zh ? '上游数据不足' : 'Insufficient upstream data') : record.state === 'READY_FOR_MANUAL_SMOKE_TEST' ? (zh ? '可进行手动烟雾测试' : 'Ready for manual smoke test') : (zh ? '制作方案已阻塞' : 'Production plan blocked');
+  const stateLabel = record.selectedTest && record.state === 'RESEARCH_REQUIRED' ? (zh ? '测试方案已保存 · 等待创作开发' : 'Test plan saved · awaiting creative development') : record.state === 'LLM_MATERIALIZER_UNAVAILABLE' ? (zh ? '创作物生成服务不可用' : 'LLM materializer unavailable') : record.state === 'INSUFFICIENT_UPSTREAM_DATA' ? (zh ? '上游数据不足' : 'Insufficient upstream data') : record.state === 'READY_FOR_MANUAL_SMOKE_TEST' ? (zh ? '可进行手动烟雾测试' : 'Ready for manual smoke test') : (zh ? '制作方案已阻塞' : 'Production plan blocked');
   const canDiagnose = record.state === 'LLM_MATERIALIZER_UNAVAILABLE' && diagnostic.state !== 'PASS';
   return <section className={`longform-production-materialization ${record.state.toLowerCase().replaceAll('_', '-')}`} id="production-materialization" aria-label={zh ? '长视频制作方案' : 'Long-form production plan'}>
     <div className="longform-production-materialization-head"><div><span className="longform-kicker">PRODUCTION MATERIALIZATION · EXPLICIT ACTION</span><b>{zh ? '制作方案状态' : 'Production plan status'}</b><small>{zh ? '只保存当前选中方向；不会自动创建其他机会，也不会提交 Provider 任务。' : 'Only the selected direction is saved; no other opportunities are created and no provider task is submitted.'}</small></div><strong>{stateLabel}</strong></div>
@@ -740,8 +742,10 @@ function ProductionMaterializationPanel({ record, locale, diagnostic, onDiagnost
   </section>;
 }
 
-function OpportunityCard({ opportunity, locale, materialization, onCreateProduction, creating, diagnostic, onDiagnostic }: { opportunity: LongformOpportunity; locale: UiLocale; materialization: ProductionMaterialization | null; onCreateProduction: () => void; creating: boolean; diagnostic: StructuredDiagnosticUiState; onDiagnostic: () => void }) {
+function OpportunityCard({ opportunity, locale, materialization, onCreateProduction, creating, diagnostic, onDiagnostic }: { opportunity: LongformOpportunity; locale: UiLocale; materialization: ProductionMaterialization | null; onCreateProduction: (handoff?: ProductionHandoff) => void; creating: boolean; diagnostic: StructuredDiagnosticUiState; onDiagnostic: () => void }) {
   const zh = locale === 'zh';
+  const [advanced, setAdvanced] = useState(false);
+  const unit = useMemo(() => fromLongform(opportunity), [opportunity]);
   const representativeCount = opportunity.representativeVideos.length;
   const decision = recommendationFor(opportunity, locale);
   const canonicalConfidence = opportunity.confidenceLevel || opportunity.confidenceLabel;
@@ -759,9 +763,13 @@ function OpportunityCard({ opportunity, locale, materialization, onCreateProduct
   const lifecycleLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', EMERGING: zh ? '新兴' : 'Emerging', GROWING: zh ? '增长' : 'Growing', MATURE: zh ? '成熟' : 'Mature', SATURATED: zh ? '拥挤/饱和' : 'Saturated', DECLINING: zh ? '回落' : 'Declining' };
   const supplyDemandLabels: Record<string, string> = { INSUFFICIENT: zh ? '证据不足' : 'Insufficient', DEMAND_OUTPACING_SUPPLY: zh ? '需求表现快于供给' : 'Demand outpacing supply', BALANCED_GROWTH: zh ? '供需同步增长' : 'Balanced growth', SUPPLY_OUTPACING_DEMAND: zh ? '供给快于需求表现' : 'Supply outpacing demand', BOTH_DECLINING: zh ? '供需共同回落' : 'Both declining', MIXED: zh ? '混合信号' : 'Mixed' };
   return <article className={`longform-opportunity ${decision.key}`}>
+    <DecisionWorkbench key={opportunity.key} unit={unit} locale={locale} onCreate={onCreateProduction} creating={creating} bridgeNote={zh ? '将所选测试与差异化保存为制作方案；不会自动调用文本或视频模型。' : 'Save the selected test and differentiation as a production draft. No automatic text or video model call.'}/>
+    {materialization && <ProductionMaterializationPanel record={materialization} locale={locale} diagnostic={diagnostic} onDiagnostic={onDiagnostic}/>}
+    <details className="convergence-advanced" onToggle={event => setAdvanced(event.currentTarget.open)}><summary>{zh ? '高级证据与已有制作流程' : 'Advanced evidence and existing production workflow'}</summary>{advanced && <>
+    {!materialization && <ProductionMaterializationPanel record={null} locale={locale} diagnostic={diagnostic} onDiagnostic={onDiagnostic}/>}
     <div className="longform-opportunity-head"><div><span className="longform-kicker">{opportunity.topic}</span><h2>{opportunity.mechanism} · {opportunity.productionType}</h2></div><div className="longform-head-badges"><span className={`longform-decision ${decision.key}`}>{decision.label}</span><span className={`longform-confidence ${canonicalConfidence.toLowerCase()}`}>{zh ? `置信度 ${opportunity.confidence}` : `${opportunity.confidence} confidence`}</span></div></div>
     <OpportunityAssessmentPanel opportunity={opportunity} locale={locale}/><ContentPatternPanel opportunity={opportunity} locale={locale}/><PatternTrendPanel opportunity={opportunity} locale={locale}/><ContentStrategyPanel opportunity={opportunity} locale={locale}/><ExperimentValidationPanel opportunity={opportunity} locale={locale}/><IdeaIntelligencePanel opportunity={opportunity} locale={locale}/><div className="longform-stats"><span><b>{opportunity.sampleSize}</b>{zh ? '条视频' : ' videos'}</span><span><b>{opportunity.channelCount}</b>{zh ? '个频道' : ' channels'}</span><span><b>{formatNumber(opportunity.medianViews, locale)}</b>{zh ? '中位播放' : ' median views'}</span></div>
-    <DecisionFirstBrief opportunity={opportunity} locale={locale} onCreateProduction={onCreateProduction} creating={creating}/><ProductionMaterializationPanel record={materialization} locale={locale} diagnostic={diagnostic} onDiagnostic={onDiagnostic}/>
+    <DecisionFirstBrief opportunity={opportunity} locale={locale} onCreateProduction={onCreateProduction} creating={creating}/>
     <CreativeBriefPanel opportunity={opportunity} locale={locale}/><CreativeDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptDevelopmentPanel opportunity={opportunity} locale={locale}/><ScriptWritingPanel opportunity={opportunity} locale={locale}/><StoryboardPlanningPanel opportunity={opportunity} locale={locale}/><VisualAssetIntelligencePanel opportunity={opportunity} locale={locale}/><VisualGenerationSpecificationPanel opportunity={opportunity} locale={locale}/><ProviderRoutingPanel opportunity={opportunity} locale={locale}/>
     <div className="longform-score-grid" id="research-demand"><Score label={zh ? '市场机会（外部）' : 'Market (external)'} value={opportunity.marketOpportunity} tone="coral" hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '执行适配（外部）' : 'Execution (external)'} value={opportunity.executionFit} hint={zh ? '上游公开信号，公式不可审计' : 'Opaque upstream signal; formula is not locally auditable'}/><Score label={zh ? '表现' : 'Performance'} value={opportunity.performance?.score ?? null} tone="teal" hint={zh ? '基于可用公开表现指标，不回答是否进入' : 'Observed public performance; does not answer whether to enter'}/><Score label={zh ? '进入决策' : 'Entry decision'} value={null} tone="ink" displayValue={opportunity.opportunityAssessment?.decision.status || opportunity.entryDecision?.status || (zh ? '待判断' : 'Pending')} hint={zh ? '由证据与置信度门控，不是单一分数' : 'Gated by evidence and confidence, not a single score'}/></div>
     <LongformEvidenceLayer opportunity={opportunity} locale={locale}/>
@@ -772,6 +780,7 @@ function OpportunityCard({ opportunity, locale, materialization, onCreateProduct
     <div className="longform-lanes" id="research-pattern">{opportunity.lanes.map(lane => <span key={lane}>{laneLabels[lane]?.[zh ? 'zh' : 'en'] || lane.replace('_', ' ')}</span>)}</div>
     <div className="longform-evidence" id="research-competition"><div><b>{zh ? '可验证证据' : 'Evidence'}</b><small>{zh ? '基于 YouTube 公开元数据与采集快照' : 'YouTube public metadata and saved snapshots'}</small></div><span>{zh ? '样本' : 'Sample'} {opportunity.sampleSize} · {zh ? '频道' : 'Creators'} {opportunity.channelCount}</span></div>
     <details className="longform-representatives" id="research-evidence"><summary>{representativeCount ? (zh ? `查看 ${representativeCount} 条代表视频` : `View ${representativeCount} representative videos`) : (zh ? '暂无代表视频' : 'No representative videos yet')}</summary>{representativeCount ? opportunity.representativeVideos.map((video, index) => <RepresentativeVideoRow key={video.videoId} video={video} locale={locale} priority={index < 2}/>) : <p className="longform-representatives-empty">{zh ? '当前样本还没有可展开的公开视频。' : 'No public videos are available for this sample yet.'}</p>}</details>
+    </>}</details>
   </article>;
 }
 
@@ -844,27 +853,33 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
     if (!researchContext || !data) return null;
     const target = normalizedText(researchContext.nicheName || researchContext.topicName);
     if (!target) return null;
-    return data.opportunities.find(item => {
-      const values = [item.key, item.topic, item.mechanism, `${item.mechanism} · ${item.productionType}`].map(normalizedText);
-      return values.some(value => value === target || value.includes(target) || target.includes(value));
-    }) || null;
+    const direct = data.opportunities.find(item => item.key === researchContext.nicheId);
+    if (direct) return direct;
+    const sourceIds = researchContext.discovery?.unit.market.evidenceVideoIds || [];
+    const pattern = normalizedText(researchContext.discovery?.unit.pattern?.label || researchContext.format);
+    const candidates = data.opportunities.filter(item => normalizedText(item.topic) === target &&
+      (item.representativeVideos.some(video => sourceIds.includes(video.videoId)) ||
+        (pattern && [item.mechanism, item.productionType].some(value => normalizedText(value) === pattern))));
+    return candidates.length === 1 ? candidates[0] : null;
   }, [data, researchContext]);
-  const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || contextOpportunity || leadOpportunity;
+  // Never silently evaluate the first unrelated niche when a radar hand-off cannot be matched.
+  const selectedOpportunity = opportunities.find(item => item.key === selectedOpportunityKey) || contextOpportunity || (researchContext ? null : leadOpportunity);
   const selectedOpportunityId = selectedOpportunity?.key || null;
-  const persistedMaterialization = selectedOpportunityId ? loadProductionMaterializations(getSession()).find(item => item.opportunityId === selectedOpportunityId) || null : null;
-  const materialization = materializationOverride?.opportunityId === selectedOpportunityId ? materializationOverride : persistedMaterialization;
-  const createProductionPlan = async () => {
+  const persistedMaterialization = selectedOpportunityId ? loadProductionMaterializations(getSession()).find(item => item.opportunityId === selectedOpportunityId || item.sourceOpportunityId === selectedOpportunityId) || null : null;
+  const materialization = (materializationOverride?.opportunityId === selectedOpportunityId || materializationOverride?.sourceOpportunityId === selectedOpportunityId) ? materializationOverride : persistedMaterialization;
+  const createProductionPlan = async (handoff?: ProductionHandoff) => {
     if (!selectedOpportunity || materializing) return;
     setMaterializing(true);
     setMaterializationError(null);
     try {
       const response = await fetch('/api/longform-production', {
         method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ opportunity: selectedOpportunity, capturedAt: data?.evidence?.capturedAt || data?.dataScope.latestCapturedAt || null, snapshotId: data?.evidence?.snapshotId || null }), cache: 'no-store',
+        body: JSON.stringify({ ...(handoff ? { action: 'SAVE_TEST_PLAN', testSelection: handoff } : {}), opportunity: selectedOpportunity, capturedAt: data?.evidence?.capturedAt || data?.dataScope.latestCapturedAt || null, snapshotId: data?.evidence?.snapshotId || null }), cache: 'no-store',
       });
       const payload = await response.json().catch(() => ({}));
       const serverRecord = normalizeServerProductionMaterialization(payload?.productionMaterialization);
       if (!response.ok || !serverRecord) throw new Error(typeof payload?.error === 'string' ? payload.error : '制作方案服务暂时不可用，请稍后重试。');
+      if (handoff && payload.testSelection?.id !== handoff.test.id) throw new Error('后端未确认所选测试，未将结果标记为制作方案成功。请先部署配套接入。');
       saveProductionMaterialization(serverRecord, getSession());
       setMaterializationOverride(serverRecord);
       globalThis.setTimeout(() => document.getElementById('production-materialization')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
@@ -913,7 +928,9 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
     routeNavigate(buildTrendRadarHref({ ...context, source: 'NICHE_EVALUATION' }, false, lane));
   };
   const Container = embedded ? 'section' : 'main';
-  return <Container className="longform-page">
+  return <Container className="longform-page convergence-longform">
+    <CreatorProfileFilters locale={locale}/>
+    <details className="convergence-advanced"><summary>{zh ? '筛选、市场范围与趋势来源' : 'Filters, market scope, and trend source'}</summary>
     <section className="longform-hero"><div><span className="longform-kicker">LONG-FORM DISCOVERY ENGINE</span><h1>{zh ? '找到值得长期制作的长视频方向。' : 'Find long-form directions worth making.'}</h1><p>{zh ? '市场机会与执行适配分开计算。每个结论都回到公开样本、采集时间和置信度，不把不可见的 CTR、留存或收益伪装成事实。' : 'Market opportunity and execution fit stay separate. Every conclusion points back to public samples, capture time, and confidence.'}</p></div><div className="longform-hero-mark"><span>{heroWindow.value}</span><small>{zh ? heroWindow.zh : heroWindow.en}</small><i /></div></section>
     {researchContext && <section className="longform-research-context" aria-label={zh ? '趋势雷达评估上下文' : 'Trend Radar evaluation context'}><div><span className="longform-kicker">TREND → EVALUATION</span><b>{zh ? '趋势雷达发现 · 已自动带入' : 'Found by Trend Radar · loaded automatically'}</b><small>{researchContext.nicheName} · {researchContext.contentType || 'LONG_FORM'} · {researchContext.format || (zh ? '未识别形态' : 'Format unavailable')} · {researchContext.topicName || (zh ? '未识别主题' : 'Topic unavailable')}</small><small>{Array.isArray(researchContext.representativeVideos) ? `${researchContext.representativeVideos.length}${zh ? ' 条代表视频证据' : ' representative videos'}` : (zh ? '代表视频未提供' : 'Representative videos unavailable')}</small></div><div><span>{zh ? '趋势状态' : 'Trend state'} <b>{trendStateLabel(contextTrendSignals?.lifecycle || contextTrendSignals?.eventType, locale)}</b></span><span>{zh ? '窗口' : 'Window'} <b>{evaluationWindowNote(researchContext.timeWindow)}</b></span><span>{zh ? '小频道突破' : 'Small creators'} <b>{String(contextBreakoutSignals?.count ?? contextSmallCreatorSignals?.count ?? '—')}</b></span><span>{zh ? '置信度' : 'Confidence'} <b>{String(researchContext.confidence || '—')}</b></span><button type="button" onClick={returnToRadar}>{zh ? '← 返回趋势雷达' : '← Back to Trend Radar'}</button></div></section>}
     <section className="longform-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => { const next = event.target.value; setMarket(next); updateUrl({ market: next }); }}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => { const next = event.target.value; setWindow(next); updateUrl({ window: next }); }}><option value="7d">{zh ? '近 7 天' : '7 days'}</option><option value="28d">{zh ? '近 28 天' : '28 days'}</option><option value="90d">{zh ? '近 90 天' : '90 days'}</option><option value="365d">{zh ? '近 1 年' : '1 year'}</option></select></label><button type="button" className="longform-refresh" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '更新中…' : 'Refreshing…') : (zh ? '更新数据' : 'Refresh')}</button></section>
@@ -923,6 +940,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
     <TrendRadarConnection context={researchContext} opportunity={selectedOpportunity} locale={locale} onReturn={returnToRadar} onOpenRadar={openRelatedRadar} />
     <section className="longform-reading-guide" aria-label={zh ? '机会台读法' : 'How to read the opportunity desk'}><div className="longform-reading-guide-title"><span className="longform-kicker">HOW TO READ</span><b>{zh ? '三步判断，不把一个分数当结论' : 'Three checks before treating a score as a decision'}</b><small>{zh ? '分数用于排序，证据用于确认。' : 'Scores sort the list; evidence confirms the decision.'}</small></div><ol><li><b>01</b><span>{zh ? '先看市场机会' : 'Market first'}</span><small>{zh ? '需求与供给' : 'Demand and supply'}</small></li><li><b>02</b><span>{zh ? '再看执行适配' : 'Then execution'}</span><small>{zh ? '制作是否可复用' : 'Repeatable format'}</small></li><li><b>03</b><span>{zh ? '最后看代表证据' : 'Then evidence'}</span><small>{zh ? '样本、时间、置信度' : 'Sample, recency, confidence'}</small></li></ol></section>
     <nav className="longform-lane-tabs" aria-label={zh ? '机会类型' : 'Opportunity lanes'}>{laneOptions.map(item => <button type="button" key={item.key} className={lane === item.key ? 'active' : ''} onClick={() => { setLane(item.key); setSelectedOpportunityKey(null); updateUrl({ lane: item.key, direction: undefined }); }}>{item.label}{item.key !== 'ALL' && data ? <small>{data.lanes[item.key] || 0}</small> : null}</button>)}<span className="longform-lane-note">{opportunities.length ? (zh ? `当前显示 ${opportunities.length} 个方向 · 按进入分排序，置信度辅助判断` : `${opportunities.length} directions · sorted by entry score, with confidence as a guide`) : (zh ? '当前筛选暂无方向' : 'No directions match this filter')}</span></nav>
+    </details>
     {error ? <div className="longform-state error"><b>{zh ? '暂时无法读取长视频数据' : 'Long-form data is unavailable'}</b><p>{error}</p><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="longform-state"><b>{zh ? '正在整理公开长视频样本…' : 'Preparing public long-form samples…'}</b></div> : opportunities.length ? <>
       <nav className="longform-research-navigation" aria-label={zh ? '长视频赛道评估导航' : 'Long-form niche evaluation navigation'}>
         <span className="longform-kicker">RESEARCH WORKSPACE</span>
@@ -937,7 +955,7 @@ export default function LongformOpportunities({ locale, embedded = false }: { lo
           <div><span className="longform-kicker">DIRECTIONS</span><b>{zh ? '选择一个赛道深入研究' : 'Choose one direction to research'}</b><small>{zh ? '研究页只展开一个方向，避免把决策信息变成机会列表。' : 'Research stays focused on one direction instead of becoming another opportunity feed.'}</small></div>
           <div className="longform-direction-list">{opportunities.map((item, index) => { const selected = item.key === selectedOpportunity?.key; const recommendation = recommendationFor(item, locale); return <button type="button" key={item.key} className={selected ? 'active' : ''} onClick={() => { setSelectedOpportunityKey(item.key); updateUrl({ direction: item.key }); }} aria-current={selected ? 'true' : undefined}><span><b>{String(index + 1).padStart(2, '0')}</b><strong>{item.mechanism} · {item.productionType}</strong><small>{item.topic}</small></span><em className={recommendation.key}>{recommendation.label}</em></button>; })}</div>
         </aside>
-        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{materializationError ? <div className="longform-production-error" role="alert">{materializationError}</div> : null}{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale} materialization={materialization} onCreateProduction={createProductionPlan} creating={materializing} diagnostic={structuredDiagnostic} onDiagnostic={() => void runStructuredDiagnostic()}/> : <div className="longform-state"><b>{zh ? '当前没有可研究的方向' : 'No direction to research'}</b></div>}</div>
+        <div className="longform-research-main" id="research-decision"><div className="longform-workspace-heading"><span className="longform-kicker">SINGLE-NICHE DECISION</span><b>{zh ? '当前研究对象' : 'Current research subject'}</b><small>{selectedOpportunity ? `${selectedOpportunity.topic} · ${selectedOpportunity.mechanism}` : (zh ? '尚未选择赛道' : 'No direction selected')}</small></div>{materializationError ? <div className="longform-production-error" role="alert">{materializationError}</div> : null}{selectedOpportunity ? <OpportunityCard opportunity={selectedOpportunity} locale={locale} materialization={materialization} onCreateProduction={createProductionPlan} creating={materializing} diagnostic={structuredDiagnostic} onDiagnostic={() => void runStructuredDiagnostic()}/> : <div className="longform-state">{researchContext?.discovery?.unit && <DecisionWorkbench unit={researchContext.discovery.unit} locale={locale} bridgeNote={zh ? '雷达证据已带入，但缺少同一具体方向的制作评估证据。' : 'Radar evidence carried over; matching production evaluation evidence is missing.'}/>}<b>{zh ? '所选雷达方向尚未匹配到长视频评估证据' : 'The selected Radar direction has no matching evaluation evidence'}</b><p>{zh ? '不会自动切换到其他赛道。可从左侧明确选择方向，或返回雷达继续观察。' : 'No unrelated niche is substituted. Select a direction explicitly or return to Radar.'}</p><button type="button" onClick={returnToRadar}>{zh ? '返回趋势雷达' : 'Back to Radar'}</button></div>}</div>
       </section>
     </> : <div className="longform-state"><b>{zh ? '当前窗口还没有足够的长视频样本' : 'Not enough long-form samples for this window'}</b><p>{zh ? '这不是演示数据。请扩大市场或时间窗口，等采集任务积累可比较的快照。' : 'This is not demo data. Expand the market or window and wait for comparable snapshots.'}</p></div>}
     <section className="longform-boundary"><div><span className="longform-kicker">READ THE SIGNAL</span><h2>{zh ? '哪些数据目前不能回答？' : 'What can this data not answer yet?'}</h2></div><div>{(data?.gaps || [zh ? '字幕、CTR、留存、RPM/CPM 和收入不属于公开字段。' : 'Transcripts, CTR, retention, RPM/CPM and revenue are not public fields.']).map(gap => <p key={gap}>→ {gap}</p>)}</div></section>

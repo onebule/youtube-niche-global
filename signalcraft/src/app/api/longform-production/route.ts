@@ -11,6 +11,18 @@ export async function POST(request: NextRequest) {
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ error: '请求格式无效。', code: 'INVALID_JSON' }, { status: 400 }); }
   try {
+    if (body && typeof body === 'object' && (body as Record<string, unknown>).action === 'SAVE_TEST_PLAN') {
+      // Old backends ignore unknown actions and may start LLM materialization.
+      // Fail closed before POST, not after a paid side effect has happened.
+      const probe = await fetch(`${upstream}?bridge=test-plan-v1`, {
+        headers: { accept: 'application/json', ...(authorization ? { authorization } : {}) },
+        cache: 'no-store', signal: AbortSignal.timeout(10000),
+      });
+      const capability = await probe.json().catch(() => null);
+      if (!probe.ok || capability?.testPlanBridge !== 'v1' || capability?.saveOnly !== true) {
+        return Response.json({ error: probe.status === 401 ? '请先登录后保存制作方案。' : '所选测试接入尚未部署到后端；已阻止提交，不会调用模型。', code: 'TEST_PLAN_BRIDGE_UNAVAILABLE' }, { status: probe.status === 401 ? 401 : 503 });
+      }
+    }
     const response = await fetch(upstream, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json', ...(authorization ? { authorization } : {}) },

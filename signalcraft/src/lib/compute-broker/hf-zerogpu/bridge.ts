@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { sanitizeHfError } from './normalizer.ts';
+import type { HfQuotaDetails } from './quota.ts';
 
 export type HfBridgeCheck = {
   ok: boolean;
@@ -9,6 +10,7 @@ export type HfBridgeCheck = {
   hardware: string | null;
   quota: 'REMAINING' | 'EXHAUSTED' | 'UNKNOWN';
   apiInfo: unknown;
+  quotaDetails?: HfQuotaDetails | null;
   providerReport?: Record<string, unknown>;
   code?: string;
   message?: string;
@@ -19,6 +21,7 @@ export type HfBridgeSmoke = {
   providerTaskId?: string;
   state?: string;
   result?: unknown;
+  quotaDetails?: HfQuotaDetails | null;
   providerReport?: Record<string, unknown>;
   code?: string;
   message?: string;

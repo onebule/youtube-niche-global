@@ -30,28 +30,85 @@ export function endpointAndInputs(apiInfo) {
   entries.sort((a, b) => score(b) - score(a));
   const [name, endpoint] = entries[0] || [null, {}];
   const parameters = Array.isArray(endpoint?.parameters) ? endpoint.parameters : Array.isArray(endpoint?.inputs) ? endpoint.inputs : [];
-  return { endpoint: name ? (name.startsWith('/') ? name : `/${name}`) : null, parameters };
+  return { endpoint: name ? (name.startsWith('/') ? name : `/${name}`) : null, parameters, capabilities: summarizeHfSpaceCapabilities(apiInfo, parameters) };
 }
 const score = ([name, endpoint]) => (/(generate|predict|inference|run)/i.test(name) ? 4 : 0) + (/(prompt|text)/i.test(JSON.stringify(endpoint)) ? 3 : 0) + (/(video|duration|seed|steps)/i.test(JSON.stringify(endpoint)) ? 2 : 0);
 
+function summarizeHfSpaceCapabilities(apiInfo, parameters) {
+  const strings = [];
+  const collect = value => {
+    if (typeof value === 'string') { if (value.length <= 120) strings.push(value); return; }
+    if (Array.isArray(value)) { value.forEach(collect); return; }
+    if (value && typeof value === 'object') Object.values(value).forEach(collect);
+  };
+  collect(apiInfo);
+  const presetInput = parameters.find(item => /preset/i.test(`${item?.name || ''} ${item?.label || ''}`));
+  const choices = [...(presetInput?.choices || []), ...strings].filter(value => typeof value === 'string' && /(?:turbo|fast|balanced|exact|cache)/i.test(value) && /(?:step|overall|faster|quality|cache)/i.test(value));
+  const presets = [...new Set(choices)].map(value => ({ value, steps: Number(value.match(/(\d+)\s*-?\s*step/i)?.[1] || '') || null, acceleration: /turbo|fast/i.test(value) ? 'Exact' : null }));
+  const durationInput = parameters.find(item => /duration|seconds|length/i.test(`${item?.name || ''} ${item?.label || ''}`));
+  const canvasInput = parameters.find(item => /canvas|aspect|ratio/i.test(`${item?.name || ''} ${item?.label || ''}`));
+  const stepsInput = parameters.find(item => /step|inference/i.test(`${item?.name || ''} ${item?.label || ''}`));
+  return {
+    presets,
+    defaultPreset: typeof presetInput?.default === 'string' ? presetInput.default : typeof presetInput?.parameter_default === 'string' ? presetInput.parameter_default : null,
+    duration: { min: Number.isFinite(Number(durationInput?.min)) ? Number(durationInput.min) : null, max: Number.isFinite(Number(durationInput?.max)) ? Number(durationInput.max) : null, default: Number.isFinite(Number(durationInput?.default ?? durationInput?.parameter_default)) ? Number(durationInput.default ?? durationInput.parameter_default) : null },
+    steps: { min: Number.isFinite(Number(stepsInput?.min)) ? Number(stepsInput.min) : null, max: Number.isFinite(Number(stepsInput?.max)) ? Number(stepsInput.max) : null, default: Number.isFinite(Number(stepsInput?.default ?? stepsInput?.parameter_default)) ? Number(stepsInput.default ?? stepsInput.parameter_default) : null },
+    canvasChoices: (canvasInput?.choices || []).filter(value => typeof value === 'string'),
+  };
+}
+
+export function estimateHfQuotaSeconds({ durationSeconds = 5, resolution = '960x544', steps = 10, gpuSize = process.env.H3_GPU_SIZE || 'xlarge' } = {}) {
+  const dimensions = String(resolution).match(/(\d{3,5})\s*x\s*(\d{3,5})/i);
+  const width = dimensions ? Number(dimensions[1]) : 960;
+  const height = dimensions ? Number(dimensions[2]) : 544;
+  const fps = 24;
+  const framesPerChunk = 17;
+  const latentsPerChunk = 5;
+  let frames = Math.max(1, Math.round(Number(durationSeconds) * fps));
+  while (frames % framesPerChunk !== latentsPerChunk) frames += 1;
+  const latentFrames = Math.floor((frames - latentsPerChunk) / framesPerChunk) * latentsPerChunk + 2;
+  const patches = Math.max(1, Math.floor(height / 32) * Math.floor(width / 32));
+  const rows = latentFrames * patches;
+  const denoise = Number(steps || 10) * (1.1745e-4 * rows + 3.8396e-9 * rows ** 2);
+  const decode = 15 + 15 * (height * width * frames) / (960 * 544 * 124);
+  const singleGpuSeconds = Math.max(60, Math.floor(denoise + decode) + 12 + 10);
+  return singleGpuSeconds * (String(gpuSize).toLowerCase() === 'xlarge' ? 2 : 1);
+}
+
+const fallbackCanvas = { '16:9': '960x544 \u00b7 16:9 fast', '9:16': '544x960 \u00b7 9:16 fast', '1:1': '544x544 \u00b7 1:1 fast', '4:3': '768x576 \u00b7 4:3 fast', '3:4': '576x768 \u00b7 3:4 fast', '21:9': '1152x512 \u00b7 21:9 fast' };
+const canvasFor = (item, requested) => {
+  const ratio = requested || '16:9';
+  const choices = Array.isArray(item?.choices) ? item.choices.filter(value => typeof value === 'string') : [];
+  const matching = choices.filter(value => value.includes(ratio));
+  if (matching.length) return matching.find(value => /fast/i.test(value)) || matching[0];
+  return ratio.includes('\u00b7') ? ratio : fallbackCanvas[ratio] || ratio;
+};
+
 export function buildInvocation(apiInfo, request) {
-  const { endpoint, parameters } = endpointAndInputs(apiInfo);
+  const { endpoint, parameters, capabilities } = endpointAndInputs(apiInfo);
   if (!endpoint || !parameters.length) return null;
+  const preset = (capabilities?.presets || []).find(item => /4\s*-?\s*step/i.test(String(item.value)))
+    || (capabilities?.presets || []).find(item => /turbo|fast/i.test(String(item.value)))
+    || null;
   const args = parameters.map(item => {
-    const name = String(item?.name || item?.parameter_name || item?.label || '').toLowerCase();
-    const fallback = item?.default ?? item?.defaultValue ?? null;
+    // Gradio often exposes generic parameter_name values (in_0, in_1, ...)
+    // while the live label carries the actual semantic contract.
+    const name = String(item?.name || item?.label || item?.parameter_name || item?.parameterName || '').toLowerCase();
+    const fallback = item?.default ?? item?.defaultValue ?? item?.parameter_default ?? item?.parameterDefault ?? null;
     if (/negative|avoid|exclude/.test(name)) return request.negativePrompt || fallback || '';
+    if (/upsample|enhance/.test(name)) return false;
     if (/prompt|text|caption|description/.test(name)) return request.prompt;
     if (/duration|seconds|length/.test(name)) return request.durationSeconds;
-    if (/step|inference/.test(name)) return request.steps ?? fallback ?? 12;
+    if (/step|inference/.test(name)) return preset?.steps ?? request.steps ?? fallback ?? 10;
     if (/seed/.test(name)) return request.seed ?? 42;
-    if (/upsample|enhance/.test(name)) return false;
-    if (/canvas|aspect|ratio/.test(name)) return request.aspectRatio || '16:9';
+    if (/canvas|aspect|ratio/.test(name)) return canvasFor(item, request.aspectRatio);
     if (/resolution|size/.test(name)) return request.resolution || '544x960';
+    if (/generation.?preset|speed.?preset/.test(name)) return preset?.value ?? fallback;
+    if (/acceleration|schedule|cache/.test(name)) return preset?.acceleration ?? fallback;
     if (/audio|sound/.test(name)) return false;
     return fallback;
   });
-  return { endpoint, args };
+  return { endpoint, args, selectedPreset: preset };
 }
 
 export function containsMp4(value, seen = new Set()) {

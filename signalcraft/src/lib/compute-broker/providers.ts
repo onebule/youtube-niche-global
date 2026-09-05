@@ -239,5 +239,9 @@ export class H3ApiProvider extends HttpH3Provider {
 }
 
 export function createDefaultProviders(config = readComputeBrokerConfig()): VideoComputeProvider[] {
-  return [new HFZeroGpuH3Provider(config.hfZeroGpu), new ModalH3Provider(config.modal), new SpotGpuProvider(config.cheapGpu), new H3ApiProvider(config.h3Api)];
+  const freeSpaces = (config.hfZeroGpu.spaces || []).filter(candidate => candidate.enabled);
+  const hfProviders = freeSpaces.length
+    ? freeSpaces.map(candidate => new HFZeroGpuH3Provider(config.hfZeroGpu, undefined, undefined, undefined, candidate))
+    : [new HFZeroGpuH3Provider(config.hfZeroGpu)];
+  return [...hfProviders, new ModalH3Provider(config.modal), new SpotGpuProvider(config.cheapGpu), new H3ApiProvider(config.h3Api)];
 }

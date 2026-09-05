@@ -9,6 +9,8 @@ import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from
 import { searchYouTubeSignals, type PublicRankingScope } from '@/src/lib/youtube';
 import { signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
+import { DiscoveryProfileProvider } from './discovery-workbench';
+import type { ProductionHandoff } from '@/src/lib/product-convergence';
 import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
 import { formatCompactNumber, interpolate, languageCopy, localizedCategory, localizedContentLanguage, localizedMarket, localizedTopic, type UiLocale } from '@/src/lib/ui-language';
 import { hasOwnerAccess } from '@/src/lib/owner-admin';
@@ -582,6 +584,18 @@ export default function SignalCraftApp() {
     notify('已带入 Shorts 趋势证据，正在打开 Shorts 赛道评估');
   };
 
+  const createShortTestPlan = (handoff: ProductionHandoff) => {
+    if (!account) { notify('请先登录，再保存制作方案。'); return; }
+    if (handoff.test.format !== 'SHORTS') return;
+    const test = handoff.test;
+    setState(current => current.ideas.some(idea => idea.id === `short-test:${test.id}`) ? current : ({ ...current, ideas: [...current.ideas, {
+      id: `short-test:${test.id}`, title: test.audienceQuestion, sourceVideoId: test.sourceVideoIds[0],
+      angle: test.differentiation.join('；'), audience: test.audienceQuestion, hypothesis: test.promise,
+      owner: account.name || '当前用户', status: '验证', note: JSON.stringify(handoff), createdAt: new Date().toISOString(),
+    }] }));
+    navigate('/app/ideas'); notify('已把所选 Shorts 测试保存到选题，不会自动生成视频。');
+  };
+
   const content = path === '/'
     ? <Home locale={locale} />
     : path === '/discover'
@@ -591,7 +605,7 @@ export default function SignalCraftApp() {
     : path === '/radar' || path === '/radar/all' || path === '/longform' || path === '/short-radar'
       ? <LongformResearchDesk locale={locale} initialView={path === '/radar/all' ? 'all-radar' : path === '/radar' ? 'radar' : path === '/short-radar' ? 'short-radar' : 'opportunities'} onWatch={watchRadarEvent} onCreateIdea={createRadarIdea} onResearch={researchRadarEvent} onShortResearch={researchShortformEvent} />
       : path === '/shortform-evaluation'
-        ? <ShortformNicheEvaluation locale={locale} />
+        ? <ShortformNicheEvaluation locale={locale} onCreate={createShortTestPlan} />
       : path === '/doctor' || path === '/app/doctor'
             ? <ChannelDoctor locale={locale} />
             : path === '/methodology'
@@ -670,7 +684,9 @@ export default function SignalCraftApp() {
       onLocaleChange={setLocale}
       isOwner={isOwner}
     />
-    {content}
+    {['/radar', '/radar/all', '/short-radar', '/longform', '/shortform-evaluation'].includes(path)
+      ? <DiscoveryProfileProvider key={accountScope} scope={accountScope}>{content}</DiscoveryProfileProvider>
+      : content}
     {drawer && <DetailDrawer video={drawer} state={state} setState={setState} onClose={() => setDrawer(null)} toast={notify} locale={locale} />}
     {toast && <div className="toast" aria-live="polite">✓ {toast.message}</div>}
   </div>;

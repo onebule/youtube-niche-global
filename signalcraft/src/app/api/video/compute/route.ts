@@ -18,10 +18,11 @@ export async function POST(request: NextRequest) {
     const input = parseVideoComputeRequest(body, request.headers.get('x-request-id') || crypto.randomUUID());
     const broker = createComputeBroker();
     const result = await broker.submit(input, { authorization: request.headers.get('authorization') });
-    return Response.json(result, { status: 202, headers: { 'cache-control': 'no-store', 'x-request-id': input.requestId } });
+    const publicCode = result.job.error?.details?.publicCode;
+    return Response.json(publicCode ? { ...result, code: publicCode } : result, { status: 202, headers: { 'cache-control': 'no-store', 'x-request-id': input.requestId } });
   } catch (error) {
     if (error instanceof ComputeRequestError) return Response.json({ code: error.reason, error: error.message }, { status: error.reason === 'UNSUPPORTED_WORKFLOW' ? 422 : 422 });
-    if (error instanceof ProviderError) return Response.json({ code: error.reason, error: error.message, retryable: error.retryable }, { status: statusForReason(error.reason) });
+    if (error instanceof ProviderError) return Response.json({ code: error.details?.publicCode || error.reason, error: error.message, retryable: error.retryable, details: error.details || null }, { status: statusForReason(error.reason) });
     return Response.json({ code: 'COMPUTE_BROKER_ERROR', error: '算力路由暂时不可用。' }, { status: 500 });
   }
 }

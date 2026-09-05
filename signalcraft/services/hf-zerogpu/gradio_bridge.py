@@ -7,6 +7,8 @@ logs the token and has no retry, fallback, batch, or automatic generation path.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import re
@@ -52,6 +54,33 @@ def classify(message: str) -> str:
     return "HF_SPACE_ERROR"
 
 
+def quota_details(message: str) -> dict[str, Any] | None:
+    """Parse only quota facts explicitly returned by the HF scheduler."""
+    match = re.search(
+        r"\(\s*([0-9]+(?:\.[0-9]+)?)s\s+requested\s+vs\.?\s*([0-9]+(?:\.[0-9]+)?)s\s+left\s*\)",
+        message,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    reset = re.search(r"try\s+again\s+in\s+([0-9]+(?::[0-9]{2}){1,2})", message, re.IGNORECASE)
+    reset_at = re.search(
+        r"(?:quota\s+reset(?:s|\s+at)?|reset\s+at)\s*[:=]?\s*(20[0-9]{2}-[0-9]{2}-[0-9]{2}T[^\s,)]+)",
+        message,
+        re.IGNORECASE,
+    )
+    required = float(match.group(1))
+    remaining = float(match.group(2))
+    return {
+        "estimatedRequiredGpuSeconds": int(round(required)),
+        "remainingGpuSeconds": int(round(remaining)),
+        "quotaResetAt": reset_at.group(1) if reset_at else None,
+        "resetEstimate": reset.group(1) if reset else None,
+        "quotaStatus": "INSUFFICIENT" if remaining < required else "SUFFICIENT",
+        "source": "PROVIDER_ERROR",
+    }
+
+
 def space_metadata(space: str, token: str) -> dict[str, Any]:
     # Optional metadata is read-only and does not gate discovery if Hub API is
     # unavailable. The Gradio client remains the authority for the live schema.
@@ -88,7 +117,7 @@ def client_for(space: str, token: str):
         from gradio_client import Client
     except Exception as error:
         raise RuntimeError("GRADIO_CLIENT_UNAVAILABLE: " + str(error)) from error
-    return Client(space, token=token)
+    return Client(space, hf_token=token, verbose=False)
 
 
 def view_api(client):
@@ -110,8 +139,12 @@ def check(payload: dict[str, Any]) -> dict[str, Any]:
         if not verified:
             return {"ok": False, "auth": "AUTH_INVALID" if auth_code == "HF_AUTH_INVALID" else "UNKNOWN", "reachability": "UNKNOWN", "runtime": None, "hardware": None, "quota": "UNKNOWN", "apiInfo": None, "code": auth_code or "HF_AUTH_UNVERIFIED", "message": "HF Token 仍未完成只读身份验证。"}
         metadata = space_metadata(space, token)
-        client = client_for(space, token)
-        api_info = clean(view_api(client))
+        # gradio_client.view_api() prints a human-readable usage report even
+        # when verbose logging is disabled. Keep that diagnostic off stdout so
+        # the bridge emits exactly one JSON document for its caller.
+        with contextlib.redirect_stdout(io.StringIO()):
+            client = client_for(space, token)
+            api_info = clean(view_api(client))
         runtime = metadata.get("runtime") if isinstance(metadata, dict) else None
         hardware = runtime.get("hardware") if isinstance(runtime, dict) else None
         stage = str(runtime.get("stage") if isinstance(runtime, dict) else "").upper()
@@ -134,26 +167,36 @@ def smoke(payload: dict[str, Any]) -> dict[str, Any]:
     if not endpoint:
         return {"ok": False, "code": "HF_API_INCOMPATIBLE", "message": "Discovered generate endpoint is missing."}
     try:
-        client = client_for(space, token)
-        # Exactly one submit call. Do not add retry or paid fallback here.
-        job = client.submit(*args, api_name=endpoint)
-        result = job.result()
+        with contextlib.redirect_stdout(io.StringIO()):
+            client = client_for(space, token)
+            # Exactly one submit call. Do not add retry or paid fallback here.
+            job = client.submit(*args, api_name=endpoint)
+            result = job.result()
         return {"ok": True, "providerTaskId": "hf-h3-" + uuid.uuid4().hex, "state": "SUCCEEDED", "result": clean(result), "providerReport": {"spaceId": space, "endpoint": endpoint, "costUsd": 0, "costType": "INCLUDED_QUOTA", "confidence": "LOW", "calibrationRequired": True}}
     except Exception as error:
         message = clean(str(error))
-        return {"ok": False, "code": classify(str(error)), "message": message}
+        details = quota_details(str(error))
+        return {"ok": False, "code": classify(str(error)), "message": message, "quota": "INSUFFICIENT" if details else "UNKNOWN", "quotaDetails": details}
 
 
 def main() -> None:
+    # The bridge is commonly launched through a Windows pipe whose legacy
+    # console encoding is GBK. Force UTF-8 for library diagnostics and JSON.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(encoding="utf-8", errors="strict" if stream is sys.stdin else "backslashreplace")
     parser = argparse.ArgumentParser()
     parser.add_argument("--action", choices=("check", "smoke"), required=True)
     args = parser.parse_args()
     try:
         payload = json.loads(sys.stdin.read() or "{}")
         result = check(payload) if args.action == "check" else smoke(payload)
-        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        # Escape non-ASCII characters so the Windows GBK console cannot fail
+        # while serializing a valid read-only response from Gradio/Hugging Face.
+        print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
     except Exception as error:
-        print(json.dumps({"ok": False, "code": "HF_BRIDGE_ERROR", "message": clean(str(error))}, ensure_ascii=False, separators=(",", ":")))
+        print(json.dumps({"ok": False, "code": "HF_BRIDGE_ERROR", "message": clean(str(error))}, ensure_ascii=True, separators=(",", ":")))
 
 
 if __name__ == "__main__":

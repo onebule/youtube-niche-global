@@ -5,8 +5,10 @@ import { promisify } from 'node:util';
 import { HFZeroGpuH3Provider, HF_ZEROGPU_H3 } from '../src/lib/compute-broker/hf-zerogpu/provider.ts';
 import { buildHfH3Invocation, discoverHfH3Api } from '../src/lib/compute-broker/hf-zerogpu/discovery.ts';
 import { normalizeHfZeroGpuOutput, sanitizeHfError } from '../src/lib/compute-broker/hf-zerogpu/normalizer.ts';
+import { estimateHfGpuSeconds, parseHfQuotaMessage } from '../src/lib/compute-broker/hf-zerogpu/quota.ts';
 import { parseVideoComputeRequest } from '../src/lib/compute-broker/validation.ts';
 import { isSafeHfVideoPath } from '../src/lib/compute-broker/hf-zerogpu/storage.ts';
+import { readComputeBrokerConfig } from '../src/lib/compute-broker/config.ts';
 
 const execFileAsync = promisify(execFile);
 const root = new URL('..', import.meta.url);
@@ -20,6 +22,48 @@ test('ZeroGPU discovery uses the live named endpoint and preserves parameter ord
   const invocation = buildHfH3Invocation(schema, request({ seed: 42 }));
   assert.deepEqual(invocation.inputNames, ['duration', 'prompt', 'seed']);
   assert.deepEqual(invocation.args, [5, 'a calm landscape', 42]);
+});
+
+test('ZeroGPU invocation maps semantic Canvas labels to a provider-valid fast choice', () => {
+  const schema = discoverHfH3Api({ named_endpoints: { '/output_video': { parameters: [
+    { label: 'Prompt', parameter_name: 'in_0', type: 'str' },
+    { label: 'Canvas', parameter_name: 'in_1', type: 'str' },
+  ], returns: [{ type: 'video' }] } } });
+  assert.equal(buildHfH3Invocation(schema, request({ aspectRatio: '16:9' })).args[1], '960x544 · 16:9 fast');
+});
+
+test('ZeroGPU invocation uses a discovered Turbo 4-step preset without inventing a provider choice', () => {
+  const schema = discoverHfH3Api({ named_endpoints: { '/generate': { parameters: [
+    { name: 'prompt', type: 'str', required: true },
+    { name: 'generation_preset', type: 'str', choices: ['Balanced — best overall', 'Turbo 4-step — fastest, more artifacts'], default: 'Balanced — best overall' },
+    { name: 'steps', type: 'number', default: 28 },
+  ], returns: [{ type: 'video' }] } } });
+  const invocation = buildHfH3Invocation(schema, request({ steps: 28 }));
+  assert.equal(invocation.selectedPreset?.value, 'Turbo 4-step — fastest, more artifacts');
+  assert.equal(invocation.selectedPreset?.steps, 4);
+  assert.deepEqual(invocation.args, ['a calm landscape', 'Turbo 4-step — fastest, more artifacts', 4]);
+});
+
+test('compute broker config contains a primary and secondary free H3 Space', () => {
+  const spaces = readComputeBrokerConfig({}).hfZeroGpu.spaces;
+  assert.deepEqual(spaces.map(space => [space.role, space.kind, space.space]), [
+    ['PRIMARY', 'H3_ULTRA_FAST_ZERO', 'mrfakename/minimax-h3-ultra-fast'],
+    ['SECONDARY', 'H3_OFFICIAL_ZERO', 'MiniMaxAI/MiniMax-H3-Turbo-Lora'],
+  ]);
+});
+
+test('ZeroGPU quota messages keep authoritative requested, remaining, and reset estimate values', () => {
+  const quota = parseHfQuotaMessage('You have exceeded your free ZeroGPU quota (190s requested vs. 3s left). Try again in 21:58:29.');
+  assert.deepEqual(quota, {
+    estimatedRequiredGpuSeconds: 190,
+    remainingGpuSeconds: 3,
+    quotaResetAt: null,
+    resetEstimate: '21:58:29',
+    quotaStatus: 'INSUFFICIENT',
+    source: 'PROVIDER_ERROR',
+    observedAt: quota.observedAt,
+  });
+  assert.equal(estimateHfGpuSeconds(request({ steps: 10, resolution: '960x544' })), 174);
 });
 
 test('incompatible or missing API schemas are explicit', () => {
@@ -41,6 +85,40 @@ test('smoke-only provider rejects ordinary broker requests without invoking the 
   const provider = new HFZeroGpuH3Provider(config({ allowRealGeneration: true, maxWaitSeconds: 60 }), { check: async () => { calls += 1; throw new Error('must not call'); }, smoke: async () => { calls += 1; throw new Error('must not call'); } });
   await assert.rejects(() => provider.submitJob(request()), /仅允许显式单任务 smoke/);
   assert.equal(calls, 0);
+});
+
+test('quota preflight blocks before remote submit and records a non-generation failure', async () => {
+  let smokeCalls = 0;
+  const apiInfo = { named_endpoints: { '/output_video': { parameters: [{ label: 'Prompt', parameter_name: 'in_0', type: 'str' }], returns: [{ type: 'video' }] } } };
+  const provider = new HFZeroGpuH3Provider(config({ allowRealGeneration: true, maxWaitSeconds: 60 }), {
+    check: async () => ({ ok: true, auth: 'AUTH_VERIFIED', reachability: 'REACHABLE', runtime: 'RUNNING', hardware: 'zeroGPU', quota: 'INSUFFICIENT', quotaDetails: { estimatedRequiredGpuSeconds: 190, remainingGpuSeconds: 3, quotaResetAt: null, resetEstimate: '21:58:29', quotaStatus: 'INSUFFICIENT', source: 'PROVIDER_ERROR' }, apiInfo }),
+    smoke: async () => { smokeCalls += 1; throw new Error('must not submit'); },
+  });
+  await assert.rejects(() => provider.submitJob(request({ requestId: 'hf-h3-smoke-quota', steps: 10 })), error => {
+    assert.equal(error.reason, 'HF_ZERO_GPU_QUOTA_EXHAUSTED');
+    assert.equal(error.details.publicCode, 'BLOCKED_BY_HF_QUOTA');
+    assert.equal(error.details.quota.quotaStatus, 'INSUFFICIENT');
+    assert.equal(error.details.providerMetrics.generationStarted, false);
+    assert.equal(error.details.providerMetrics.gpuInferenceStarted, false);
+    assert.equal(error.details.providerMetrics.videoGenerated, false);
+    assert.equal(error.details.providerMetrics.failureClass, 'RESOURCE_QUOTA');
+    assert.equal(error.details.providerMetrics.failureReason, 'HF_ZERO_GPU_QUOTA_EXHAUSTED');
+    assert.equal(error.details.providerMetrics.countsTowardModelFailureRate, false);
+    return true;
+  });
+  assert.equal(smokeCalls, 0);
+});
+
+test('quota refusal returned by the read-only check keeps the public quota classification', async () => {
+  const provider = new HFZeroGpuH3Provider(config({ allowRealGeneration: true, maxWaitSeconds: 60 }), {
+    check: async () => ({ ok: false, auth: 'AUTH_VERIFIED', reachability: 'REACHABLE', runtime: 'RUNNING', hardware: 'zeroGPU', quota: 'INSUFFICIENT', code: 'HF_ZERO_GPU_QUOTA_EXHAUSTED', message: 'quota (190s requested vs. 3s left)', quotaDetails: { estimatedRequiredGpuSeconds: 190, remainingGpuSeconds: 3, quotaResetAt: null, resetEstimate: null, quotaStatus: 'INSUFFICIENT', source: 'PROVIDER_PREFLIGHT' } }),
+    smoke: async () => { throw new Error('must not submit'); },
+  });
+  await assert.rejects(() => provider.submitJob(request({ requestId: 'hf-h3-smoke-check-quota' })), error => {
+    assert.equal(error.details.publicCode, 'BLOCKED_BY_HF_QUOTA');
+    assert.equal(error.details.providerMetrics.generationStarted, false);
+    return true;
+  });
 });
 
 test('provider reports included quota as zero USD with low confidence', async () => {
@@ -82,6 +160,8 @@ test('invalid MP4 validation cannot become a successful provider job', async () 
 test('output normalization requires an authoritative MP4 candidate', () => {
   const normalized = normalizeHfZeroGpuOutput({ video: { url: 'https://hf.space/file.mp4' }, providerReport: { queueState: 'DONE' } });
   assert.equal(normalized.videoAsset.url, 'https://hf.space/file.mp4');
+  const workflowTuple = normalizeHfZeroGpuOutput([{ path: '/tmp/h3-output.mp4', mime_type: 'video/mp4' }, 'report', 'refined prompt']);
+  assert.equal(workflowTuple.videoAsset.path, '/tmp/h3-output.mp4');
   assert.equal(normalized.providerReport.confidence, 'LOW');
   assert.equal(normalizeHfZeroGpuOutput({ text: 'not a video' }).videoAsset, null);
   assert.equal(sanitizeHfError(new Error('Bearer hf_secret_value')).includes('hf_secret'), false);

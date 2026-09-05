@@ -95,6 +95,9 @@ export type ProviderHealth = {
 export type CostEstimate = {
   rawCostUsd: number | null;
   effectiveCostUsd: number | null;
+  /** Provider-specific free-quota estimate used only by FREE_FIRST routing. */
+  estimatedQuotaSeconds?: number | null;
+  quotaConfidence?: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
   successRate: number | null;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   source: 'ENVIRONMENT' | 'BENCHMARK' | 'TELEMETRY' | 'INCLUDED_QUOTA' | 'UNKNOWN';
@@ -173,7 +176,7 @@ export type ComputeJob = {
   finishedAt: string | null;
   providerTaskId: string | null;
   output: NormalizedProviderResult | null;
-  error: { reason: FailureReason; message: string; retryable: boolean } | null;
+  error: { reason: FailureReason; message: string; retryable: boolean; details?: Record<string, unknown> } | null;
 };
 
 export type ComputeResponse = {
@@ -197,17 +200,20 @@ export class ProviderError extends Error {
   readonly reason: FailureReason;
   readonly retryable: boolean;
   readonly status?: number;
+  readonly details?: Record<string, unknown>;
   constructor(
     message: string,
     reason: FailureReason,
     retryable: boolean,
     status?: number,
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ProviderError';
     this.reason = reason;
     this.retryable = retryable;
     this.status = status;
+    this.details = details;
   }
 }
 

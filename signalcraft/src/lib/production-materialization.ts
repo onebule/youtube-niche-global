@@ -24,6 +24,8 @@ export type ProductionMaterialization = {
   schemaVersion: typeof PRODUCTION_MATERIALIZATION_VERSION;
   productionDraftId: string;
   opportunityId: string;
+  sourceOpportunityId?: string;
+  selectedTest?: { id: string; audienceQuestion: string };
   selection: 'EXPLICIT_USER_SELECTED';
   createdAt: string;
   sourceSnapshotId: string | null;
@@ -61,6 +63,7 @@ export function normalizeServerProductionMaterialization(value: unknown): Produc
   const stageValue = (key: string) => asRecord(valueAt(asRecord(raw.stages), key));
   const context = asRecord(raw.productionContext);
   const source = asRecord(raw.sourceOpportunity);
+  const selectedTest = asRecord(asRecord(raw.provenance).selectedTest);
   const textValue = (record: JsonRecord, key: string, fallback: string) => typeof record[key] === 'string' && record[key] ? record[key] as string : fallback;
   const brief = stageValue('creativeBrief');
   const script = stageValue('script');
@@ -81,6 +84,8 @@ export function normalizeServerProductionMaterialization(value: unknown): Produc
     schemaVersion: PRODUCTION_MATERIALIZATION_VERSION,
     productionDraftId: raw.productionDraftId,
     opportunityId: raw.opportunityId,
+    sourceOpportunityId: typeof source.key === 'string' ? source.key : undefined,
+    selectedTest: typeof selectedTest.id === 'string' && typeof selectedTest.audienceQuestion === 'string' ? { id: selectedTest.id, audienceQuestion: selectedTest.audienceQuestion } : undefined,
     selection: 'EXPLICIT_USER_SELECTED',
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
     sourceSnapshotId: typeof context.snapshotId === 'string' ? context.snapshotId : null,

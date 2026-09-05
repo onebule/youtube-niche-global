@@ -12,6 +12,12 @@ export type HfInputSpec = {
   choices: unknown[];
 };
 
+export type HfPresetSpec = {
+  value: string;
+  steps: number | null;
+  acceleration: string | null;
+};
+
 export type HfH3ApiSchema = {
   schemaVersion: 'hf-h3-api.v1';
   space: string;
@@ -22,6 +28,10 @@ export type HfH3ApiSchema = {
   compatible: boolean;
   errorCode: 'HF_API_INCOMPATIBLE' | 'HF_API_CHANGED' | null;
   reason: string | null;
+  presets: HfPresetSpec[];
+  defaultPreset: string | null;
+  duration: { min: number | null; max: number | null; default: number | null };
+  canvasChoices: string[];
 };
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -51,6 +61,10 @@ function parameterSpecs(endpoint: Record<string, unknown>): HfInputSpec[] {
     const defaultValue = value.default ?? value.defaultValue ?? parameter.default ?? null;
     const required = Boolean(value.required ?? parameter.required ?? (defaultValue === null && !/image|file|audio|video/i.test(`${name} ${label}`)));
     const range = record(value.range || value.metadata);
+    const typeSpec = record(value.type || parameter.type);
+    const choices = list(value.choices || value.options || value.enum || parameter.choices || parameter.options || parameter.enum || typeSpec.enum)
+      .concat(typeSpec.oneOf && Array.isArray(typeSpec.oneOf) ? typeSpec.oneOf : [])
+      .filter(choice => typeof choice === 'string');
     return {
       index,
       name,
@@ -60,9 +74,59 @@ function parameterSpecs(endpoint: Record<string, unknown>): HfInputSpec[] {
       defaultValue,
       min: numberOrNull(value.min ?? range.min),
       max: numberOrNull(value.max ?? range.max),
-      choices: list(value.enum || value.choices || value.options),
+      choices,
     };
   });
+}
+
+function collectStrings(value: unknown, output: string[] = [], depth = 0): string[] {
+  if (depth > 8) return output;
+  if (typeof value === 'string') {
+    if (value.length <= 120) output.push(value);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => collectStrings(item, output, depth + 1));
+    return output;
+  }
+  if (value && typeof value === 'object') Object.values(value).forEach(item => collectStrings(item, output, depth + 1));
+  return output;
+}
+
+function discoverPresets(payload: unknown, inputs: HfInputSpec[]): HfPresetSpec[] {
+  const candidates = inputs.flatMap(input => input.choices.filter(choice => typeof choice === 'string')) as string[];
+  const source = [...candidates, ...collectStrings(payload)];
+  const values = [...new Set(source.filter(value => /(?:turbo|fast|balanced|exact|cache)/i.test(value) && /(?:step|overall|faster|quality|cache)/i.test(value)))];
+  return values.map(value => ({
+    value,
+    steps: Number(value.match(/(\d+)\s*-?\s*step/i)?.[1] || '') || null,
+    acceleration: /turbo|fast/i.test(value) ? 'Exact' : null,
+  }));
+}
+
+export function selectHfFastPreset(schema: HfH3ApiSchema): HfPresetSpec | null {
+  return schema.presets.find(preset => /4\s*-?\s*step/i.test(preset.value))
+    || schema.presets.find(preset => /turbo|fast/i.test(preset.value))
+    || null;
+}
+
+const FALLBACK_CANVAS_BY_RATIO: Record<string, string> = {
+  '16:9': '960x544 \u00b7 16:9 fast',
+  '9:16': '544x960 \u00b7 9:16 fast',
+  '1:1': '544x544 \u00b7 1:1 fast',
+  '4:3': '768x576 \u00b7 4:3 fast',
+  '3:4': '576x768 \u00b7 3:4 fast',
+  '21:9': '1152x512 \u00b7 21:9 fast',
+};
+
+function canvasValue(input: HfInputSpec, requested: string | null) {
+  const ratio = requested || '16:9';
+  const choices = input.choices.filter(choice => typeof choice === 'string') as string[];
+  if (choices.length) {
+    const matching = choices.filter(choice => choice.includes(ratio));
+    if (matching.length) return matching.find(choice => /fast/i.test(choice)) || matching[0];
+  }
+  return ratio.includes('\u00b7') ? ratio : FALLBACK_CANVAS_BY_RATIO[ratio] || ratio;
 }
 
 function endpointScore(name: string, endpoint: Record<string, unknown>) {
@@ -78,10 +142,14 @@ function endpointScore(name: string, endpoint: Record<string, unknown>) {
 export function discoverHfH3Api(payload: unknown, space = 'MiniMaxAI/MiniMax-H3-Turbo-Lora'): HfH3ApiSchema {
   const entries = endpointEntries(payload);
   const selected = entries.sort((a, b) => endpointScore(b[0], b[1]) - endpointScore(a[0], a[1]))[0];
-  if (!selected) return { schemaVersion: 'hf-h3-api.v1', space, endpoint: null, inputs: [], outputs: [], discoveredAt: new Date().toISOString(), compatible: false, errorCode: 'HF_API_INCOMPATIBLE', reason: 'Space 没有公开 named endpoint，不能安全推断生成接口。' };
+  if (!selected) return { schemaVersion: 'hf-h3-api.v1', space, endpoint: null, inputs: [], outputs: [], discoveredAt: new Date().toISOString(), compatible: false, errorCode: 'HF_API_INCOMPATIBLE', reason: 'Space 没有公开 named endpoint，不能安全推断生成接口。', presets: [], defaultPreset: null, duration: { min: null, max: null, default: null }, canvasChoices: [] };
   const [endpointName, endpoint] = selected;
   const inputs = parameterSpecs(endpoint);
   const outputs = list(endpoint.returns || endpoint.outputs || endpoint.output_components);
+  const presets = discoverPresets(payload, inputs);
+  const presetInput = inputs.find(input => /preset/i.test(`${input.name} ${input.label}`));
+  const durationInput = inputs.find(input => /duration|seconds|length/i.test(`${input.name} ${input.label}`));
+  const canvasInput = inputs.find(input => /canvas|aspect|ratio/i.test(`${input.name} ${input.label}`));
   const hasPrompt = inputs.some(input => /prompt|text|caption|description/i.test(`${input.name} ${input.label}`));
   const hasVideoOutput = outputs.length === 0 || outputs.some(output => /video|file|filepath|mp4/i.test(JSON.stringify(output)));
   const compatible = hasPrompt && hasVideoOutput;
@@ -90,6 +158,10 @@ export function discoverHfH3Api(payload: unknown, space = 'MiniMaxAI/MiniMax-H3-
     inputs, outputs, discoveredAt: new Date().toISOString(), compatible,
     errorCode: compatible ? null : 'HF_API_CHANGED',
     reason: compatible ? null : '已发现 endpoint，但 prompt 或视频输出契约无法验证。',
+    presets,
+    defaultPreset: typeof presetInput?.defaultValue === 'string' ? presetInput.defaultValue : null,
+    duration: { min: durationInput?.min ?? null, max: durationInput?.max ?? null, default: typeof durationInput?.defaultValue === 'number' ? durationInput.defaultValue : null },
+    canvasChoices: canvasInput?.choices.filter(choice => typeof choice === 'string') as string[] || [],
   };
 }
 
@@ -102,12 +174,13 @@ function bounded(value: number, input: HfInputSpec) {
   return Math.min(upper, Math.max(lower, value));
 }
 
-export type HfH3Invocation = { endpoint: string; args: unknown[]; inputNames: string[]; defaultsUsed: string[] };
+export type HfH3Invocation = { endpoint: string; args: unknown[]; inputNames: string[]; defaultsUsed: string[]; selectedPreset?: HfPresetSpec | null };
 
 /** Build arguments in the order discovered from the live Space schema. */
 export function buildHfH3Invocation(schema: HfH3ApiSchema, request: VideoGenerationRequest): HfH3Invocation {
   if (!schema.compatible || !schema.endpoint) throw new Error(schema.reason || 'HF API schema is incompatible.');
   const defaultsUsed: string[] = [];
+  const selectedPreset = selectHfFastPreset(schema);
   const args = schema.inputs.map(input => {
     const value = input.defaultValue;
     if (matches(input, [/negative|avoid|exclude/i])) return request.negativePrompt ?? value ?? '';
@@ -115,16 +188,18 @@ export function buildHfH3Invocation(schema: HfH3ApiSchema, request: VideoGenerat
     if (matches(input, [/start.?image|input.?image|image.?path|init.?image/i])) return request.assets.startImage ?? value ?? null;
     if (matches(input, [/end.?image/i])) return request.assets.endImage ?? value ?? null;
     if (matches(input, [/duration|seconds|length/i])) return bounded(request.durationSeconds, input);
-    if (matches(input, [/step|inference/i])) return bounded(request.steps ?? (Number(input.defaultValue) || 12), input);
+    if (matches(input, [/step|inference/i])) return bounded(selectedPreset?.steps ?? request.steps ?? (Number(input.defaultValue) || 10), input);
     if (matches(input, [/seed/i])) return request.seed ?? 42;
     if (matches(input, [/upsample|enhance/i])) return false;
-    if (matches(input, [/canvas|aspect|ratio/i])) return request.aspectRatio;
+    if (matches(input, [/generation.?preset|speed.?preset/i])) return selectedPreset?.value ?? value ?? null;
+    if (matches(input, [/acceleration|schedule|cache/i])) return selectedPreset?.acceleration ?? value ?? null;
+    if (matches(input, [/canvas|aspect|ratio/i])) return canvasValue(input, request.aspectRatio);
     if (matches(input, [/resolution|size/i])) return request.resolution;
     if (matches(input, [/audio|sound/i])) return request.audio;
     defaultsUsed.push(input.name);
     return value ?? null;
   });
-  return { endpoint: schema.endpoint, args, inputNames: schema.inputs.map(input => input.name), defaultsUsed };
+  return { endpoint: schema.endpoint, args, inputNames: schema.inputs.map(input => input.name), defaultsUsed, selectedPreset };
 }
 
 export function summarizeHfH3Schema(schema: HfH3ApiSchema) {
@@ -134,6 +209,10 @@ export function summarizeHfH3Schema(schema: HfH3ApiSchema) {
     inputCount: schema.inputs.length,
     inputs: schema.inputs.map(input => ({ name: input.name, kind: input.kind, required: input.required, min: input.min, max: input.max, choices: input.choices })),
     outputCount: schema.outputs.length,
+    presets: schema.presets,
+    defaultPreset: schema.defaultPreset,
+    duration: schema.duration,
+    canvasChoices: schema.canvasChoices,
     errorCode: schema.errorCode,
     reason: schema.reason,
   };

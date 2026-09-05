@@ -6,6 +6,10 @@
  * database (or leak a user's workspace state into another account).
  */
 
+import { accountStorageKey } from './account-storage.ts';
+import { getSession } from './auth.ts';
+import { normalizeProfile, type CreatorProfile, type OpportunityUnit } from './product-convergence.ts';
+
 export type NicheContextSource = 'TREND_RADAR' | 'NICHE_EVALUATION';
 
 export type RadarReturnState = {
@@ -35,6 +39,7 @@ export type NicheAnalysisContext = {
   confidence?: number | string;
   source: NicheContextSource;
   returnState?: RadarReturnState;
+  discovery?: { unit: OpportunityUnit; creatorProfile: CreatorProfile };
 };
 
 export const NICHE_CONTEXT_STORAGE_KEY = 'signalcraft:niche-analysis-context:v1';
@@ -75,6 +80,7 @@ function cleanContext(value: unknown): NicheAnalysisContext | null {
     representativeChannels: Array.isArray(value.representativeChannels) ? value.representativeChannels : undefined,
     confidence: typeof value.confidence === 'number' || typeof value.confidence === 'string' ? value.confidence : undefined,
     source,
+    discovery: cleanDiscovery(value.discovery),
     returnState: returnState ? {
       scrollPosition: typeof returnState.scrollPosition === 'number' && Number.isFinite(returnState.scrollPosition) ? returnState.scrollPosition : undefined,
       page: typeof returnState.page === 'number' && Number.isFinite(returnState.page) ? returnState.page : undefined,
@@ -85,10 +91,17 @@ function cleanContext(value: unknown): NicheAnalysisContext | null {
   };
 }
 
+function cleanDiscovery(value: unknown): NicheAnalysisContext['discovery'] {
+  if (!isRecord(value) || !isRecord(value.unit)) return undefined;
+  const unit = value.unit;
+  if (typeof unit.id !== 'string' || typeof unit.niche !== 'string' || !['SHORTS', 'LONG_FORM'].includes(String(unit.format)) || !isRecord(unit.market) || !Array.isArray(unit.market.facts) || !Array.isArray(unit.market.evidenceVideoIds) || !isRecord(unit.requirements) || !isRecord(unit.originality) || !Array.isArray(unit.tests)) return undefined;
+  return { unit: unit as OpportunityUnit, creatorProfile: normalizeProfile(value.creatorProfile) };
+}
+
 export function readNicheAnalysisContext(): NicheAnalysisContext | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(NICHE_CONTEXT_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(accountStorageKey(NICHE_CONTEXT_STORAGE_KEY, getSession()));
     return cleanContext(raw ? JSON.parse(raw) : null);
   } catch {
     return null;
@@ -98,7 +111,7 @@ export function readNicheAnalysisContext(): NicheAnalysisContext | null {
 export function saveNicheAnalysisContext(context: NicheAnalysisContext) {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(NICHE_CONTEXT_STORAGE_KEY, JSON.stringify(context));
+    window.sessionStorage.setItem(accountStorageKey(NICHE_CONTEXT_STORAGE_KEY, getSession()), JSON.stringify(context));
   } catch {
     // Storage can be disabled in private browsing; the URL hand-off still works.
   }
@@ -106,7 +119,7 @@ export function saveNicheAnalysisContext(context: NicheAnalysisContext) {
 
 export function clearNicheAnalysisContext() {
   if (typeof window === 'undefined') return;
-  try { window.sessionStorage.removeItem(NICHE_CONTEXT_STORAGE_KEY); } catch { /* ignore */ }
+  try { window.sessionStorage.removeItem(accountStorageKey(NICHE_CONTEXT_STORAGE_KEY, getSession())); } catch { /* ignore */ }
 }
 
 function queryValue(value: unknown) {
@@ -151,7 +164,10 @@ export function contextFromQuery(params: URLSearchParams) {
   const source = params.get('source') === 'trend-radar' || legacyRadar ? 'TREND_RADAR' : params.get('source') === 'niche-evaluation' ? 'NICHE_EVALUATION' : undefined;
   const nicheName = queryValue(params.get('nicheName')) || queryValue(params.get('topic'));
   if (!source || !nicheName) return null;
-  const previous = readNicheAnalysisContext();
+  const saved = readNicheAnalysisContext();
+  const requestedId = queryValue(params.get('nicheId')) || queryValue(params.get('opportunityId'));
+  const requestedType = queryValue(params.get('type'));
+  const previous = saved && saved.nicheName === nicheName && (!requestedId || saved.nicheId === requestedId) && (!requestedType || requestedType.toLowerCase().includes('short') === Boolean(saved.contentType?.toLowerCase().includes('short'))) ? saved : null;
   const context = cleanContext({
     ...(previous && previous.nicheName === nicheName ? previous : {}),
     nicheId: queryValue(params.get('nicheId')) || queryValue(params.get('opportunityId')) || previous?.nicheId,

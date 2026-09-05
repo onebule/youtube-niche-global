@@ -22,6 +22,18 @@ const now = () => new Date().toISOString();
 function latency(candidate: ProviderCandidate) { return candidate.health.latencyMs ?? Number.POSITIVE_INFINITY; }
 function isHealthy(health: ProviderHealth) { return health.state === 'AVAILABLE' || health.state === 'DEGRADED'; }
 function modelMatches(provider: VideoComputeProvider, model: string | null) { return !model || provider.supportedModels.some(value => value.toLowerCase() === model.toLowerCase()); }
+function freeFirstRank(candidate: ProviderCandidate) {
+  if (candidate.provider.costClass === 'FREE_QUOTA') return 0;
+  if (candidate.provider.costClass === 'FREE_CREDIT' || candidate.provider.creditBacked) return 1;
+  return 2;
+}
+function quotaEstimate(candidate: ProviderCandidate) { return candidate.cost.estimatedQuotaSeconds ?? Number.POSITIVE_INFINITY; }
+function freeFirstCompare(a: ProviderCandidate, b: ProviderCandidate) {
+  return freeFirstRank(a) - freeFirstRank(b)
+    || quotaEstimate(a) - quotaEstimate(b)
+    || comparableCost(a) - comparableCost(b)
+    || latency(a) - latency(b);
+}
 
 export class ComputeBroker {
   private readonly registry: ProviderRegistry;
@@ -53,6 +65,19 @@ export class ComputeBroker {
       if (!provider.supportedWorkflows.includes(request.workflow)) reasons.push(`workflow ${request.workflow} 未声明支持。`);
       if (!isHealthy(providerHealth)) { compatible = false; reasons.push(`provider 状态为 ${providerHealth.state}。`); }
       if (providerHealth.modelState === 'MODEL_MISSING') { compatible = false; reasons.push('模型缓存未就绪。'); }
+      const apiMetadata = providerHealth.metadata?.api;
+      if (apiMetadata && typeof apiMetadata === 'object' && (apiMetadata as { compatible?: unknown }).compatible === false) {
+        compatible = false;
+        reasons.push('provider API 契约不兼容。');
+      }
+      const quotaDetails = providerHealth.metadata?.quotaDetails;
+      if (quotaDetails && typeof quotaDetails === 'object' && (quotaDetails as { quotaStatus?: unknown }).quotaStatus === 'INSUFFICIENT') {
+        compatible = false;
+        const remaining = (quotaDetails as { remainingGpuSeconds?: unknown }).remainingGpuSeconds;
+        const required = (quotaDetails as { estimatedRequiredGpuSeconds?: unknown }).estimatedRequiredGpuSeconds;
+        reasons.push(`免费额度不足：预计 ${String(required ?? '未知')}s，剩余 ${String(remaining ?? '未知')}s。`);
+      }
+      if (providerHealth.metadata?.quota === 'EXHAUSTED') { compatible = false; reasons.push('免费额度已耗尽。'); }
       if (!this.breaker.canRequest(provider.providerId)) { compatible = false; reasons.push('Circuit breaker 暂时打开。'); }
       if (request.requestedProviderId && provider.providerId !== request.requestedProviderId) { compatible = false; reasons.push('不符合手动 provider 选择。'); }
       candidates.push({ provider, health: providerHealth, cost, compatible, reasons });
@@ -88,7 +113,7 @@ export class ComputeBroker {
         ? selectable.find(candidate => candidate.provider.providerId === request.requestedProviderId) || null
         : selectable.find(candidate => modelMatches(candidate.provider, request.model)) || null;
     } else if (mode === 'FREE_FIRST') {
-      selected = [...selectable].sort((a, b) => Number(b.provider.creditBacked) - Number(a.provider.creditBacked) || comparableCost(a) - comparableCost(b) || latency(a) - latency(b))[0] || null;
+      selected = [...selectable].sort(freeFirstCompare)[0] || null;
     } else if (mode === 'LOWEST_COST') {
       selected = [...selectable].sort((a, b) => comparableCost(a) - comparableCost(b) || latency(a) - latency(b))[0] || null;
     } else if (mode === 'FASTEST') {
@@ -96,11 +121,11 @@ export class ComputeBroker {
     } else if (mode === 'BEST_QUALITY') {
       selected = [...selectable].sort((a, b) => Number(b.provider.hardwareProfile.productionEligible) - Number(a.provider.hardwareProfile.productionEligible) || Number(b.provider.costClass === 'API') - Number(a.provider.costClass === 'API') || comparableCost(a) - comparableCost(b))[0] || null;
     } else {
-      selected = [...selectable].sort((a, b) => Number(b.provider.creditBacked) - Number(a.provider.creditBacked) || comparableCost(a) - comparableCost(b) || latency(a) - latency(b))[0] || null;
+      selected = [...selectable].sort(freeFirstCompare)[0] || null;
     }
 
     if (mode === 'CUSTOM' && !request.requestedProviderId && !request.model) throw new ComputeRequestError('CUSTOM 模式需要 providerId 或 model。');
-    const fallbackChain = selected ? [selected, ...selectable.filter(candidate => candidate.provider.providerId !== selected?.provider.providerId).sort((a, b) => Number(b.provider.creditBacked) - Number(a.provider.creditBacked) || comparableCost(a) - comparableCost(b)).slice(0, this.config.maxFallbacks)].map(candidate => candidate.provider.providerId) : [];
+    const fallbackChain = selected ? [selected, ...selectable.filter(candidate => candidate.provider.providerId !== selected?.provider.providerId).sort(freeFirstCompare).slice(0, this.config.maxFallbacks)].map(candidate => candidate.provider.providerId) : [];
     const routingReason = budgetExceeded
       ? '所有可用 provider 的预计成本均超过 maxCostUsd，未提交任务。'
       : selected
@@ -161,17 +186,20 @@ export class ComputeBroker {
         throw new ProviderError(output.error?.message || 'Provider returned a failed state.', output.error?.reason || 'UNKNOWN_PROVIDER_ERROR', output.error?.retryable ?? true);
       } catch (error) {
         const providerError = error instanceof ProviderError ? error : new ProviderError('Provider execution failed.', 'UNKNOWN_PROVIDER_ERROR', true);
-        this.breaker.recordFailure(providerId);
-        this.log('compute.provider.failed', { requestId: request.requestId, jobId: job.jobId, provider: providerId, reason: providerError.reason, retryable: providerError.retryable });
-        const hasFallback = providerError.retryable && plan.fallbackChain.indexOf(providerId) < plan.fallbackChain.length - 1;
+        const quotaBlocked = providerError.reason === 'HF_ZERO_GPU_QUOTA_EXHAUSTED';
+        // A quota admission refusal is a resource state, not a model/provider
+        // failure. It must not open the circuit or trigger fallback spending.
+        if (!quotaBlocked) this.breaker.recordFailure(providerId);
+        this.log('compute.provider.failed', { requestId: request.requestId, jobId: job.jobId, provider: providerId, reason: providerError.reason, retryable: providerError.retryable, failureClass: quotaBlocked ? 'RESOURCE_QUOTA' : undefined, countsTowardModelFailureRate: quotaBlocked ? false : undefined });
+        const hasFallback = !quotaBlocked && providerError.retryable && plan.fallbackChain.indexOf(providerId) < plan.fallbackChain.length - 1;
         if (hasFallback) {
-          latest = await this.store.update(job.jobId, { status: 'RETRYING', error: { reason: providerError.reason, message: providerError.message, retryable: true } }) || latest;
-          latest = await this.store.update(job.jobId, { status: 'FALLBACK', error: { reason: providerError.reason, message: providerError.message, retryable: true } }) || latest;
+          latest = await this.store.update(job.jobId, { status: 'RETRYING', error: { reason: providerError.reason, message: providerError.message, retryable: true, details: providerError.details } }) || latest;
+          latest = await this.store.update(job.jobId, { status: 'FALLBACK', error: { reason: providerError.reason, message: providerError.message, retryable: true, details: providerError.details } }) || latest;
           this.log('compute.fallback', { requestId: request.requestId, jobId: job.jobId, from: providerId });
           continue;
         }
-        this.log('compute.cost.actual', { requestId: request.requestId, jobId: job.jobId, provider: providerId, actualCostUsd: null, source: 'UNKNOWN', success: false, failureReason: providerError.reason });
-        latest = await this.store.update(job.jobId, { status: 'FAILED', error: { reason: providerError.reason, message: providerError.message, retryable: providerError.retryable }, finishedAt: now() }) || latest;
+        this.log('compute.cost.actual', { requestId: request.requestId, jobId: job.jobId, provider: providerId, actualCostUsd: null, source: 'UNKNOWN', success: false, failureReason: providerError.reason, failureClass: quotaBlocked ? 'RESOURCE_QUOTA' : undefined, countsTowardModelFailureRate: quotaBlocked ? false : undefined });
+        latest = await this.store.update(job.jobId, { status: 'FAILED', error: { reason: providerError.reason, message: providerError.message, retryable: providerError.retryable, details: providerError.details }, finishedAt: now() }) || latest;
         return { jobId: latest.jobId, selectedProvider: latest.selectedProviderId, estimatedCostUsd: plan.estimatedCostUsd, routingReason: plan.routingReason, status: latest.status, fallbackChain: plan.fallbackChain, dryRun: false, job: latest };
       }
     }

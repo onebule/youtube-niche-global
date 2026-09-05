@@ -8,6 +8,7 @@ const isVideo = (value: string, contentType: string | null) => Boolean(contentTy
 function candidates(value: unknown, seen = new Set<unknown>()): Array<{ value: string; contentType: string | null }> {
   if (value === null || value === undefined || seen.has(value)) return [];
   if (typeof value === 'string') return isVideo(value, null) ? [{ value, contentType: null }] : [];
+  if (Array.isArray(value)) return value.slice(0, 50).flatMap(item => candidates(item, seen));
   if (typeof value !== 'object') return [];
   seen.add(value);
   const root = record(value);
