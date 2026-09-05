@@ -46,6 +46,10 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
     title: 'SignalCraft 定价',
     description: '查看 SignalCraft 的公开研究与创作工作台方案。',
   },
+  '/owner': {
+    title: 'SignalCraft 站点管理台',
+    description: '查看采集、数据、账号与额度服务状态；管理权限由服务器验证。',
+  },
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ slug?: string[] }> }): Promise<Metadata> {
