@@ -34,6 +34,8 @@ const copy = {
   },
 } as const;
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginPage({ account, locale, onLocaleChange, onSignIn, onPasswordAuth, onContinue }: LoginPageProps) {
   const text = copy[locale];
   const [mode, setMode] = useState<'login'|'register'>('login');
@@ -60,10 +62,18 @@ export default function LoginPage({ account, locale, onLocaleChange, onSignIn, o
       setError(text.invalidPasswordMatch);
       return;
     }
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      setError(locale === 'zh' ? '请输入有效的邮箱地址。' : 'Enter a valid email address.');
+      return;
+    }
+    if (password.length < 8 || password.length > 128) {
+      setError(locale === 'zh' ? '密码需要 8–128 位字符。' : 'Password must be 8–128 characters.');
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
-    const result = await onPasswordAuth({ action: mode, email, password, name: mode === 'register' ? name : undefined });
+    const result = await onPasswordAuth({ action: mode, email: email.trim().toLowerCase(), password, name: mode === 'register' ? name.trim() : undefined });
     setBusy(false);
     if (!result.ok) {
       setError(result.error || (locale === 'zh' ? '账号操作未完成，请稍后重试。' : 'The account action could not be completed. Try again.'));

@@ -2,6 +2,8 @@ export type AccountSession={accessToken:string;email:string;name:string;userId?:
 export type PasswordAuthInput={action:'login'|'register';email:string;password:string;name?:string};
 export type PasswordAuthResult={ok:boolean;session?:AccountSession;requiresEmailConfirmation?:boolean;email?:string;error?:string;code?:string};
 
+const AUTH_ENDPOINT = process.env.NEXT_PUBLIC_AUTH_URL || 'https://youtube-niche-global-api.vercel.app/api/auth';
+
 const key='signalcraft-auth-v1';
 const legacyFrontendHosts=new Set(['youtube-niche-global.vercel.app','www.youtube-niche-global.vercel.app']);
 // This URL is public by design. The hosted client only needs it to start the
@@ -80,7 +82,7 @@ export function startGoogleSignIn({direct=false}:{direct?:boolean}={}){
 
 async function postPasswordAuth(input:PasswordAuthInput|{action:'refresh';refreshToken:string}):Promise<PasswordAuthResult>{
   try{
-    const response=await fetch('/api/auth',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(input),cache:'no-store'});
+    const response=await fetch(AUTH_ENDPOINT,{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(input),cache:'no-store'});
     const payload=await response.json().catch(()=>({})) as PasswordAuthResult;
     if(!response.ok)return {ok:false,error:typeof payload.error==='string'?payload.error:'账号操作未完成，请稍后重试。',code:payload.code};
     const session=sessionFromPayload(payload,'password');
