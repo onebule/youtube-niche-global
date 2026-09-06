@@ -1,5 +1,5 @@
 import type { LongformOpportunity, LongformResponse } from './longform';
-import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence } from './evidence-contract.ts';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataAvailability, normalizeDataQuality, normalizeEvidence } from './evidence-contract.ts';
 import { evaluateLongformEntryDecision } from './entry-decision.ts';
 import { normalizeNicheBreakoutSummary } from './niche-signals.ts';
 import { normalizeNicheLifecycleSummary } from './niche-lifecycle.ts';
@@ -281,6 +281,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
     schemaVersion: textOr(raw.schemaVersion, DATA_QUALITY_SCHEMA_VERSION),
     evidence,
     dataQuality: effectiveDataQuality,
+    dataAvailability: normalizeDataAvailability(raw.dataAvailability),
     available: raw.available === true,
     engineVersion: textOr(raw.engineVersion, 'unknown'),
     dataScope: {

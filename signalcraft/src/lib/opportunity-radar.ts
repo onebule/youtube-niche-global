@@ -1,6 +1,6 @@
 import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
-import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataAvailability, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 import type { ConfidenceLevel } from './entry-decision.ts';
 
 // Trend Radar uses the long-form opportunity engine through the backend's
@@ -74,6 +74,7 @@ export type OpportunityRadarResponse = {
   schemaVersion?: string;
   evidence?: EvidenceContract;
   dataQuality?: DataQuality;
+  dataAvailability?: DataAvailability;
   available: boolean;
   engineVersion: string;
   window: '7d' | '14d' | '30d';

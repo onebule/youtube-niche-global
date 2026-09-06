@@ -13,6 +13,22 @@ export type EvidenceType = 'FACT' | 'INFERENCE' | 'LOW_CONFIDENCE';
 export type DataQualityLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT';
 export type DataValueState = 'KNOWN' | 'ZERO' | 'UNKNOWN' | 'NOT_APPLICABLE';
 export type BaselineStatus = 'VERIFIED' | 'INSUFFICIENT' | 'UNAVAILABLE';
+export type ExternalDataState = 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE';
+export type FreshnessState = 'FRESH' | 'AGING' | 'STALE' | 'UNKNOWN';
+
+export type DataAvailability = {
+  version: string;
+  calibration?: { status: 'CALIBRATION_REQUIRED' | 'CALIBRATED'; version: string };
+  sources: Array<{
+    id: string;
+    state: ExternalDataState;
+    dataClass: 'FACT' | 'DERIVED' | 'INFERENCE' | 'ESTIMATE';
+    freshness: FreshnessState;
+    capturedAt: string | null;
+    note: string;
+  }>;
+  metricSemantics?: Record<string, string>;
+};
 
 export type EvidenceFact = {
   statement: string;
@@ -136,6 +152,30 @@ export function normalizeDataQuality(value: unknown, fallback: Partial<DataQuali
     source: text(raw.source) ?? fallback.source ?? null,
     schemaVersion: text(raw.schemaVersion) || fallback.schemaVersion || DATA_QUALITY_SCHEMA_VERSION,
   };
+}
+
+export function normalizeDataAvailability(value: unknown): DataAvailability | undefined {
+  if (!isRecord(value) || !Array.isArray(value.sources)) return undefined;
+  const sources = value.sources.flatMap((item): DataAvailability['sources'] => {
+    if (!isRecord(item)) return [];
+    const id = text(item.id);
+    const note = text(item.note);
+    const state = item.state === 'AVAILABLE' || item.state === 'DEGRADED' || item.state === 'UNAVAILABLE' ? item.state : null;
+    const dataClass = item.dataClass === 'FACT' || item.dataClass === 'DERIVED' || item.dataClass === 'INFERENCE' || item.dataClass === 'ESTIMATE' ? item.dataClass : null;
+    const freshness = item.freshness === 'FRESH' || item.freshness === 'AGING' || item.freshness === 'STALE' || item.freshness === 'UNKNOWN' ? item.freshness : null;
+    return id && note && state && dataClass && freshness ? [{ id, note, state, dataClass, freshness, capturedAt: validIso(item.capturedAt) }] : [];
+  });
+  if (!sources.length) return undefined;
+  const calibrationStatus = isRecord(value.calibration) && (value.calibration.status === 'CALIBRATION_REQUIRED' || value.calibration.status === 'CALIBRATED')
+    ? value.calibration.status
+    : null;
+  const calibration: DataAvailability['calibration'] = calibrationStatus && isRecord(value.calibration) && text(value.calibration.version)
+    ? { status: calibrationStatus, version: text(value.calibration.version)! }
+    : undefined;
+  const metricSemantics = isRecord(value.metricSemantics)
+    ? Object.fromEntries(Object.entries(value.metricSemantics).flatMap(([key, item]) => typeof item === 'string' && item.trim() ? [[key, item.trim()]] : []))
+    : undefined;
+  return { version: text(value.version) || 'data-availability.v1', calibration, sources, metricSemantics };
 }
 
 export function deriveDataQuality(input: {

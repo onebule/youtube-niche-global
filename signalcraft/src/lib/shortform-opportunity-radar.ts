@@ -1,6 +1,7 @@
 import { authHeaders } from './auth.ts';
+import type { DataAvailability } from './evidence-contract.ts';
 import { clientErrorMessage } from './client-error.ts';
-import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
+import { DATA_QUALITY_SCHEMA_VERSION, deriveDataQuality, normalizeDataAvailability, normalizeDataQuality, normalizeEvidence, type DataQuality, type EvidenceContract } from './evidence-contract.ts';
 import type { ConfidenceLevel } from './entry-decision.ts';
 
 // Keep the Shorts radar on the same verified API origin as the long-form
@@ -67,6 +68,7 @@ export type ShortformRadarEvent = {
 };
 
 export type ShortformRadarResponse = {
+  dataAvailability?: DataAvailability;
   schemaVersion?: string;
   evidence?: EvidenceContract;
   dataQuality?: DataQuality;
@@ -104,7 +106,7 @@ export function normalizeShortformRadarResponse(payload: unknown): ShortformRada
     capturedAt: scope?.latestCapturedAt || null,
     source: scope?.source || 'unknown',
   });
-  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engine: typeof raw.engine === 'string' ? raw.engine : 'unknown', engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', format: 'SHORT_FORM', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
+  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), dataAvailability: normalizeDataAvailability(rawRecord.dataAvailability), available: raw.available === true, engine: typeof raw.engine === 'string' ? raw.engine : 'unknown', engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', format: 'SHORT_FORM', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
 }
 
 export async function fetchShortformOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {

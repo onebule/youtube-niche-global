@@ -1,7 +1,7 @@
 import { authHeaders } from './auth.ts';
 import { clientErrorMessage } from './client-error.ts';
 import { normalizeLongformResponse } from './longform-response';
-import type { DataQuality, EvidenceContract, EvidenceDecisionReason } from './evidence-contract.ts';
+import type { DataAvailability, DataQuality, EvidenceContract, EvidenceDecisionReason } from './evidence-contract.ts';
 import type { ConfidenceLevel, EntryDecision, PerformanceAssessment } from './entry-decision.ts';
 import type { NicheBreakoutSummary } from './niche-signals.ts';
 import type { NicheLifecycleSummary } from './niche-lifecycle.ts';
@@ -100,6 +100,7 @@ export type LongformResponse = {
   schemaVersion?: string;
   evidence?: EvidenceContract;
   dataQuality?: DataQuality;
+  dataAvailability?: DataAvailability;
   available: boolean;
   engineVersion: string;
   dataScope: { source: string; markets: string[]; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; marketSampleLimit?: number; failedMarkets?: string[]; note: string };
