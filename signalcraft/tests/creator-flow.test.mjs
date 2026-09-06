@@ -7,12 +7,18 @@ test('creator project restores safely from an incomplete local snapshot', () => 
     title: '夏日产品片',
     brief: '清晨的玻璃瓶',
     format: 'landscape',
+    sequenceTitle: '主镜头序列',
   });
   assert.deepEqual(normalizeCreatorProject({ title: '', format: 'unsupported' }), {
     title: '未命名项目',
     brief: '',
     format: 'short',
+    sequenceTitle: '主镜头序列',
   });
+});
+
+test('creator project keeps a creator-defined sequence title when restoring', () => {
+  assert.equal(normalizeCreatorProject({ sequenceTitle: '开场到收束' }).sequenceTitle, '开场到收束');
 });
 
 test('project brief creates a draft only and never implies a generation', () => {

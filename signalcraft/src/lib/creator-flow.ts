@@ -9,6 +9,8 @@ export type CreatorProject = {
   title: string;
   brief: string;
   format: CreatorProjectFormat;
+  /** A human-facing label for the existing ordered Shot workspace. */
+  sequenceTitle: string;
 };
 
 export type CreatorFlowStage = 'brief' | 'reference' | 'direction' | 'ready' | 'rendering' | 'complete' | 'needs_attention';
@@ -20,7 +22,7 @@ function clean(value: unknown, maximum: number) {
 }
 
 export function createCreatorProject(): CreatorProject {
-  return { title: '未命名项目', brief: '', format: 'short' };
+  return { title: '未命名项目', brief: '', format: 'short', sequenceTitle: '主镜头序列' };
 }
 
 /** Accept old local snapshots without asking a creator to rebuild a project. */
@@ -31,6 +33,7 @@ export function normalizeCreatorProject(value: unknown): CreatorProject {
     title: clean(candidate.title, 80) || '未命名项目',
     brief: clean(candidate.brief, 1200),
     format,
+    sequenceTitle: clean(candidate.sequenceTitle, 80) || '主镜头序列',
   };
 }
 

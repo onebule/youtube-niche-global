@@ -917,15 +917,21 @@ export default function VideoCanvasStudio({
   const alternateModelDetails = useMemo(() => models.find(item => item.id === alternateModel) || null, [alternateModel, models]);
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
   const shotRailItems = useMemo(() => {
-    const current = { shot, order: canvasSemantics.shot.order || shot, status: canvasSemantics.shot.status };
+    const current = {
+      shot,
+      order: canvasSemantics.shot.order || shot,
+      status: canvasSemantics.shot.status,
+      title: canvasSemantics.shot.title,
+    };
     const byNumber = new Map(shotSnapshots.map(snapshot => [snapshot.shot, {
       shot: snapshot.shot,
       order: snapshot.semantics.shot.order || snapshot.shot,
       status: snapshot.semantics.shot.status,
+      title: snapshot.semantics.shot.title,
     }]));
     byNumber.set(shot, current);
     return Array.from(byNumber.values()).sort((left, right) => left.order - right.order || left.shot - right.shot);
-  }, [canvasSemantics.shot.order, canvasSemantics.shot.status, shot, shotSnapshots]);
+  }, [canvasSemantics.shot.order, canvasSemantics.shot.status, canvasSemantics.shot.title, shot, shotSnapshots]);
   const nextShotNumber = () => Math.max(shot, ...shotSnapshots.map(snapshot => snapshot.shot), 0) + 1;
 
   const currentShotRailIndex = shotRailItems.findIndex(item => item.shot === shot);
@@ -940,19 +946,22 @@ export default function VideoCanvasStudio({
     applyShotSnapshot(target);
   };
 
-  const reorderCurrentShot = (direction: 'up' | 'down') => {
-    if ((direction === 'up' && !canMoveCurrentShotUp) || (direction === 'down' && !canMoveCurrentShotDown)) return false;
+  const reorderShot = (targetShot: number, direction: 'up' | 'down') => {
+    const targetIndex = shotRailItems.findIndex(item => item.shot === targetShot);
+    if (targetIndex < 0 || (direction === 'up' && targetIndex === 0) || (direction === 'down' && targetIndex === shotRailItems.length - 1)) return false;
     const currentSnapshot = captureCurrentShot();
-    const reordered = reorderShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, direction);
+    const reordered = reorderShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), targetShot, direction);
     const active = reordered.find(snapshot => snapshot.shot === shot);
     if (!active) return false;
     setShotSnapshots(reordered);
     setCanvasSemantics(active.semantics);
     notify(direction === 'up'
-      ? (zh ? `镜头 ${String(shot).padStart(2, '0')} 已前移。` : `Shot ${String(shot).padStart(2, '0')} moved earlier.`)
-      : (zh ? `镜头 ${String(shot).padStart(2, '0')} 已后移。` : `Shot ${String(shot).padStart(2, '0')} moved later.`));
+      ? (zh ? `镜头 ${String(targetShot).padStart(2, '0')} 已前移。` : `Shot ${String(targetShot).padStart(2, '0')} moved earlier.`)
+      : (zh ? `镜头 ${String(targetShot).padStart(2, '0')} 已后移。` : `Shot ${String(targetShot).padStart(2, '0')} moved later.`));
     return true;
   };
+
+  const reorderCurrentShot = (direction: 'up' | 'down') => reorderShot(shot, direction);
 
   const deleteCurrentShot = () => {
     if (shotActionsDisabled) return false;
@@ -2416,6 +2425,7 @@ export default function VideoCanvasStudio({
       ...patch,
       title: typeof patch.title === 'string' ? patch.title.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) : previous.title,
       brief: typeof patch.brief === 'string' ? patch.brief.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 1200) : previous.brief,
+      sequenceTitle: typeof patch.sequenceTitle === 'string' ? patch.sequenceTitle.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) : previous.sequenceTitle,
     }));
   };
 
@@ -2972,6 +2982,29 @@ export default function VideoCanvasStudio({
         <label className="creator-flow-brief-wide"><span>{zh ? '内容概述' : 'Creative brief'}</span><textarea value={project.brief} maxLength={1200} rows={3} onChange={event => updateProject({ brief: event.target.value })} placeholder={zh ? '写下主体、受众、情绪或想表达的故事。例如：一只橘猫在雨后街道缓慢前行，氛围温暖克制。' : 'Describe the subject, audience, mood, or story. For example: A ginger cat walks slowly through a rain-washed street with a warm, restrained mood.'} /></label>
       </div>
       <div className="creator-flow-brief-action"><span className={'creator-flow-stage is-' + creatorStage}>{creatorStage === 'ready' ? (zh ? '可生成' : 'Ready') : creatorStage === 'complete' ? (zh ? '已有结果' : 'Result ready') : creatorStage === 'rendering' ? (zh ? '生成中' : 'Rendering') : creatorStage === 'needs_attention' ? (zh ? '需要处理' : 'Needs attention') : (zh ? '创作中' : 'In progress')}</span><button type="button" onClick={useProjectBriefForShot}>{zh ? '带入当前镜头' : 'Use in current shot'}<span aria-hidden="true">→</span></button></div>
+    </section>
+
+    <section className="creator-sequence" aria-labelledby="creator-sequence-title">
+      <div className="creator-sequence-copy"><span>02 · {zh ? '镜头序列' : 'SEQUENCE'}</span><h2 id="creator-sequence-title">{zh ? '把镜头排成一条故事线。' : 'Arrange shots into a story line.'}</h2><p>{zh ? '这是已有镜头的真实顺序：可切换、前移或后移。排序不会提交生成任务，也不会改变任何已生成版本。' : 'This is the real order of your existing shots. Switch, move earlier, or move later. Reordering never submits a task or changes a generated version.'}</p></div>
+      <div className="creator-sequence-workspace">
+        <label className="creator-sequence-name"><span>{zh ? '序列名称' : 'Sequence name'}</span><input value={project.sequenceTitle} maxLength={80} onChange={event => updateProject({ sequenceTitle: event.target.value })} onBlur={() => updateProject({ sequenceTitle: project.sequenceTitle.trim() || (zh ? '主镜头序列' : 'Main shot sequence') })} placeholder={zh ? '例如：开场到收束' : 'For example: Opening to close'} /></label>
+        <div className="creator-sequence-list" role="list" aria-label={zh ? '镜头序列' : 'Shot sequence'}>
+          {shotRailItems.map((item, index) => {
+            const title = item.title.trim() || `${zh ? '镜头' : 'Shot'} ${String(item.shot).padStart(2, '0')}`;
+            const status = item.status === 'generating' ? (zh ? '生成中' : 'Rendering') : item.status === 'completed' ? (zh ? '已完成' : 'Complete') : item.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft');
+            return <article key={item.shot} role="listitem" className={'creator-sequence-shot ' + (item.shot === shot ? 'is-current ' : '') + 'is-' + item.status}>
+              <button type="button" className="creator-sequence-shot-main" onClick={() => switchShot(item.shot)} aria-current={item.shot === shot ? 'step' : undefined}>
+                <span className="creator-sequence-order">{String(index + 1).padStart(2, '0')}</span><span className="creator-sequence-shot-copy"><b>{title}</b><small>{status}{item.shot !== index + 1 ? ` · ID ${String(item.shot).padStart(2, '0')}` : ''}</small></span><i aria-hidden="true" />
+              </button>
+              <div className="creator-sequence-shot-actions" aria-label={zh ? `${title} 的排序操作` : `Order controls for ${title}`}>
+                <button type="button" disabled={index === 0} onClick={() => reorderShot(item.shot, 'up')} aria-label={zh ? `将 ${title} 前移` : `Move ${title} earlier`}>↑</button>
+                <button type="button" disabled={index === shotRailItems.length - 1} onClick={() => reorderShot(item.shot, 'down')} aria-label={zh ? `将 ${title} 后移` : `Move ${title} later`}>↓</button>
+              </div>
+            </article>;
+          })}
+        </div>
+      </div>
+      <div className="creator-sequence-action"><span>{zh ? `${shotRailItems.length} 个镜头` : `${shotRailItems.length} shot${shotRailItems.length === 1 ? '' : 's'}`}</span><button type="button" disabled={shotActionsDisabled} onClick={() => createNextShot(false)}><span aria-hidden="true">＋</span>{zh ? '添加镜头' : 'Add shot'}</button></div>
     </section>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
