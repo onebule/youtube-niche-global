@@ -87,6 +87,7 @@ import {
 import { normalizeVideoGenerationJob, resolveCanvasModelMode, type CanvasModelMode } from '@/src/lib/canvas-generation';
 import {
   createCreatorProject,
+  creatorAgentContext,
   creatorShotDirection,
   creatorFlowStage,
   mergeCreatorBibleIntoPrompt,
@@ -1934,7 +1935,11 @@ export default function VideoCanvasStudio({
         duration,
         aspectRatio,
         resolution,
-        canvasContext: createCanvasAgentContext(captureCurrentShot(), selectedNodeId),
+        canvasContext: createCanvasAgentContext(captureCurrentShot(), selectedNodeId, creatorAgentContext(project, {
+          shotCount: shotRailItems.length,
+          currentShot: shot,
+          currentShotPosition: Math.max(1, currentShotRailIndex + 1),
+        })),
       });
       // The selected model is a user decision. Treat the plan response as
       // untrusted guidance and preserve the lock even if an upstream Agent

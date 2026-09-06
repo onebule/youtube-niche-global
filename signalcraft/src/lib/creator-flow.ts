@@ -3,6 +3,8 @@
  * canvas semantics. It does not create a second graph, provider integration,
  * or billing path: a project brief only helps a creator start a shot draft.
  */
+import type { CanvasCreatorContext } from './canvas-domain';
+
 export type CreatorProjectFormat = 'short' | 'landscape' | 'square' | 'series';
 export type CreatorBibleField = 'character' | 'scene' | 'style' | 'camera' | 'motion';
 export type CreatorBible = {
@@ -74,6 +76,23 @@ export function normalizeCreatorProject(value: unknown): CreatorProject {
 export function creatorBibleSummary(bible: CreatorBible) {
   const filled = CREATOR_BIBLE_FIELDS.filter(field => Boolean(bible[field].trim()));
   return { filled: filled.length, locked: filled.filter(field => bible.locks[field]).length };
+}
+
+/** A compact, non-secret snapshot for one read-only AI Director planning turn. */
+export function creatorAgentContext(project: CreatorProject, sequence: CanvasCreatorContext['sequence']): CanvasCreatorContext {
+  const bible = {} as CanvasCreatorContext['bible'];
+  for (const field of CREATOR_BIBLE_FIELDS) {
+    bible[field] = { value: project.bible[field], locked: project.bible.locks[field] };
+  }
+  return {
+    project: { title: project.title, format: project.format, sequenceTitle: project.sequenceTitle },
+    sequence: {
+      shotCount: Math.min(999, Math.max(1, Math.round(sequence.shotCount || 1))),
+      currentShot: Math.min(999, Math.max(1, Math.round(sequence.currentShot || 1))),
+      currentShotPosition: Math.min(999, Math.max(1, Math.round(sequence.currentShotPosition || 1))),
+    },
+    bible,
+  };
 }
 
 export function creatorBiblePromptBlock(project: CreatorProject, locale: 'zh' | 'en') {

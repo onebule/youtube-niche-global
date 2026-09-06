@@ -137,6 +137,7 @@ export type CanvasSemantics = {
  */
 export type CanvasAgentContext = {
   schemaVersion: 1;
+  creator: CanvasCreatorContext | null;
   shot: CanvasSemantics['shot'];
   selectedNodeId: CanvasNodeId | null;
   selectedNode: CanvasNodeSemantic | null;
@@ -157,6 +158,27 @@ export type CanvasAgentContext = {
     startAssetId: string | null;
     endAssetId: string | null;
     referenceAssetIds: string[];
+  };
+};
+
+/** Small creator-facing context for read-only AI Director planning. */
+export type CanvasCreatorContext = {
+  project: {
+    title: string;
+    format: 'short' | 'landscape' | 'square' | 'series';
+    sequenceTitle: string;
+  };
+  sequence: {
+    shotCount: number;
+    currentShot: number;
+    currentShotPosition: number;
+  };
+  bible: {
+    character: { value: string; locked: boolean };
+    scene: { value: string; locked: boolean };
+    style: { value: string; locked: boolean };
+    camera: { value: string; locked: boolean };
+    motion: { value: string; locked: boolean };
   };
 };
 

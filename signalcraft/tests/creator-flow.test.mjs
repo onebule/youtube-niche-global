@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { creatorBibleSummary, creatorFlowStage, creatorShotDirection, mergeCreatorBibleIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
+import { creatorAgentContext, creatorBibleSummary, creatorFlowStage, creatorShotDirection, mergeCreatorBibleIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
 
 test('creator project restores safely from an incomplete local snapshot', () => {
   assert.deepEqual(normalizeCreatorProject({ title: '  夏日产品片  ', brief: '  清晨的玻璃瓶  ', format: 'landscape' }), {
@@ -49,6 +49,16 @@ test('project bible can seed a new shot without being mistaken for a shot direct
   assert.equal(draft.applied, true);
   assert.equal(creatorShotDirection(draft.prompt), '');
   assert.equal(creatorFlowStage({ brief: '测试', hasReference: true, hasPrompt: Boolean(creatorShotDirection(draft.prompt)) }), 'direction');
+});
+
+test('AI Director context carries a bounded project, sequence, and explicit lock state', () => {
+  const project = normalizeCreatorProject({ title: '雨夜咖啡馆', format: 'series', bible: { character: 'Lina', style: '自然电影感', locks: { character: true, style: false } } });
+  const context = creatorAgentContext(project, { shotCount: 3, currentShot: 2, currentShotPosition: 2 });
+  assert.equal(context.project.title, '雨夜咖啡馆');
+  assert.equal(context.project.format, 'series');
+  assert.deepEqual(context.sequence, { shotCount: 3, currentShot: 2, currentShotPosition: 2 });
+  assert.deepEqual(context.bible.character, { value: 'Lina', locked: true });
+  assert.deepEqual(context.bible.style, { value: '自然电影感', locked: false });
 });
 
 test('project brief creates a draft only and never implies a generation', () => {

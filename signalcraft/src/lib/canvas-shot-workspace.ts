@@ -1,5 +1,5 @@
 import { type CanvasNodePositions } from './canvas-commands';
-import { normalizeCanvasSemantics, type CanvasAgentContext, type CanvasNodeId, type CanvasSemantics } from './canvas-domain';
+import { normalizeCanvasSemantics, type CanvasAgentContext, type CanvasCreatorContext, type CanvasNodeId, type CanvasSemantics } from './canvas-domain';
 import { normalizeVideoDuration, type VideoGeneration, type VideoGenerationPlan, type VideoModelId } from './video-generation';
 import type { ModelRoutingStrategy } from './video-model-router';
 
@@ -85,10 +85,11 @@ export function restoreFrame(frame: PersistedFrame | null | undefined): Uploaded
   return frame ? { ...frame, previewUrl: '' } : null;
 }
 
-export function createCanvasAgentContext(snapshot: ShotSnapshot, selectedNodeId: CanvasNodeId | null): CanvasAgentContext {
+export function createCanvasAgentContext(snapshot: ShotSnapshot, selectedNodeId: CanvasNodeId | null, creator: CanvasCreatorContext | null = null): CanvasAgentContext {
   const selectedNode = selectedNodeId ? snapshot.semantics.nodes[selectedNodeId] || null : null;
   return {
     schemaVersion: 1,
+    creator,
     shot: snapshot.semantics.shot,
     selectedNodeId,
     selectedNode,
