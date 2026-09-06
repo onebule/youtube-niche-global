@@ -57,7 +57,7 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
       window.location.assign(result.checkoutUrl);
     } catch (error) {
       const billingError = error instanceof BillingClientError ? error : null;
-      if (billingError?.code === 'BILLING_NOT_CONFIGURED' || billingError?.code === 'WAFFO_PRODUCT_NOT_CONFIGURED' || billingError?.code === 'WAFFO_MERCHANT_NOT_CONFIGURED') setCheckoutState('unavailable');
+      if (billingError?.status === 404 || billingError?.code === 'BILLING_ROUTE_NOT_FOUND' || billingError?.code === 'BILLING_NOT_CONFIGURED' || billingError?.code === 'WAFFO_PRODUCT_NOT_CONFIGURED' || billingError?.code === 'WAFFO_MERCHANT_NOT_CONFIGURED') setCheckoutState('unavailable');
       else { setCheckoutState('error'); setCheckoutError(billingError?.message || '安全结算暂时不可用，请稍后重试或联系管理员。'); }
     }
   };
