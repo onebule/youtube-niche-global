@@ -46,32 +46,51 @@ export type TestDirection = {
 };
 export type OpportunityUnit = {
   id: string; format: ContentFormat; niche: string; subNiche: string | null;
+  // A category or a format label is useful evidence metadata, but it is not a
+  // channel direction.  Only a specific topic plus a supported mechanism may
+  // enter the creator-facing opportunity feed.
+  classification?: { state: 'READY' | 'INSUFFICIENT_CLASSIFICATION'; reason: string };
   sourceTitle?: string;
   durationBucket?: string;
   representativeVideos?: Array<{ videoId: string; title: string; channelTitle: string | null; views: number | null }>;
   pattern: { id: string; label: string; trend: PatternTrendState; provenance: string } | null;
   market: { videos: number; creators: number; previousVideos: number; windowDays: number | null;
     growth: number | null; concentration: number | null; lifecycle: string; confidence: string;
-    quality: string; facts: string[]; evidenceVideoIds: string[]; provenance: string; capturedAt: string | null };
+    quality: string; facts: string[]; evidenceVideoIds: string[]; provenance: string; capturedAt: string | null;
+    opportunityScore?: number | null; smallCreatorBreakouts?: number | null };
   requirements: { presence?: 'FACELESS' | 'ON_CAMERA'; time?: Level; budget?: Level; aiSkill?: CreatorProfile['aiSkill']; goal?: CreatorProfile['goal']; source?: string };
   originality: { risk: OriginalityRisk; reason: string };
   tests: TestDirection[];
 };
 const specific = (value: string | undefined | null) => Boolean(value?.trim() && !/^(unknown|unidentified|short_form|long_form|uncertain)$/i.test(value.trim()) && !/未知|未识别|待识别/.test(value));
+const broadTopics = new Set([
+  '人物生活', '人物与博客', '娱乐', '喜剧', '游戏', '教育', '科技', '旅行', '汽车', '宠物动物', '宠物与动物', '生活技巧',
+  'people & blogs', 'entertainment', 'comedy', 'gaming', 'education', 'science & technology', 'technology', 'travel', 'autos & vehicles', 'pets & animals', 'howto & style',
+].map(value => value.toLocaleLowerCase()));
+const isBroadTopic = (value: string | null | undefined) => broadTopics.has(String(value || '').trim().toLocaleLowerCase());
+export function isActionableMicroNiche(unit: OpportunityUnit) {
+  return Boolean(unit.subNiche && unit.pattern && unit.classification?.state !== 'INSUFFICIENT_CLASSIFICATION');
+}
 export function fromRadar(event: OpportunityRadarEvent | ShortformRadarEvent, format: ContentFormat): OpportunityUnit {
   // Long-form format is a duration bucket, not a content mechanism.
   const mechanism = 'mechanism' in event ? event.mechanism : null;
   const pattern = mechanism && specific(mechanism) ? { id: `${format}:${mechanism}`, label: mechanism, trend: 'INSUFFICIENT' as const, provenance: 'RADAR_CLASSIFICATION_NOT_TEMPORAL_PATTERN_EVIDENCE' } : null;
   // The source does not expose a verified sub-niche taxonomy. Do not invent one
   // from a broad category or pretend that a generated event label is a sub-niche.
+  const actionable = specific(event.topic) && !isBroadTopic(event.topic) && Boolean(pattern);
+  const classification = actionable
+    ? { state: 'READY' as const, reason: '已识别具体主题与内容机制，可进入人工决策。' }
+    : { state: 'INSUFFICIENT_CLASSIFICATION' as const, reason: '当前只有平台分类或未验证的形式，尚不能作为可直接开做的细分赛道。' };
   return {
-    id: event.id, format, niche: event.topic, subNiche: null, pattern,
+    id: event.id, format, niche: event.topic, subNiche: actionable ? `${event.topic} · ${pattern!.label}` : null, classification, pattern,
     sourceTitle: event.title, durationBucket: format === 'LONG_FORM' ? event.format : undefined,
     representativeVideos: (event.representativeVideos || []).filter((video, index, all) => /^[A-Za-z0-9_-]{11}$/.test(video.videoId) && all.findIndex(item => item.videoId === video.videoId) === index).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     market: { videos: event.sampleVideoCount, creators: event.independentChannelCount, previousVideos: event.baseline.previousSampleCount,
       windowDays: event.baseline.windowDays, growth: event.metrics.demandProxyGrowth ?? null,
       concentration: event.creatorConcentrationTop3 ?? null, lifecycle: event.lifecycle, confidence: event.confidence,
-      quality: event.dataQuality, facts: [...event.facts], evidenceVideoIds: [...event.evidenceVideoIds], provenance: event.evidence.provenance, capturedAt: event.lastUpdatedAt || null },
+      quality: event.dataQuality, facts: [...event.facts], evidenceVideoIds: [...event.evidenceVideoIds], provenance: event.evidence.provenance, capturedAt: event.lastUpdatedAt || null,
+      opportunityScore: event.whyNowScore ?? ('opportunityScore' in event ? event.opportunityScore : null),
+      smallCreatorBreakouts: 'breakoutCount' in event ? event.breakoutCount : event.smallCreatorBreakoutCount },
     requirements: {}, originality: { risk: 'UNKNOWN', reason: '雷达元数据不包含原创性核验；请检查具体人物、例子、画面和结局。' }, tests: [],
   };
 }
@@ -96,8 +115,12 @@ export function fromLongform(opportunity: LongformOpportunity): OpportunityUnit 
     originalityRisk: item.novelty.state === 'DUPLICATE' ? 'VERY_HIGH' : item.novelty.state === 'TOO_SIMILAR' ? 'HIGH' : item.novelty.state === 'NOVEL' ? 'LOW' : item.novelty.state === 'ACCEPTABLE_VARIATION' ? 'MODERATE' : 'UNKNOWN',
     originalityReason: item.novelty.evidence.join('；'),
   }));
+  const subNiche = specific(candidate?.concept.subject) && candidate?.concept.subject !== opportunity.topic && !isBroadTopic(candidate?.concept.subject) ? candidate!.concept.subject : null;
+  const classification = subNiche && pattern
+    ? { state: 'READY' as const, reason: '已有来源支撑的具体主题与内容模式。' }
+    : { state: 'INSUFFICIENT_CLASSIFICATION' as const, reason: '当前仍停留在一级分类或缺少可复核的细分主题，不作为直接进入建议。' };
   return {
-    id: opportunity.key, format: 'LONG_FORM', niche: opportunity.topic, subNiche: specific(candidate?.concept.subject) && candidate?.concept.subject !== opportunity.topic ? candidate!.concept.subject : null,
+    id: opportunity.key, format: 'LONG_FORM', niche: opportunity.topic, subNiche, classification,
     representativeVideos: opportunity.representativeVideos.filter((video, index, all) => /^[A-Za-z0-9_-]{11}$/.test(video.videoId) && all.findIndex(item => item.videoId === video.videoId) === index).slice(0, 3).map(({ videoId, title, channelTitle, views }) => ({ videoId, title, channelTitle, views })),
     pattern: pattern ? { id: pattern.patternId, label: pattern.label, trend: trend?.state || 'INSUFFICIENT', provenance: aggregation!.provenance.algorithmVersion } : null,
     market: { videos: opportunity.sampleSize, creators: opportunity.channelCount,
@@ -106,7 +129,8 @@ export function fromLongform(opportunity: LongformOpportunity): OpportunityUnit 
       lifecycle: opportunity.nicheLifecycle?.lifecycle.state || 'UNKNOWN', confidence: opportunity.confidenceLevel || opportunity.confidenceLabel,
       quality: opportunity.confidenceLevel === 'INSUFFICIENT' ? 'INSUFFICIENT' : 'PARTIAL', facts: [],
       evidenceVideoIds: opportunity.representativeVideos.map(item => item.videoId),
-      provenance: opportunity.upstreamAssessment?.source || 'PUBLIC_YOUTUBE_METADATA', capturedAt: opportunity.upstreamAssessment?.capturedAt || null },
+      provenance: opportunity.upstreamAssessment?.source || 'PUBLIC_YOUTUBE_METADATA', capturedAt: opportunity.upstreamAssessment?.capturedAt || null,
+      opportunityScore: opportunity.marketOpportunity, smallCreatorBreakouts: opportunity.nicheSignals?.repeatedBreakoutCreators ?? null },
     requirements: {}, originality: { risk, reason: candidate?.novelty.evidence.join('；') || '暂无已核验原创性结论。' }, tests,
   };
 }
@@ -158,14 +182,15 @@ export function creatorFit(unit: OpportunityUnit, profile: CreatorProfile) {
 const priority: Record<Decision, number> = { RECOMMENDED: 6, TEST: 5, WATCH: 3, DEPRIORITIZE: 1, AVOID: -3, INSUFFICIENT: -4 };
 export function recommend(units: readonly OpportunityUnit[], profile: CreatorProfile, format: ContentFormat) {
   const unique = [...new Map(units.filter(u => u.format === format).map(unit => [unit.id, unit])).values()];
-  const market = unique.map(unit => ({ unit, decision: marketDecision(unit), fit: creatorFit(unit, profile) }))
+  const pending = unique.filter(unit => !isActionableMicroNiche(unit));
+  const market = unique.filter(isActionableMicroNiche).map(unit => ({ unit, decision: marketDecision(unit), fit: creatorFit(unit, profile) }))
     .sort((a, b) => priority[b.decision] - priority[a.decision] || a.unit.id.localeCompare(b.unit.id));
   const ranked = [...market].sort((a, b) => (priority[b.decision] + b.fit.rank) - (priority[a.decision] + a.fit.rank) || a.unit.id.localeCompare(b.unit.id));
   const eligible = ranked.filter(item => !['AVOID', 'INSUFFICIENT', 'DEPRIORITIZE'].includes(item.decision) && item.fit.level !== 'CONSTRAINED');
   const top = eligible.slice(0, 3);
   const rest = eligible.filter(item => !top.includes(item));
   const explore = rest.find(item => !top.some(t => t.unit.niche === item.unit.niche)) || rest[0] || null;
-  return { top, explore, market, ranked };
+  return { top, explore, market, ranked, pending };
 }
 export function differentiation(unit: OpportunityUnit, alternative = false) {
   const highRisk = ['HIGH', 'VERY_HIGH'].includes(unit.originality.risk);

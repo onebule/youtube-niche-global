@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeProfile, DISCOVERY_RULES, entryWindow, marketDecision, creatorFit, recommend, differentiation, firstTests, buildProductionHandoff, addReviewedShortTest, fromRadar } from '../src/lib/product-convergence.ts';
+import { normalizeProfile, DISCOVERY_RULES, entryWindow, marketDecision, creatorFit, recommend, differentiation, firstTests, buildProductionHandoff, addReviewedShortTest, fromRadar, isActionableMicroNiche } from '../src/lib/product-convergence.ts';
 import { buildNicheEvaluationHref, contextFromQuery, saveNicheAnalysisContext, readNicheAnalysisContext } from '../src/lib/niche-analysis-context.ts';
 
 function unit(id = 'a', format = 'SHORTS', patch = {}) {
@@ -41,6 +41,16 @@ test('diluting patterns cannot be shown as growing recommendations', () => {
 test('broad categories are research leads, not final actionable recommendations', () => {
   assert.equal(marketDecision(unit('a', 'SHORTS', { subNiche: null })), 'WATCH');
   assert.equal(marketDecision(unit('a', 'SHORTS', { pattern: null })), 'WATCH');
+});
+test('unclassified radar categories stay visible as evidence but cannot enter the opportunity feed', () => {
+  const event = { id: 'broad', topic: '人物与博客', mechanism: '喜剧表演', format: 'SHORT_FORM', lifecycle: 'CONFIRMED', sampleVideoCount: 12, independentChannelCount: 5, baseline: { previousSampleCount: 8, windowDays: 14 }, metrics: {}, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public' } };
+  const broad = fromRadar(event, 'SHORTS');
+  const specific = unit('specific', 'SHORTS');
+  const feed = recommend([broad, specific], {}, 'SHORTS');
+  assert.equal(broad.classification?.state, 'INSUFFICIENT_CLASSIFICATION');
+  assert.equal(isActionableMicroNiche(broad), false);
+  assert.deepEqual(feed.market.map(item => item.unit.id), ['specific']);
+  assert.deepEqual(feed.pending.map(item => item.id), ['broad']);
 });
 test('deterministic 3+1 with no duplicate or padded opportunities', () => {
   const input = ['e', 'd', 'c', 'b', 'a'].map(id => unit(id, 'SHORTS', { niche: id === 'd' ? 'Pets' : 'Science' }));
