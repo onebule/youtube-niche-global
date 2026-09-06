@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { creatorBibleSummary, creatorFlowStage, mergeCreatorBibleIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
+import { creatorBibleSummary, creatorFlowStage, creatorShotDirection, mergeCreatorBibleIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
 
 test('creator project restores safely from an incomplete local snapshot', () => {
   assert.deepEqual(normalizeCreatorProject({ title: '  夏日产品片  ', brief: '  清晨的玻璃瓶  ', format: 'landscape' }), {
@@ -41,6 +41,14 @@ test('project bible is visible in the shot prompt and never silently truncated',
   assert.match(reapplied.prompt, /同一位长发女主角/);
   assert.doesNotMatch(reapplied.prompt, /同一位短发女主角/);
   assert.equal(mergeCreatorBibleIntoPrompt('x'.repeat(1190), project, 'zh').reason, 'too_long');
+});
+
+test('project bible can seed a new shot without being mistaken for a shot direction', () => {
+  const project = normalizeCreatorProject({ bible: { style: '自然电影感', locks: { style: true } } });
+  const draft = mergeCreatorBibleIntoPrompt('', project, 'zh');
+  assert.equal(draft.applied, true);
+  assert.equal(creatorShotDirection(draft.prompt), '');
+  assert.equal(creatorFlowStage({ brief: '测试', hasReference: true, hasPrompt: Boolean(creatorShotDirection(draft.prompt)) }), 'direction');
 });
 
 test('project brief creates a draft only and never implies a generation', () => {

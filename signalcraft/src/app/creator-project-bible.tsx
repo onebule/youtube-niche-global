@@ -24,7 +24,7 @@ export default function CreatorProjectBible({
   }), { filled: 0, locked: 0 });
 
   return <section className="creator-bible" aria-labelledby="creator-bible-title">
-    <div className="creator-bible-copy"><span>03 · {zh ? '项目 Bible' : 'PROJECT BIBLE'}</span><h2 id="creator-bible-title">{zh ? '写下每个镜头都该记住的事。' : 'Record what every shot should remember.'}</h2><p>{zh ? '可保存人物、场景、风格、镜头和动作方向。勾选“锁定”后，带入镜头、套用模板或应用 AI 导演稿时会保留为可见规则。' : 'Save character, scene, style, camera, and motion direction. Locked entries remain visible rules when you apply them to a shot, template, or AI Director draft.'}</p></div>
+    <div className="creator-bible-copy"><span>03 · {zh ? '项目 Bible' : 'PROJECT BIBLE'}</span><h2 id="creator-bible-title">{zh ? '写下每个镜头都该记住的事。' : 'Record what every shot should remember.'}</h2><p>{zh ? '可保存人物、场景、风格、镜头和动作方向。勾选“锁定”后，带入镜头、套用模板或应用 AI 导演稿时会保留为可见规则；新建镜头也会带入同一份可编辑规则。' : 'Save character, scene, style, camera, and motion direction. Locked entries remain visible rules when you apply them to a shot, template, or AI Director draft; new shots also carry the same editable rules.'}</p></div>
     <div className="creator-bible-fields" role="group" aria-label={zh ? '项目 Bible 规则' : 'Project Bible rules'}>
       {CREATOR_BIBLE_FIELDS.map(field => <label key={field} className={'creator-bible-field ' + (project.bible.locks[field] ? 'is-locked' : '')}>
         <span>{labels[field]}</span>

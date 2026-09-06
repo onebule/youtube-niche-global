@@ -20,7 +20,7 @@ export type CreatorProject = {
   format: CreatorProjectFormat;
   /** A human-facing label for the existing ordered Shot workspace. */
   sequenceTitle: string;
-  /** Private project-wide rules. They are only sent when a creator applies them to a Shot. */
+  /** Private project-wide rules. New shots and explicit applications include them as visible prompt text. */
   bible: CreatorBible;
 };
 
@@ -30,6 +30,7 @@ const FORMATS: CreatorProjectFormat[] = ['short', 'landscape', 'square', 'series
 export const CREATOR_BIBLE_FIELDS: CreatorBibleField[] = ['character', 'scene', 'style', 'camera', 'motion'];
 const BIBLE_BLOCK_START = '[SIGNALCRAFT_PROJECT_RULES]';
 const BIBLE_BLOCK_END = '[/SIGNALCRAFT_PROJECT_RULES]';
+const BIBLE_BLOCK_PATTERN = /\s*\[SIGNALCRAFT_PROJECT_RULES\][\s\S]*?\[\/SIGNALCRAFT_PROJECT_RULES\]\s*/g;
 
 function clean(value: unknown, maximum: number) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, maximum);
@@ -88,12 +89,17 @@ export function creatorBiblePromptBlock(project: CreatorProject, locale: 'zh' | 
   return lines.length ? `${BIBLE_BLOCK_START}\n${lines.join('\n')}\n${BIBLE_BLOCK_END}` : '';
 }
 
+/** Project rules help a shot, but are not themselves a shot direction. */
+export function creatorShotDirection(input: string) {
+  return String(input || '').replace(BIBLE_BLOCK_PATTERN, '\n').trim();
+}
+
 /**
  * Project rules are explicit prompt text, never a hidden provider setting.
  * Reapplying replaces the old block, and refuses to truncate locked rules.
  */
 export function mergeCreatorBibleIntoPrompt(input: string, project: CreatorProject, locale: 'zh' | 'en', maximum = 1200) {
-  const withoutPrevious = String(input || '').replace(/\s*\[SIGNALCRAFT_PROJECT_RULES\][\s\S]*?\[\/SIGNALCRAFT_PROJECT_RULES\]\s*/g, '\n').trim();
+  const withoutPrevious = creatorShotDirection(input);
   const block = creatorBiblePromptBlock(project, locale);
   if (!block) return { prompt: withoutPrevious, applied: false, reason: 'empty' as const };
   const prompt = [withoutPrevious, block].filter(Boolean).join('\n\n');
