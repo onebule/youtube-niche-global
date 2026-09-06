@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getSession } from '@/src/lib/auth';
+import { BillingClientError, startProCheckout } from '@/src/lib/billing';
 
 export type UpgradePlan = {
   name: 'Pro' | 'Team';
@@ -19,6 +20,8 @@ type UpgradeModalProps = {
 export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const [checkoutState, setCheckoutState] = useState<'idle'|'loading'|'unavailable'|'error'>('idle');
+  const [checkoutError, setCheckoutError] = useState('');
   const account = getSession();
 
   useEffect(() => {
@@ -41,6 +44,21 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
       setCopyError(true);
+    }
+  };
+
+  const startCheckout = async () => {
+    if (plan.name !== 'Pro' || !account) return;
+    const cycle = plan.cycle === 'month' ? 'monthly' : plan.cycle === 'year' ? 'yearly' : null;
+    if (!cycle) { setCheckoutState('unavailable'); return; }
+    setCheckoutState('loading'); setCheckoutError('');
+    try {
+      const result = await startProCheckout(cycle);
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      const billingError = error instanceof BillingClientError ? error : null;
+      if (billingError?.code === 'BILLING_NOT_CONFIGURED' || billingError?.code === 'WAFFO_PRODUCT_NOT_CONFIGURED' || billingError?.code === 'WAFFO_MERCHANT_NOT_CONFIGURED') setCheckoutState('unavailable');
+      else { setCheckoutState('error'); setCheckoutError(billingError?.message || '安全结算暂时不可用，请稍后重试或联系管理员。'); }
     }
   };
 
@@ -72,6 +90,9 @@ export default function UpgradeModal({ plan, onClose }: UpgradeModalProps) {
             <span>购买账号</span>
             <b>{account?.email || '未登录 · 请在微信中提供注册后要使用的邮箱。'}</b>
           </div>
+          {plan.name==='Pro'&&plan.cycle!=='quarter'&&account&&<div className="upgrade-secure-checkout"><button className="primary" type="button" onClick={()=>void startCheckout()} disabled={checkoutState==='loading'}>{checkoutState==='loading'?'正在创建安全结算…':'安全结算开通 Pro →'}</button><small>如已配置安全结算，将跳转至 Waffo 托管付款页；实际金额以该结算页的已发布产品为准。</small></div>}
+          {checkoutState==='unavailable'&&<p className="upgrade-boundary">此周期的安全结算仍在配置中，已保留以下人工开通方式。</p>}
+          {checkoutState==='error'&&<p className="upgrade-copy-error">{checkoutError}</p>}
           <button className="upgrade-copy" type="button" onClick={copyRequest}>{copied ? '已复制开通信息' : '复制开通信息'}</button>
           {copyError && <p className="upgrade-copy-error">无法访问剪贴板，请在微信里说明：{plan.name} · {plan.price} · {currencyName}，并提供购买账号邮箱。</p>}
           <p className="upgrade-boundary">这是人工开通流程：不会在本页自动扣款，也不会收集你的支付信息。美元金额仅用于报价参考，实际付款方式由管理员确认。</p>
