@@ -87,7 +87,7 @@ export function fromRadar(event: OpportunityRadarEvent | ShortformRadarEvent, fo
   const pattern = mechanism && specific(mechanism) ? { id: `${format}:${mechanism}`, label: mechanism, trend: 'INSUFFICIENT' as const, provenance: 'RADAR_CLASSIFICATION_NOT_TEMPORAL_PATTERN_EVIDENCE' } : null;
   // The source does not expose a verified sub-niche taxonomy. Do not invent one
   // from a broad category or pretend that a generated event label is a sub-niche.
-  const actionable = specific(event.topic) && !isBroadTopic(event.topic) && Boolean(pattern);
+  const actionable = event.sampleGate?.passed !== false && specific(event.topic) && !isBroadTopic(event.topic) && Boolean(pattern);
   const classification = actionable
     ? { state: 'READY' as const, reason: '已识别具体主题与内容机制，可进入人工决策。' }
     : { state: 'INSUFFICIENT_CLASSIFICATION' as const, reason: '当前只有平台分类或未验证的形式，尚不能作为可直接开做的细分赛道。' };

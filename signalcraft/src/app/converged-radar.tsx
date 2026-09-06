@@ -37,7 +37,12 @@ export default function ConvergedRadar({ locale, format }: { locale: UiLocale; f
         const request = scope === 'SHORTS' ? fetchShortformOpportunityRadar : fetchOpportunityRadar;
         void request({ market, window: timeWindow, limit: 500 }, { signal: controller.signal }).then(data => {
           if (controller.signal.aborted) return;
-          setFeeds(previous => ({ ...previous, [scope]: { loading: false, units: data.available ? data.events.map(event => fromRadar(event, scope)) : [], error: !data.available ? (zh ? '当前数据服务没有可用结果。' : 'The data service has no available result.') : null, gaps: data.gaps, availability: data.dataAvailability, scope: zh ? `本期 ${data.dataScope.currentRows} 条样本 · 历史 ${data.dataScope.historicalRows} 条 · 最近采集 ${data.dataScope.latestCapturedAt || '未提供'}` : `Current rows: ${data.dataScope.currentRows} · Historical rows: ${data.dataScope.historicalRows} · Captured: ${data.dataScope.latestCapturedAt || 'unavailable'}` } }));
+          const qualified = data.available ? data.events.map(event => fromRadar(event, scope)) : [];
+          // Observations have real public samples but have not passed the
+          // recommendation gate. Keep them visible only as a review queue.
+          const observations = data.available ? (data.observations || []).map(event => fromRadar(event, scope)) : [];
+          const units = [...new Map([...qualified, ...observations].map(unit => [unit.id, unit])).values()];
+          setFeeds(previous => ({ ...previous, [scope]: { loading: false, units, error: !data.available ? (zh ? '当前数据服务没有可用结果。' : 'The data service has no available result.') : null, gaps: data.gaps, availability: data.dataAvailability, scope: zh ? `本期 ${data.dataScope.currentRows} 条样本 · 历史 ${data.dataScope.historicalRows} 条 · 最近采集 ${data.dataScope.latestCapturedAt || '未提供'}` : `Current rows: ${data.dataScope.currentRows} · Historical rows: ${data.dataScope.historicalRows} · Captured: ${data.dataScope.latestCapturedAt || 'unavailable'}` } }));
         }).catch(error => { if (!controller.signal.aborted) setFeeds(previous => ({ ...previous, [scope]: { ...empty, loading: false, error: clientErrorMessage(error, zh ? '暂时无法读取市场数据。' : 'Market data is unavailable.') } })); });
       }
     }, 0);

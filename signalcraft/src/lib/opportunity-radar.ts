@@ -52,6 +52,7 @@ export type OpportunityRadarEvent = {
   facts: string[];
   inferences: string[];
   dataQuality: 'COMPLETE' | 'PARTIAL' | 'STALE' | 'INSUFFICIENT';
+  sampleGate?: { passed?: boolean };
   baseline: { windowDays: number; previousSampleCount: number; label: string; multiWindow: boolean };
   metrics: Record<string, number | null>;
   evidence: { successfulVideoIds: string[]; independentWinnerVideoIds: string[]; weakVideoIds: string[]; provenance: string };
@@ -102,6 +103,7 @@ export type OpportunityRadarResponse = {
   };
   lanes: Record<string, number>;
   events: OpportunityRadarEvent[];
+  observations?: OpportunityRadarEvent[];
   gaps: string[];
   quota?: { access_tier?: string; ranking_limit?: number | null; ranking_unlimited?: boolean };
 };
@@ -117,7 +119,7 @@ export function normalizeOpportunityRadarResponse(payload: unknown): Opportunity
     capturedAt: scope?.latestCapturedAt || null,
     source: scope?.source || 'unknown',
   });
-  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
+  return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], observations: Array.isArray(raw.observations) ? raw.observations : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
 }
 
 export async function fetchOpportunityRadar(input: { market?: string; language?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
