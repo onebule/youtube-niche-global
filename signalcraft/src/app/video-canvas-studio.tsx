@@ -88,8 +88,10 @@ import { normalizeVideoGenerationJob, resolveCanvasModelMode, type CanvasModelMo
 import {
   createCreatorProject,
   creatorFlowStage,
+  mergeCreatorBibleIntoPrompt,
   normalizeCreatorProject,
   projectBriefToShotDraft,
+  type CreatorBibleField,
   type CreatorProject,
   type CreatorProjectFormat,
 } from '@/src/lib/creator-flow';
@@ -97,6 +99,7 @@ import { compileH3Prompt, describeH3PromptIssue, validateH3Prompt, type H3Prompt
 import { VIRAL_CASE_CANVAS_HANDOFF_KEY, normalizeViralCaseCanvasHandoff } from '@/src/lib/viral-case';
 import ImageGenerationPanel from './image-generation-panel';
 import CanvasInspector from './canvas-inspector';
+import CreatorProjectBible from './creator-project-bible';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
@@ -116,7 +119,7 @@ type UploadedReferenceMedia = {
   previewUrl: string;
 };
 type SavedCanvas = {
-  version: 1 | 2 | 3 | 4 | 5 | 6;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -803,11 +806,16 @@ export default function VideoCanvasStudio({
       referenceVideoCount: referenceVideos.length,
       referenceAudioCount: referenceAudios.length,
     });
-    setPrompt(result.prompt);
+    const merged = mergeCreatorBibleIntoPrompt(result.prompt, project, zh ? 'zh' : 'en');
+    if (merged.reason === 'too_long') {
+      setError(zh ? '项目 Bible 的锁定规则加上 H3 提示词后超过 1200 字；请先精简规则。' : 'The Project Bible rules would exceed the 1,200-character H3 prompt limit. Shorten the rules first.');
+      return;
+    }
+    setPrompt(merged.prompt);
     setAgentPlan(null);
     const firstIssue = result.validation.issues[0];
     if (firstIssue) notify(describeH3PromptIssue(firstIssue, zh ? 'zh' : 'en'));
-  }, [duration, endFrame, h3Brief, h3PromptMode, notify, referenceAudios.length, referenceFrames.length, referenceMode, referenceVideos.length, startFrame, zh]);
+  }, [duration, endFrame, h3Brief, h3PromptMode, notify, project, referenceAudios.length, referenceFrames.length, referenceMode, referenceVideos.length, startFrame, zh]);
   const generationInFlight = generation?.status === 'queued' || generation?.status === 'processing';
   const canGenerate = Boolean(effectiveAccess === 'ready' && effectiveModel && hasReferenceInput && referenceModeSupported && preflight.ok && !submitting && !cancelling && !uploading && !generationInFlight);
   const compareModelIsEligible = (candidate: Exclude<VideoModelId, 'auto'>) => {
@@ -1251,7 +1259,7 @@ export default function VideoCanvasStudio({
       const raw = localStorage.getItem(canvasStorageKey);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5 || saved.version === 6) {
+        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5 || saved.version === 6 || saved.version === 7) {
           // Hydration intentionally mirrors an external localStorage snapshot
           // after mount; this is the one synchronous state sync in this effect.
           // v3 reserves a dedicated composer row, so older layouts need the
@@ -1333,7 +1341,7 @@ export default function VideoCanvasStudio({
     const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
     const saved: SavedCanvas = {
-      version: 6,
+      version: 7,
       project,
       nodes,
       prompt,
@@ -1987,9 +1995,16 @@ export default function VideoCanvasStudio({
   const applyAgentPrompt = () => {
     const optimized = agentPlan?.prompt.trim().slice(0, 1200) || '';
     if (!optimized || optimized === prompt.trim()) return;
-    setPrompt(optimized);
+    const merged = mergeCreatorBibleIntoPrompt(optimized, project, zh ? 'zh' : 'en');
+    if (merged.reason === 'too_long') {
+      setError(zh ? 'Agent 优化稿加上项目 Bible 的锁定规则后超过 1200 字；请先精简规则或优化稿。' : 'The Agent draft plus Project Bible rules exceeds 1,200 characters. Shorten the rules or draft first.');
+      return;
+    }
+    setPrompt(merged.prompt);
     patchSemanticNode('prompt', { status: 'draft' });
-    notify(zh ? '已应用 Agent 优化 Prompt；请再次检查后生成。' : 'The Agent prompt was applied. Review it once more before generating.');
+    notify(merged.applied
+      ? (zh ? '已应用 Agent 优化稿，并保留项目 Bible 的锁定规则；请再次检查后生成。' : 'The Agent draft was applied with Project Bible rules preserved. Review it once more before generating.')
+      : (zh ? '已应用 Agent 优化 Prompt；请再次检查后生成。' : 'The Agent prompt was applied. Review it once more before generating.'));
   };
 
   const animateCurrentReference = () => {
@@ -2153,7 +2168,12 @@ export default function VideoCanvasStudio({
   };
   const applyCanvasTemplate = (template: CanvasTemplate) => {
     const nextResolution = compatibleTemplateResolution(model, template.resolution);
-    setPrompt(zh ? template.promptZh : template.promptEn);
+    const merged = mergeCreatorBibleIntoPrompt(zh ? template.promptZh : template.promptEn, project, zh ? 'zh' : 'en');
+    if (merged.reason === 'too_long') {
+      setError(zh ? '模板加上项目 Bible 的锁定规则后超过 1200 字；请先精简规则。' : 'The template plus Project Bible rules exceeds 1,200 characters. Shorten the rules first.');
+      return;
+    }
+    setPrompt(merged.prompt);
     setReferenceMode(template.referenceMode);
     setDuration(normalizeVideoDuration(model, template.duration));
     setAspectRatio(template.aspectRatio);
@@ -2427,6 +2447,40 @@ export default function VideoCanvasStudio({
       brief: typeof patch.brief === 'string' ? patch.brief.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 1200) : previous.brief,
       sequenceTitle: typeof patch.sequenceTitle === 'string' ? patch.sequenceTitle.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) : previous.sequenceTitle,
     }));
+  };
+
+  const updateProjectBibleField = (field: CreatorBibleField, value: string) => {
+    const cleanValue = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 240);
+    setProject(previous => ({
+      ...previous,
+      bible: {
+        ...previous.bible,
+        [field]: cleanValue,
+        locks: { ...previous.bible.locks, [field]: cleanValue.trim() ? previous.bible.locks[field] : false },
+      },
+    }));
+  };
+
+  const toggleProjectBibleLock = (field: CreatorBibleField) => {
+    if (!project.bible[field].trim()) return;
+    setProject(previous => ({ ...previous, bible: { ...previous.bible, locks: { ...previous.bible.locks, [field]: !previous.bible.locks[field] } } }));
+  };
+
+  const applyProjectBibleToShot = () => {
+    const merged = mergeCreatorBibleIntoPrompt(prompt, project, zh ? 'zh' : 'en');
+    if (merged.reason === 'empty') {
+      notify(zh ? '先填写至少一项项目 Bible，再带入当前镜头。' : 'Add at least one Project Bible rule before applying it to this shot.');
+      return;
+    }
+    if (merged.reason === 'too_long') {
+      setError(zh ? '当前镜头加上项目 Bible 的规则会超过 1200 字；请先精简 Prompt 或规则。' : 'This shot plus Project Bible rules would exceed 1,200 characters. Shorten the prompt or rules first.');
+      return;
+    }
+    setPrompt(merged.prompt);
+    setAgentPlan(null);
+    patchSemanticNode('prompt', { status: 'draft' });
+    notify(zh ? '项目 Bible 已写入当前镜头的可见规则块；AI 导演和生成都会以这份规则为输入。' : 'The Project Bible is now a visible rule block in this shot. The AI Director and generation both receive this input.');
+    focusMotionPrompt();
   };
 
   const useProjectBriefForShot = () => {
@@ -3006,6 +3060,8 @@ export default function VideoCanvasStudio({
       </div>
       <div className="creator-sequence-action"><span>{zh ? `${shotRailItems.length} 个镜头` : `${shotRailItems.length} shot${shotRailItems.length === 1 ? '' : 's'}`}</span><button type="button" disabled={shotActionsDisabled} onClick={() => createNextShot(false)}><span aria-hidden="true">＋</span>{zh ? '添加镜头' : 'Add shot'}</button></div>
     </section>
+
+    <CreatorProjectBible project={project} zh={zh} onFieldChange={updateProjectBibleField} onToggleLock={toggleProjectBibleLock} onApply={applyProjectBibleToShot} />
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
       <span className="video-canvas-model-mark" aria-hidden="true">✦</span>
