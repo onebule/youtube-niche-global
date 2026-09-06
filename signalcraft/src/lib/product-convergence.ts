@@ -28,6 +28,16 @@ export function normalizeProfile(value: unknown): CreatorProfile {
 }
 export type Decision = 'RECOMMENDED' | 'TEST' | 'WATCH' | 'DEPRIORITIZE' | 'AVOID' | 'INSUFFICIENT';
 export type EntryWindow = 'OPEN' | 'NARROWING' | 'CLOSED' | 'UNDETERMINED';
+export type SharedDecision = 'STRONG_TEST' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
+export type SharedEntryWindow = 'EARLY' | 'OPEN' | 'CLOSING' | 'LATE' | 'UNKNOWN';
+export type OpportunityDecisionSummary = {
+  version: string; calibrationStatus: string; decision: SharedDecision; confidence: string;
+  entryWindow: SharedEntryWindow; lifecycle: string; falsePositive: 'PASS' | 'CAUTION' | 'BLOCKED';
+  evidence: Array<{ kind: string; code: string; message: string }>;
+  whyNow: Array<{ kind: string; code: string; message: string }>;
+  risks: Array<{ kind: string; code: string; message: string }>;
+  score: number | null;
+};
 export type OriginalityRisk = 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH' | 'UNKNOWN';
 // Separate rule sets: never compare raw scores or windows across formats.
 export const DISCOVERY_RULES = Object.freeze({
@@ -57,7 +67,7 @@ export type OpportunityUnit = {
   market: { videos: number; creators: number; previousVideos: number; windowDays: number | null;
     growth: number | null; concentration: number | null; lifecycle: string; confidence: string;
     quality: string; facts: string[]; evidenceVideoIds: string[]; provenance: string; capturedAt: string | null;
-    opportunityScore?: number | null; smallCreatorBreakouts?: number | null };
+    opportunityScore?: number | null; smallCreatorBreakouts?: number | null; decision?: OpportunityDecisionSummary | null };
   requirements: { presence?: 'FACELESS' | 'ON_CAMERA'; time?: Level; budget?: Level; aiSkill?: CreatorProfile['aiSkill']; goal?: CreatorProfile['goal']; source?: string };
   originality: { risk: OriginalityRisk; reason: string };
   tests: TestDirection[];
@@ -90,7 +100,8 @@ export function fromRadar(event: OpportunityRadarEvent | ShortformRadarEvent, fo
       concentration: event.creatorConcentrationTop3 ?? null, lifecycle: event.lifecycle, confidence: event.confidence,
       quality: event.dataQuality, facts: [...event.facts], evidenceVideoIds: [...event.evidenceVideoIds], provenance: event.evidence.provenance, capturedAt: event.lastUpdatedAt || null,
       opportunityScore: event.whyNowScore ?? ('opportunityScore' in event ? event.opportunityScore : null),
-      smallCreatorBreakouts: 'breakoutCount' in event ? event.breakoutCount : event.smallCreatorBreakoutCount },
+      smallCreatorBreakouts: 'breakoutCount' in event ? event.breakoutCount : event.smallCreatorBreakoutCount,
+      decision: 'decision' in event ? event.decision as OpportunityDecisionSummary : null },
     requirements: {}, originality: { risk: 'UNKNOWN', reason: '雷达元数据不包含原创性核验；请检查具体人物、例子、画面和结局。' }, tests: [],
   };
 }
@@ -136,6 +147,10 @@ export function fromLongform(opportunity: LongformOpportunity): OpportunityUnit 
 }
 
 export function entryWindow(unit: OpportunityUnit): EntryWindow {
+  const upstream = unit.market.decision?.entryWindow;
+  if (upstream === 'EARLY' || upstream === 'OPEN') return 'OPEN';
+  if (upstream === 'CLOSING') return 'NARROWING';
+  if (upstream === 'LATE') return 'CLOSED';
   const rules = DISCOVERY_RULES[unit.format];
   const m = unit.market;
   if (m.quality === 'INSUFFICIENT' || m.quality === 'STALE' || m.videos < rules.minVideos || m.creators < rules.minCreators || m.previousVideos < rules.minPrevious) return 'UNDETERMINED';
@@ -145,6 +160,11 @@ export function entryWindow(unit: OpportunityUnit): EntryWindow {
   return 'UNDETERMINED';
 }
 export function marketDecision(unit: OpportunityUnit): Decision {
+  const upstream = unit.market.decision?.decision;
+  if (upstream === 'STRONG_TEST') return 'RECOMMENDED';
+  if (upstream === 'TEST' || upstream === 'WATCH' || upstream === 'AVOID' || upstream === 'INSUFFICIENT_DATA') {
+    return upstream === 'INSUFFICIENT_DATA' ? 'INSUFFICIENT' : upstream;
+  }
   const m = unit.market, rules = DISCOVERY_RULES[unit.format];
   if (m.videos < rules.minVideos || m.creators < rules.minCreators || ['INSUFFICIENT', 'STALE'].includes(m.quality) || m.confidence === 'INSUFFICIENT') return 'INSUFFICIENT';
   const window = entryWindow(unit);

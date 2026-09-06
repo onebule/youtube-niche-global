@@ -20,6 +20,7 @@ export type OpportunityRadarEvent = {
   eventType: RadarEventType;
   title: string;
   topic: string;
+  mechanism?: string;
   format: string;
   language?: string;
   lifecycle: RadarLifecycle;
@@ -69,6 +70,13 @@ export type OpportunityRadarEvent = {
     isBreakout: boolean;
     vpd: number | null;
   }>;
+  decision?: {
+    version: string; calibrationStatus: string; decision: 'STRONG_TEST' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
+    confidence: string; entryWindow: 'EARLY' | 'OPEN' | 'CLOSING' | 'LATE' | 'UNKNOWN';
+    lifecycle: string; falsePositive: 'PASS' | 'CAUTION' | 'BLOCKED';
+    evidence: Array<{ kind: string; code: string; message: string }>; whyNow: Array<{ kind: string; code: string; message: string }>;
+    risks: Array<{ kind: string; code: string; message: string }>; score: number | null;
+  };
 };
 
 export type OpportunityRadarResponse = {
