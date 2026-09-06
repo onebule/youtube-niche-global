@@ -66,6 +66,7 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
   const zh = locale === 'zh';
   const [window, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
   const [market, setMarket] = useState('all');
+  const [language, setLanguage] = useState('all');
   const [data, setData] = useState<ShortformRadarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +95,8 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
       } else {
         const queryMarket = params.get('market');
         if (queryMarket) setMarket(queryMarket);
+        const queryLanguage = params.get('language');
+        if (queryLanguage) setLanguage(queryLanguage);
         const queryWindow = params.get('window');
         if (queryWindow === '7d' || queryWindow === '14d' || queryWindow === '30d') setWindow(queryWindow);
       }
@@ -116,10 +119,10 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
     requestRef.current?.abort();
     const controller = new AbortController(); requestRef.current = controller;
     setLoading(true); setError(null);
-    try { setData(await fetchShortformOpportunityRadar({ market, window, limit: 500 }, { signal: controller.signal })); }
+    try { setData(await fetchShortformOpportunityRadar({ market, language, window, limit: 500 }, { signal: controller.signal })); }
     catch (reason) { if (!controller.signal.aborted) setError(clientErrorMessage(reason, zh ? 'Shorts 趋势雷达数据暂时不可用。' : 'Shorts Trend Radar is temporarily unavailable.')); }
     finally { if (!controller.signal.aborted) setLoading(false); }
-  }, [market, window, zh]);
+  }, [language, market, window, zh]);
   useEffect(() => { if (!contextReady) return; const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [contextReady, load]);
   useEffect(() => {
     if (!data || restoreScrollRef.current === null || typeof globalThis.window === 'undefined') return;
@@ -146,7 +149,7 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
   return <Container className="shortform-radar-page">
     <section className="shortform-radar-hero"><div><span className="shortform-radar-kicker">SHORTS TREND RADAR</span><h1>{zh ? '识别 Shorts 最近出现的变化。' : 'Detect recent changes in Shorts.'}</h1><p>{zh ? '独立读取 Shorts 数据，观察跨频道扩散、中小频道突破和供给变化。这里是变化监测引擎，不会改变现有 Shorts 榜单、筛选、历史数据或评分。' : 'A separate Shorts-only engine for cross-channel spread, creator breakouts, and supply change. Existing Shorts rankings, filters, history, and scoring remain untouched.'}</p></div><div className="shortform-radar-stamp"><strong>SHORTS</strong><span>{zh ? '独立数据范围' : 'isolated data scope'}</span><i/></div></section>
     {onSwitchFormat ? <nav className="shortform-radar-format-tabs" aria-label={zh ? '内容形态' : 'Content format'}><button type="button" onClick={() => onSwitchFormat('ALL')}>{zh ? '全部' : 'All'}</button><button type="button" className="active" aria-current="page">Shorts</button><button type="button" onClick={() => onSwitchFormat('LONG_FORM')}>{zh ? '长视频' : 'Long-form'}</button></nav> : null}
-    <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}><label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部市场' : 'All markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="IN">IN</option><option value="BR">BR</option><option value="JP">JP</option></select></label><label><span>{zh ? '时间窗口' : 'Window'}</span><select value={window} onChange={event => setWindow(event.target.value as '7d' | '14d' | '30d')}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label><div className="shortform-radar-scope"><b>{data?.dataScope.currentRows ?? '—'}</b><span>{zh ? '当前短视频样本' : 'current Shorts sample'}</span></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button></section>
+    <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}><label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部市场' : 'All markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="IN">IN</option><option value="BR">BR</option><option value="JP">JP</option></select></label><label><span>{zh ? '时间窗口' : 'Window'}</span><select value={window} onChange={event => setWindow(event.target.value as '7d' | '14d' | '30d')}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label><label><span>{zh ? '内容语言' : 'Content language'}</span><select value={language} onChange={event => { const next = event.target.value; setLanguage(next); const params = new URLSearchParams(globalThis.window.location.search); if (next === 'all') params.delete('language'); else params.set('language', next); globalThis.window.history.replaceState({}, '', `${globalThis.window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`); }}><option value="all">{zh ? '全部语言（分开计算）' : 'All languages (separate)'}</option><option value="en">英语</option><option value="zh">中文</option><option value="ja">日本语</option><option value="es">Español</option><option value="pt">Português</option><option value="hi">हिन्दी</option></select></label><div className="shortform-radar-scope"><b>{data?.dataScope.currentRows ?? '—'}</b><span>{zh ? '当前短视频样本' : 'current Shorts sample'}</span></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button></section>
     <div className="shortform-radar-boundary"><span>{zh ? '边界明确' : 'BOUNDARY'}</span><p>{zh ? 'Shorts 趋势雷达只回答“最近发生了什么变化”；长视频赛道评估回答“一个方向是否值得长期进入”。两者的数据范围、事件和指标彼此独立，现有 Shorts 产品行为保持不变。' : 'Shorts Trend Radar answers what changed recently; Long-form Niche Evaluation asks whether a direction is worth entering over time. Their scopes, events, and metrics stay separate, and the existing Shorts product remains unchanged.'}</p></div>
     <nav className="shortform-radar-quick-modes" aria-label={zh ? '快速发现方式' : 'Quick discovery modes'}>{[{ key: 'ALL', zh: '最近有机会', en: 'Worth a look' }, { key: 'BEGINNER', zh: '新人更友好', en: 'Beginner friendly' }, { key: 'BREAKOUT', zh: '小频道正在跑出来', en: 'Creator breakouts' }, { key: 'RECENT', zh: '正在形成', en: 'Emerging now' }, { key: 'CAUTION', zh: '需要谨慎', en: 'Use caution' }].map(option => <button key={option.key} type="button" className={mode === option.key ? 'active' : ''} onClick={() => setMode(option.key as typeof mode)}>{option[zh ? 'zh' : 'en']}</button>)}</nav>
     {focusTopic ? <div className="shortform-radar-focus"><span>{zh ? '已定位赛道' : 'Focused niche'}</span><b>{focusTopic}</b><button type="button" onClick={() => setFocusTopic(null)}>{zh ? '清除定位' : 'Clear focus'}</button></div> : null}

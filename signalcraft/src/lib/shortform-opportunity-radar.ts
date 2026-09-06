@@ -17,6 +17,7 @@ export type ShortformRadarEvent = {
   topic: string;
   mechanism: string;
   format: 'SHORT_FORM';
+  language?: string;
   lifecycle: 'WATCH' | 'EMERGING' | 'CONFIRMED' | 'CROWDED';
   opportunityScore: number;
   whyNowScore: number;
@@ -80,6 +81,7 @@ export type ShortformRadarResponse = {
   dataScope: {
     source: string;
     markets: string[];
+    language?: string;
     historyDays: number;
     currentWindowDays: number;
     currentRows: number;
@@ -109,8 +111,9 @@ export function normalizeShortformRadarResponse(payload: unknown): ShortformRada
   return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), dataAvailability: normalizeDataAvailability(rawRecord.dataAvailability), available: raw.available === true, engine: typeof raw.engine === 'string' ? raw.engine : 'unknown', engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', format: 'SHORT_FORM', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
 }
 
-export async function fetchShortformOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
+export async function fetchShortformOpportunityRadar(input: { market?: string; language?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
+  if (input.language && input.language !== 'all') params.set('language', input.language);
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
   const response = await fetch(`${SHORTFORM_OPPORTUNITY_RADAR_ENDPOINT}?${params.toString()}`, {
     headers: { accept: 'application/json', ...authHeaders() },

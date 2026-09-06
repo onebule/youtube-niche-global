@@ -129,6 +129,7 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
   const zh = locale === 'zh';
   const [window, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
   const [market, setMarket] = useState('all');
+  const [language, setLanguage] = useState('all');
   const [lane, setLane] = useState('ALL');
   const [focusTopic, setFocusTopic] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<OpportunityRadarEvent | null>(null);
@@ -179,6 +180,7 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
         if (queryWindow === '7d' || queryWindow === '14d' || queryWindow === '30d') setWindow(queryWindow);
         const queryMarket = urlState.market;
         if (queryMarket) setMarket(queryMarket);
+        if (urlState.language) setLanguage(urlState.language);
         const queryLane = urlState.lane;
         if (queryLane) setLane(queryLane);
       }
@@ -191,10 +193,10 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
     requestRef.current?.abort();
     const controller = new AbortController(); requestRef.current = controller;
     setLoading(true); setError(null);
-    try { const next = await fetchOpportunityRadar({ market, window, limit: 500 }, { signal: controller.signal }); setData(next); }
+    try { const next = await fetchOpportunityRadar({ market, language, window, limit: 500 }, { signal: controller.signal }); setData(next); }
     catch (reason) { if (!controller.signal.aborted) setError(clientErrorMessage(reason, zh ? '长视频趋势雷达数据暂时不可用。' : 'Long-form Trend Radar is temporarily unavailable.')); }
     finally { if (!controller.signal.aborted) setLoading(false); }
-  }, [market, window, zh]);
+  }, [language, market, window, zh]);
   useEffect(() => { if (!contextReady) return; const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [contextReady, load]);
   useEffect(() => {
     if (!data || restoreScrollRef.current === null || typeof globalThis.window === 'undefined') return;
@@ -216,7 +218,7 @@ export default function OpportunityRadar({ locale, embedded = false, onWatch, on
   const Container = embedded ? 'section' : 'main';
   return <Container className="radar-v2-page"><section className="radar-v2-hero"><div><span className="radar-v2-kicker">LONG-FORM TREND RADAR · CHANGE DETECTION</span><h1>{zh ? '识别正在形成的长视频趋势变化。' : 'Detect long-form trend changes before they become obvious.'}</h1><p>{zh ? '长视频趋势雷达的对象是趋势事件，而不是单条爆款。它用历史基线、跨频道证据和中小频道突破回答：发生了什么、为什么是现在、是不是已经拥挤。' : 'Long-form Trend Radar tracks trend events, not isolated viral videos. Historical baselines, independent channels, and small-creator proof show what changed and whether it is too late.'}</p></div><div className="radar-v2-hero-stamp"><strong>14D</strong><span>{zh ? '默认主窗口' : 'default window'}</span><i/></div></section>
     {onSwitchFormat ? <nav className="radar-v2-format-tabs" aria-label={zh ? '内容形态' : 'Content format'}><button type="button" onClick={() => onSwitchFormat('ALL')}>{zh ? '全部' : 'All'}</button><button type="button" onClick={() => onSwitchFormat('SHORTS')}>Shorts</button><button type="button" className="active" aria-current="page">{zh ? '长视频' : 'Long-form'}</button></nav> : null}
-    <section className="radar-v2-toolbar"><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => { const next = event.target.value as typeof window; setWindow(next); updateUrl({ window: next }); }}><option value="7d">7D</option><option value="14d">14D · {zh ? '推荐' : 'recommended'}</option><option value="30d">30D</option></select></label><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => { const next = event.target.value; setMarket(next); updateUrl({ market: next }); }}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><button type="button" className="primary" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '读取中…' : 'Loading…') : (zh ? '更新雷达' : 'Refresh radar')}</button></section>
+    <section className="radar-v2-toolbar"><label>{zh ? '时间窗口' : 'Window'}<select value={window} onChange={event => { const next = event.target.value as typeof window; setWindow(next); updateUrl({ window: next }); }}><option value="7d">7D</option><option value="14d">14D · {zh ? '推荐' : 'recommended'}</option><option value="30d">30D</option></select></label><label>{zh ? '市场' : 'Market'}<select value={market} onChange={event => { const next = event.target.value; setMarket(next); updateUrl({ market: next }); }}><option value="all">{zh ? '全部已采集市场' : 'All collected markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="JP">JP</option><option value="IN">IN</option></select></label><label>{zh ? '内容语言' : 'Content language'}<select value={language} onChange={event => { const next = event.target.value; setLanguage(next); updateUrl({ language: next === 'all' ? undefined : next }); }}><option value="all">{zh ? '全部语言（分开计算）' : 'All languages (separate)'}</option><option value="en">英语</option><option value="zh">中文</option><option value="ja">日本语</option><option value="es">Español</option><option value="pt">Português</option><option value="hi">हिन्दी</option></select></label><button type="button" className="primary" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '读取中…' : 'Loading…') : (zh ? '更新雷达' : 'Refresh radar')}</button></section>
     {data && <section className="radar-v2-scope"><div><span className="radar-v2-kicker">DATA SCOPE</span><b>{data.dataScope.currentRows} {zh ? '条当前长视频 · ' : 'current long-form · '}{data.dataScope.historicalRows} {zh ? '条历史基线' : 'historical baseline'}</b><small>{data.dataScope.note}</small></div><div><strong>{data.events.length}</strong><span>{zh ? '个事件' : 'events'}</span></div></section>}
     {focusTopic ? <div className="radar-v2-focus"><span>{zh ? '已定位赛道' : 'Focused niche'}</span><b>{focusTopic}</b><button type="button" onClick={() => { setFocusTopic(null); updateUrl({ topic: undefined }); }}>{zh ? '清除定位' : 'Clear focus'}</button></div> : null}
     <nav className="radar-v2-tabs" aria-label={zh ? '变化信号类型' : 'Change signal type'}>{laneOptions.map(option => <button key={option.key} type="button" className={lane === option.key ? 'active' : ''} onClick={() => { setLane(option.key); updateUrl({ lane: option.key }); }}>{option[zh ? 'zh' : 'en']}{data ? <small>{laneCount(option.key)}</small> : null}</button>)}</nav>

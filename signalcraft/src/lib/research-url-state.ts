@@ -7,6 +7,7 @@
  */
 export type ResearchUrlState = {
   market?: string;
+  language?: string;
   window?: string;
   lane?: string;
   topic?: string;
@@ -19,6 +20,7 @@ export function readResearchUrlState(search: string): ResearchUrlState {
   const params = new URLSearchParams(search);
   return {
     market: clean(params.get('market')),
+    language: clean(params.get('language')),
     window: clean(params.get('window')),
     lane: clean(params.get('lane')),
     topic: clean(params.get('topic')) || clean(params.get('nicheName')),

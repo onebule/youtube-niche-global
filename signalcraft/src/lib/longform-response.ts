@@ -287,6 +287,7 @@ export function normalizeLongformResponse(payload: unknown): LongformResponse {
     dataScope: {
       source: textOr(rawScope.source, 'unknown'),
       markets: textList(rawScope.markets),
+      language: nullableText(rawScope.language) || undefined,
       window: textOr(rawScope.window, '28d'),
       latestCapturedAt: nullableText(rawScope.latestCapturedAt),
       collectedRows: Math.max(0, Math.round(numberOr(rawScope.collectedRows, 0))),

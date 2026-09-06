@@ -103,7 +103,7 @@ export type LongformResponse = {
   dataAvailability?: DataAvailability;
   available: boolean;
   engineVersion: string;
-  dataScope: { source: string; markets: string[]; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; marketSampleLimit?: number; failedMarkets?: string[]; note: string };
+  dataScope: { source: string; markets: string[]; language?: string; window: string; latestCapturedAt: string | null; collectedRows: number; longformRows: number; uncertainRows: number; classificationCoverage: number; longformShare?: number; calculationPoolLimit?: number; visibleOpportunityLimit?: number | null; marketSampleLimit?: number; failedMarkets?: string[]; note: string };
   availabilityAudit: { coverage: number; availableFields: number; unavailableFields: number; fields: Record<string, { available: boolean; provenance: string; confidence: string; note: string | null }> };
   lanes: Record<string, number>;
   opportunities: LongformOpportunity[];
@@ -111,8 +111,9 @@ export type LongformResponse = {
   quota?: { access_tier?: string; ranking_limit?: number | null; ranking_unlimited?: boolean };
 };
 
-export async function fetchLongformOpportunities(input: { market: string; window: string; category?: string; limit?: number; locale?: 'zh' | 'en' } = { market: 'all', window: '28d' }, options: { signal?: AbortSignal } = {}) {
+export async function fetchLongformOpportunities(input: { market: string; language?: string; window: string; category?: string; limit?: number; locale?: 'zh' | 'en' } = { market: 'all', window: '28d' }, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market, window: input.window });
+  if (input.language && input.language !== 'all') params.set('language', input.language);
   if (input.locale) params.set('locale', input.locale);
   if (input.category && input.category !== 'all') params.set('category', input.category);
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));

@@ -21,6 +21,7 @@ export type OpportunityRadarEvent = {
   title: string;
   topic: string;
   format: string;
+  language?: string;
   lifecycle: RadarLifecycle;
   whyNowScore: number | null;
   whyNowLevel: 'WEAK' | 'MODERATE' | 'STRONG' | 'VERY_STRONG';
@@ -81,6 +82,7 @@ export type OpportunityRadarResponse = {
   dataScope: {
     source: string;
     markets: string[];
+    language?: string;
     historyDays: number;
     currentWindowDays: number;
     currentRows: number;
@@ -110,8 +112,9 @@ export function normalizeOpportunityRadarResponse(payload: unknown): Opportunity
   return { ...raw, schemaVersion: typeof raw.schemaVersion === 'string' ? raw.schemaVersion : DATA_QUALITY_SCHEMA_VERSION, evidence: normalizeEvidence(rawRecord.evidence, { source: scope?.source || 'unknown', algorithmVersion: typeof rawRecord.algorithmVersion === 'string' ? rawRecord.algorithmVersion : null, snapshotId: typeof rawRecord.snapshotId === 'string' ? rawRecord.snapshotId : null, inputSnapshotId: typeof rawRecord.inputSnapshotId === 'string' ? rawRecord.inputSnapshotId : null, requestId: typeof rawRecord.requestId === 'string' ? rawRecord.requestId : null, capturedAt: typeof rawRecord.capturedAt === 'string' ? rawRecord.capturedAt : scope?.latestCapturedAt || null }), dataQuality: normalizeDataQuality(rawRecord.dataQuality, quality), available: raw.available === true, engineVersion: typeof raw.engineVersion === 'string' ? raw.engineVersion : 'unknown', window: raw.window || '14d', dataScope: scope || { source: 'unknown', markets: [], historyDays: 0, currentWindowDays: 14, currentRows: 0, historicalRows: 0, latestCapturedAt: null, note: '暂无数据范围说明。' }, lanes: raw.lanes || {}, events: Array.isArray(raw.events) ? raw.events : [], gaps: Array.isArray(raw.gaps) ? raw.gaps.filter((item): item is string => typeof item === 'string') : [] };
 }
 
-export async function fetchOpportunityRadar(input: { market?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
+export async function fetchOpportunityRadar(input: { market?: string; language?: string; window?: '7d' | '14d' | '30d'; limit?: number } = {}, options: { signal?: AbortSignal } = {}) {
   const params = new URLSearchParams({ market: input.market || 'all', window: input.window || '14d' });
+  if (input.language && input.language !== 'all') params.set('language', input.language);
   if (input.limit) params.set('limit', String(Math.min(Math.max(Math.round(input.limit), 1), 500)));
   const response = await fetch(`${OPPORTUNITY_RADAR_ENDPOINT}?${params.toString()}`, {
     headers: { accept: 'application/json', ...authHeaders() },
