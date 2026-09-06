@@ -85,6 +85,14 @@ import {
   type ModelRoutingStrategy,
 } from '@/src/lib/video-model-router';
 import { normalizeVideoGenerationJob, resolveCanvasModelMode, type CanvasModelMode } from '@/src/lib/canvas-generation';
+import {
+  createCreatorProject,
+  creatorFlowStage,
+  normalizeCreatorProject,
+  projectBriefToShotDraft,
+  type CreatorProject,
+  type CreatorProjectFormat,
+} from '@/src/lib/creator-flow';
 import { compileH3Prompt, describeH3PromptIssue, validateH3Prompt, type H3PromptMode } from '@/src/lib/h3-prompt-compiler';
 import { VIRAL_CASE_CANVAS_HANDOFF_KEY, normalizeViralCaseCanvasHandoff } from '@/src/lib/viral-case';
 import ImageGenerationPanel from './image-generation-panel';
@@ -108,7 +116,7 @@ type UploadedReferenceMedia = {
   previewUrl: string;
 };
 type SavedCanvas = {
-  version: 1 | 2 | 3 | 4 | 5;
+  version: 1 | 2 | 3 | 4 | 5 | 6;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -130,6 +138,7 @@ type SavedCanvas = {
   scriptOcr?: ScriptOcrDraft | null;
   customNodes?: CanvasCustomNode[];
   customEdges?: CanvasCustomEdge[];
+  project?: CreatorProject;
 };
 
 type ScriptOcrState = {
@@ -206,12 +215,12 @@ const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGen
   };
 };
 const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
-  source: zh ? '镜头边界' : 'Shot boundary',
+  source: zh ? '视觉参考' : 'Visual reference',
   prompt: 'Motion Prompt',
   model: zh ? '模型设置' : 'Model settings',
-  agent: zh ? 'Agent 导演' : 'Agent director',
-  task: zh ? '视频生成' : 'Video generation',
-  result: zh ? '视频结果' : 'Video result',
+  agent: zh ? 'AI 导演' : 'AI Director',
+  task: zh ? '生成确认' : 'Generation review',
+  result: zh ? '镜头结果' : 'Shot result',
 }[nodeId]);
 const agentActionName = (action: CanvasAgentAction, zh: boolean) => {
   if (action.type === 'canvas.organize') return zh ? '整理画布' : 'Organize canvas';
@@ -492,6 +501,7 @@ export default function VideoCanvasStudio({
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [capabilitiesRetry, setCapabilitiesRetry] = useState(0);
   const [error, setError] = useState('');
+  const [project, setProject] = useState<CreatorProject>(() => createCreatorProject());
   const [prompt, setPrompt] = useState('');
   const [h3Brief, setH3Brief] = useState('');
   const [model, setModel] = useState<VideoModelId>('seedance-2');
@@ -827,6 +837,21 @@ export default function VideoCanvasStudio({
     if (preflight.errors.length) return preflight.errors[0].message;
     return '';
   })();
+  const creatorStage = creatorFlowStage({
+    brief: project.brief,
+    hasReference: hasReferenceInput,
+    hasPrompt: Boolean(prompt.trim()),
+    generationStatus: generation?.status || null,
+  });
+  const creatorStageCopy = ({
+    brief: zh ? '先描述这支内容想传达什么。' : 'Describe what this piece should communicate first.',
+    reference: zh ? '加入一张参考图，让镜头有视觉起点。' : 'Add one reference image to give this shot a visual starting point.',
+    direction: zh ? '补充镜头描述，再让 AI 导演协助规划。' : 'Add a shot direction, then ask the AI Director to help plan it.',
+    ready: zh ? '素材和描述已齐全，确认后即可提交生成。' : 'Assets and direction are ready. Review, then submit when you choose.',
+    rendering: zh ? '正在生成；你可以继续浏览其他镜头。' : 'Rendering is in progress. You can keep reviewing other shots.',
+    complete: zh ? '当前镜头已有结果，可继续创建下一镜头。' : 'This shot has a result. Continue with the next shot when ready.',
+    needs_attention: zh ? '本次生成需要处理；修改后由你决定是否再次提交。' : 'This generation needs attention. Edit it, then decide whether to submit again.',
+  } satisfies Record<ReturnType<typeof creatorFlowStage>, string>)[creatorStage];
   const progress = generation?.progress || 0;
   const generationId = generation?.id;
   const generationStatus = generation?.status;
@@ -1217,7 +1242,7 @@ export default function VideoCanvasStudio({
       const raw = localStorage.getItem(canvasStorageKey);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5) {
+        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5 || saved.version === 6) {
           // Hydration intentionally mirrors an external localStorage snapshot
           // after mount; this is the one synchronous state sync in this effect.
           // v3 reserves a dedicated composer row, so older layouts need the
@@ -1225,6 +1250,7 @@ export default function VideoCanvasStudio({
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setNodes(saved.version >= 3 ? restoreNodePositions(saved.nodes) : INITIAL_NODES);
           setPrompt(saved.prompt || '');
+          setProject(normalizeCreatorProject(saved.project));
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
           setModel(restoredModel);
@@ -1298,7 +1324,8 @@ export default function VideoCanvasStudio({
     const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
     const saved: SavedCanvas = {
-      version: 5,
+      version: 6,
+      project,
       nodes,
       prompt,
       model,
@@ -1322,7 +1349,7 @@ export default function VideoCanvasStudio({
       customEdges: customEdges.map(edge => ({ ...edge })),
     };
     localStorage.setItem(canvasStorageKey, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, modelMode, nodes, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, modelMode, nodes, project, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1962,7 +1989,7 @@ export default function VideoCanvasStudio({
     focusMotionPrompt();
     notify(hasReferenceInput
       ? (zh ? '已把当前参考素材带入图生视频流程，请补充 Motion Prompt。' : 'The current reference is ready for image-to-video. Add a Motion Prompt.')
-      : (zh ? '先在镜头边界节点加入 START 或参考图，再开始 Animate。' : 'Add a START frame or reference image in the shot boundary node before animating.'));
+      : (zh ? '先在视觉参考中加入 START 或参考图，再开始 Animate。' : 'Add a START frame or reference image before animating.'));
   };
 
   const openNodePaletteFor = (parentId: string) => {
@@ -2381,6 +2408,35 @@ export default function VideoCanvasStudio({
     } catch (cause) {
       setError(clientMessage(cause));
     }
+  };
+
+  const updateProject = (patch: Partial<CreatorProject>) => {
+    setProject(previous => ({
+      ...previous,
+      ...patch,
+      title: typeof patch.title === 'string' ? patch.title.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) : previous.title,
+      brief: typeof patch.brief === 'string' ? patch.brief.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 1200) : previous.brief,
+    }));
+  };
+
+  const useProjectBriefForShot = () => {
+    const draft = projectBriefToShotDraft(project);
+    if (!draft) {
+      notify(zh ? '先写下这支内容的目标或故事，再建立镜头草稿。' : 'Add the goal or story first, then create a shot draft.');
+      return;
+    }
+    if (!prompt.trim()) {
+      setPrompt(draft);
+      patchSemanticNode('prompt', { status: 'draft' });
+      notify(zh ? '项目概述已带入当前镜头草稿；请确认或补充后再让 AI 导演规划。' : 'The project brief is now a shot draft. Review it before asking the AI Director to plan.');
+    } else {
+      notify(zh ? '当前镜头已有描述，项目概述仍会保留在上方。' : 'This shot already has a direction; the project brief remains above.');
+    }
+    focusMotionPrompt();
+  };
+
+  const renameCurrentShot = (title: string) => {
+    setCanvasSemantics(previous => patchCanvasShot(previous, { title: title.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) }));
   };
 
   const changeCanvasModelMode = (next: CanvasModelMode) => {
@@ -2904,9 +2960,19 @@ export default function VideoCanvasStudio({
 
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
-      <div><span>AI STUDIO · SHOT CANVAS</span><h1>{zh ? '把镜头思路铺开，再交给模型。' : 'Lay out the shot before handing it to the model.'}</h1><p>{zh ? '拖拽节点组织一次图生视频任务；底层仍复用现有 Provider、异步任务、积分和媒体存储。' : 'Arrange one image-to-video task with draggable nodes while reusing the existing providers, task lifecycle, credits, and storage.'}</p></div>
-      <aside><b>{zh ? '画布状态' : 'Canvas state'}</b><span>{zh ? '当前账号在此设备自动保存' : 'Auto-saved for this account'}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理画布' : 'Tidy canvas'}</button></aside>
+      <div><span>CREATOR FLOW · PRIVATE PROJECT</span><h1>{zh ? '从想法开始，把它变成一组可生成的镜头。' : 'Start with an idea, then turn it into a set of generatable shots.'}</h1><p>{zh ? '先定项目，再逐镜头加入参考、描述和结果。模型、费用和任务仍沿用现有服务，每次生成都由你确认。' : 'Define the project, then add references, direction, and results shot by shot. Existing models, costs, and tasks stay in place, and every generation needs your confirmation.'}</p></div>
+      <aside><b>{zh ? '创作进度' : 'Creation progress'}</b><span>{creatorStageCopy}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理当前镜头' : 'Tidy current shot'}</button></aside>
     </header>
+
+    <section className="creator-flow-brief" aria-labelledby="creator-flow-project-title">
+      <div className="creator-flow-brief-copy"><span>01 · {zh ? '项目' : 'PROJECT'}</span><h2 id="creator-flow-project-title">{zh ? '先告诉我你想做什么。' : 'Start by telling us what you want to make.'}</h2><p>{zh ? '这只是当前账号的私有创作概述。它可以带入首个镜头草稿，但不会自动调用模型或提交任务。' : 'This is a private creative brief for this account. It can seed a first-shot draft, but never calls a model or submits a task by itself.'}</p></div>
+      <div className="creator-flow-brief-fields">
+        <label><span>{zh ? '项目名称' : 'Project name'}</span><input value={project.title} maxLength={80} onChange={event => updateProject({ title: event.target.value })} onBlur={() => updateProject({ title: project.title.trim() || (zh ? '未命名项目' : 'Untitled project') })} placeholder={zh ? '例如：夏日新品短片' : 'For example: Summer product film'} /></label>
+        <label><span>{zh ? '内容形态' : 'Format'}</span><select value={project.format} onChange={event => updateProject({ format: event.target.value as CreatorProjectFormat })}><option value="short">{zh ? '短视频 / 竖屏' : 'Short / vertical'}</option><option value="landscape">{zh ? '横版视频' : 'Landscape video'}</option><option value="square">{zh ? '方形内容' : 'Square content'}</option><option value="series">{zh ? '系列内容' : 'Series'}</option></select></label>
+        <label className="creator-flow-brief-wide"><span>{zh ? '内容概述' : 'Creative brief'}</span><textarea value={project.brief} maxLength={1200} rows={3} onChange={event => updateProject({ brief: event.target.value })} placeholder={zh ? '写下主体、受众、情绪或想表达的故事。例如：一只橘猫在雨后街道缓慢前行，氛围温暖克制。' : 'Describe the subject, audience, mood, or story. For example: A ginger cat walks slowly through a rain-washed street with a warm, restrained mood.'} /></label>
+      </div>
+      <div className="creator-flow-brief-action"><span className={'creator-flow-stage is-' + creatorStage}>{creatorStage === 'ready' ? (zh ? '可生成' : 'Ready') : creatorStage === 'complete' ? (zh ? '已有结果' : 'Result ready') : creatorStage === 'rendering' ? (zh ? '生成中' : 'Rendering') : creatorStage === 'needs_attention' ? (zh ? '需要处理' : 'Needs attention') : (zh ? '创作中' : 'In progress')}</span><button type="button" onClick={useProjectBriefForShot}>{zh ? '带入当前镜头' : 'Use in current shot'}<span aria-hidden="true">→</span></button></div>
+    </section>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
       <span className="video-canvas-model-mark" aria-hidden="true">✦</span>
@@ -2919,7 +2985,7 @@ export default function VideoCanvasStudio({
 
     <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
       <div className="video-canvas-caption">
-        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{zh ? '未命名镜头项目' : 'Untitled shot project'}</b><small><i aria-hidden="true" />{zh ? '仅当前账号可见' : 'Private to this account'}</small></div></div>
+        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{project.title.trim() || (zh ? '未命名项目' : 'Untitled project')}</b><small><i aria-hidden="true" />{zh ? '私有项目 · 自动保存' : 'Private project · auto-saved'}</small></div></div>
         <div className="video-canvas-caption-center">
           <div className="canvas-shot-rail" aria-label={zh ? '镜头列表' : 'Shot list'}>
             <small>SHOTS</small>
@@ -2928,9 +2994,9 @@ export default function VideoCanvasStudio({
               return <button key={index} type="button" className={'canvas-shot-rail-item ' + (index === shot ? 'is-current' : '')} aria-current={index === shot ? 'step' : undefined} aria-label={zh ? `切换到镜头 ${String(index).padStart(2, '0')}` : `Switch to shot ${String(index).padStart(2, '0')}`} onClick={() => switchShot(index)}><b>{String(index).padStart(2, '0')}</b><i className={item.status} aria-hidden="true" /></button>;
             })}
           </div>
-          <p>{zh ? '拖动空白区域移动画布，滚轮缩放。' : 'Drag the background to pan, use the wheel to zoom.'}</p>
+          <p>{zh ? '按镜头推进；生成前始终由你确认。' : 'Move through shots at your pace; you always confirm before generation.'}</p>
         </div>
-        <div className="video-canvas-caption-actions"><button type="button" className={'canvas-add-node-trigger ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭面板' : 'Close panel') : (zh ? '添加节点' : 'Add node')}</button></div>
+        <div className="video-canvas-caption-actions"><button type="button" className="canvas-add-node-trigger" disabled={shotActionsDisabled} onClick={() => createNextShot(false)}><span aria-hidden="true">＋</span>{zh ? '新镜头' : 'New shot'}</button><button type="button" className={'canvas-add-node-trigger is-quiet ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭素材' : 'Close assets') : (zh ? '添加素材' : 'Add assets')}</button></div>
       </div>
       <div
         ref={viewportRef}
@@ -2976,23 +3042,23 @@ export default function VideoCanvasStudio({
           <small>{zh ? '点击色块定位节点；拖动和缩放仍在主画布完成。' : 'Click a block to focus a node. Pan and zoom in the main canvas.'}</small>
         </aside>}
         <div className="canvas-main-toolbar" role="toolbar" aria-label={zh ? '画布主工具' : 'Canvas tools'} onPointerDown={event => event.stopPropagation()}>
-          <button type="button" className="canvas-main-tool" onClick={toggleNodePalette} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" title={nodePaletteOpen ? (zh ? '关闭添加节点面板' : 'Close add node panel') : (zh ? '添加节点' : 'Add node')}>
-            <span aria-hidden="true">＋</span><b>{zh ? '添加' : 'Add'}</b>
+          <button type="button" className="canvas-main-tool" onClick={toggleNodePalette} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" title={nodePaletteOpen ? (zh ? '关闭素材面板' : 'Close assets panel') : (zh ? '添加素材' : 'Add assets')}>
+            <span aria-hidden="true">＋</span><b>{zh ? '素材' : 'Assets'}</b>
           </button>
           <button type="button" className="canvas-main-tool" onClick={addTextNode} title={zh ? '聚焦 Motion Prompt' : 'Focus Motion Prompt'}>
-            <span aria-hidden="true">T</span><b>{zh ? '文字' : 'Text'}</b>
+            <span aria-hidden="true">T</span><b>{zh ? '描述' : 'Direction'}</b>
           </button>
           <button type="button" className="canvas-main-tool" onClick={addNextAfterSelectedCanvasNode} disabled={!selectedCanvasNodeId} title={!selectedCanvasNodeId ? (zh ? '先选择一个节点' : 'Select a node first') : (zh ? '为当前节点添加下一步' : 'Add a next step after the selected node')}>
-            <span aria-hidden="true">↗</span><b>{zh ? '下一步' : 'Next'}</b>
+            <span aria-hidden="true">↗</span><b>{zh ? '扩展' : 'Extend'}</b>
           </button>
           <button type="button" className="canvas-main-tool is-primary" onClick={handleAgentAction} title={zh ? '让 Agent 规划当前镜头；提交前仍需你确认' : 'Let the Agent plan this shot; you still confirm before submit'}>
-            <span aria-hidden="true">✦</span><b>{zh ? 'AI 创建' : 'AI create'}</b>
+            <span aria-hidden="true">✦</span><b>{zh ? 'AI 导演' : 'AI Director'}</b>
           </button>
           <button type="button" className="canvas-main-tool canvas-main-tool-image" onClick={openImageGeneration} title={zh ? '使用 GPT-Image-2 生成图片' : 'Generate an image with GPT-Image-2'}>
             <span aria-hidden="true">▧</span><b>{zh ? 'AI 生图' : 'AI image'}</b>
           </button>
           <button type="button" className={'canvas-main-tool ' + (historyOpen ? 'is-active' : '')} onClick={toggleHistory} aria-expanded={historyOpen} aria-controls="canvas-history-panel" title={historyOpen ? (zh ? '关闭生成历史' : 'Close generation history') : (zh ? '打开生成历史' : 'Open generation history')}>
-            <span aria-hidden="true">▤</span><b>{zh ? '历史' : 'History'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}
+            <span aria-hidden="true">▤</span><b>{zh ? '版本' : 'Versions'}</b>{history.length > 0 && <i aria-hidden="true">{history.length > 99 ? '99+' : history.length}</i>}
           </button>
           <button type="button" className="canvas-main-tool" onClick={() => void toggleCanvasFullscreen()} title={isCanvasFullscreen ? (zh ? '退出全屏（Esc）' : 'Exit fullscreen (Esc)') : (zh ? '进入全屏' : 'Enter fullscreen')}>
             <span aria-hidden="true">⛶</span><b>{isCanvasFullscreen ? (zh ? '退出' : 'Exit') : (zh ? '全屏' : 'Full')}</b>
@@ -3049,7 +3115,7 @@ export default function VideoCanvasStudio({
           >
             <div className="canvas-shot-container-head" onPointerDown={startShotDrag} onPointerMove={moveShot} onPointerUp={endShotDrag} onPointerCancel={endShotDrag}>
               <span className="canvas-shot-container-index">{String(canvasSemantics.shot.index).padStart(2, '0')}</span>
-              <div><b>{zh ? '当前镜头' : 'Current shot'}</b><small>{canvasSemantics.shot.title}</small></div>
+              <label className="canvas-shot-title-field" onPointerDown={event => event.stopPropagation()}><b>{zh ? '当前镜头' : 'Current shot'}</b><input aria-label={zh ? '当前镜头名称' : 'Current shot title'} value={canvasSemantics.shot.title} maxLength={80} placeholder={`Shot ${String(shot).padStart(2, '0')}`} onChange={event => renameCurrentShot(event.target.value)} onBlur={() => { if (!canvasSemantics.shot.title.trim()) renameCurrentShot(`Shot ${String(shot).padStart(2, '0')}`); }} /></label>
               <span className={'canvas-shot-container-status ' + canvasSemantics.shot.status}><i />{canvasSemantics.shot.status === 'generating' ? (zh ? '生成中' : 'Generating') : canvasSemantics.shot.status === 'completed' ? (zh ? '已完成' : 'Completed') : canvasSemantics.shot.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft')}</span>
               <div className="canvas-shot-container-actions">
                 <button type="button" className="canvas-shot-container-action" disabled={shotActionsDisabled} title={shotActionsDisabled ? (zh ? '当前任务完成后可继续创建镜头' : 'Finish the current task before creating another shot') : undefined} onPointerDown={event => event.stopPropagation()} onClick={() => createNextShot(true)}>{zh ? '复制' : 'Duplicate'}</button>
@@ -3060,14 +3126,14 @@ export default function VideoCanvasStudio({
                 <button type="button" aria-expanded={!canvasSemantics.shot.collapsed} onPointerDown={event => event.stopPropagation()} onClick={toggleShotCollapsed}>{canvasSemantics.shot.collapsed ? (zh ? '展开' : 'Expand') : (zh ? '收起' : 'Collapse')}</button>
               </div>
             </div>
-            {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? 'SHOT FLOW' : 'SHOT FLOW'}</span><b>{zh ? '素材 → Agent → 生成 → 结果' : 'Reference → Agent → Generate → Result'}</b></div>}
+            {!canvasSemantics.shot.collapsed && <div className="canvas-shot-container-flow"><span>{zh ? '镜头流程' : 'SHOT FLOW'}</span><b>{zh ? '视觉参考 → 创作方案 → 生成确认 → 镜头结果' : 'Visual reference → Creative plan → Confirm generation → Shot result'}</b></div>}
           </div>
           <svg className="video-canvas-edges" width={STAGE_SIZE.width} height={STAGE_SIZE.height} aria-hidden="true">
             {edges.map(edge => <g key={edge.id} className={customEdges.some(customEdge => customEdge.id === edge.id) ? 'custom-edge' : undefined}><path className="edge-shadow" d={edge.d} /><path d={edge.d} /></g>)}
           </svg>
 
           <article className={'video-canvas-node source-node ' + (selectedNodeId === 'source' ? 'is-selected' : '')} data-canvas-node="source" data-canvas-role={canvasSemantics.nodes.source?.role} data-shot-id={canvasSemantics.nodes.source?.shotId} data-asset-id={canvasSemantics.nodes.source?.assetId || undefined} data-highlighted-asset={highlightedAssetId || undefined} data-status={canvasSemantics.nodes.source?.status} data-selected={selectedNodeId === 'source' ? 'true' : undefined} onClick={() => selectCanvasNode('source')} style={{ left: nodes.source.x, top: nodes.source.y, width: nodeSize.source.width, minHeight: nodeSize.source.height }}>
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头边界节点。拖动，或使用方向键移动。' : 'Shot boundary node. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '镜头边界' : 'Shot boundary'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视觉参考。拖动，或使用方向键移动。' : 'Visual reference. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('source')} onKeyDown={event => moveNodeWithKeyboard(event, 'source')} onPointerDown={event => startNodeDrag(event, 'source')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>01</span><b>{zh ? '视觉参考' : 'Visual reference'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body">
               {referenceMode === 'text' ? <div className="canvas-text-source-node"><span aria-hidden="true">Aa</span><b>{zh ? '纯文本镜头' : 'Text-only shot'}</b><small>{zh ? 'Veo 3.1 Lite 不使用参考图片' : 'Veo 3.1 Lite does not use reference images'}</small></div> : referenceMode === 'start-end' ? <>
                 <UploadControl label="START" zh={zh} value={startFrame} busy={uploading === 'start'} onSelect={file => void upload('start', file)} onRemove={() => { retireAsset(startFrame?.assetId); setStartFrame(null); patchSemanticNode('source', { assetId: null }); }} />
@@ -3086,16 +3152,16 @@ export default function VideoCanvasStudio({
               </div>}
               <div className="canvas-source-actions">
                 <button type="button" className="canvas-source-animate-button" disabled={shotActionsDisabled} data-canvas-action="animate" onClick={animateCurrentReference}>{zh ? 'Animate 当前素材' : 'Animate current reference'}<span aria-hidden="true">→</span></button>
-                <small>{hasReferenceInput ? (zh ? '进入底部生成台，选择模型后提交。' : 'Open the composer, choose a model, then submit.') : (zh ? '需要至少 1 张参考图。' : 'At least one reference image is required.')}</small>
+                <small>{hasReferenceInput ? (zh ? '进入下方镜头编辑器，确认方案后提交。' : 'Open the shot editor below, then review before submitting.') : (zh ? '需要至少 1 张参考图。' : 'At least one reference image is required.')}</small>
               </div>
             </div>
               <span className="node-port output" aria-hidden="true" />
-              <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('source')} aria-label={zh ? '在镜头边界后添加下一步' : 'Add a next step after shot boundary'}>＋</button>
+              <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('source')} aria-label={zh ? '在视觉参考后添加素材或步骤' : 'Add an asset or step after visual reference'}>＋</button>
           </article>
 
           <article className={'video-canvas-node agent-node ' + (selectedNodeId === 'agent' ? 'is-selected' : '')} data-canvas-node="agent" data-canvas-role={canvasSemantics.nodes.agent?.role} data-shot-id={canvasSemantics.nodes.agent?.shotId} data-generation-id={canvasSemantics.nodes.agent?.generationId || undefined} data-status={canvasSemantics.nodes.agent?.status} data-selected={selectedNodeId === 'agent' ? 'true' : undefined} onClick={() => selectCanvasNode('agent')} style={{ left: nodes.agent.x, top: nodes.agent.y, width: nodeSize.agent.width, minHeight: nodeSize.agent.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'Agent 导演节点。拖动，或使用方向键移动。' : 'Agent director node. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('agent')} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'Agent 导演' : 'Agent director'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? 'AI 导演。拖动，或使用方向键移动。' : 'AI Director. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('agent')} onKeyDown={event => moveNodeWithKeyboard(event, 'agent')} onPointerDown={event => startNodeDrag(event, 'agent')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>02</span><b>{zh ? 'AI 导演' : 'AI Director'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-agent-body">
               <div className="canvas-agent-badge"><span aria-hidden="true">✦</span><b>{agentPlan ? agentPlan.director.label : 'GPT / Claude'}</b><small>{agentPlan ? (agentPlan.agentFallback ? (zh ? '规则回退' : 'Rules fallback') : (zh ? '已规划' : 'Planned')) : (zh ? '待规划' : 'Ready')}</small></div>
               {agentPlan ? <>
@@ -3126,27 +3192,27 @@ export default function VideoCanvasStudio({
               {agentPlanBlockedReason && <small className="canvas-agent-prerequisite">{agentPlanBlockedReason}</small>}
             </div>
             <span className="node-port output" aria-hidden="true" />
-            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('agent')} aria-label={zh ? '在 Agent 导演后添加下一步' : 'Add a next step after Agent director'}>＋</button>
+            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('agent')} aria-label={zh ? '在 AI 导演后添加下一步' : 'Add a next step after AI Director'}>＋</button>
           </article>
 
           <article className={'video-canvas-node task-node ' + (selectedNodeId === 'task' ? 'is-selected' : '')} data-canvas-node="task" data-canvas-role={canvasSemantics.nodes.task?.role} data-shot-id={canvasSemantics.nodes.task?.shotId} data-generation-id={canvasSemantics.nodes.task?.generationId || undefined} data-version-id={canvasSemantics.nodes.task?.versionId || undefined} data-version={canvasSemantics.nodes.task?.version || undefined} data-best-take={canvasSemantics.nodes.task?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.task?.status} data-selected={selectedNodeId === 'task' ? 'true' : undefined} onClick={() => selectCanvasNode('task')} style={{ left: nodes.task.x, top: nodes.task.y, width: nodeSize.task.width, minHeight: nodeSize.task.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频生成节点。拖动，或使用方向键移动。' : 'Video generation node. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '视频生成' : 'Video generation'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '生成确认。拖动，或使用方向键移动。' : 'Generation review. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('task')} onKeyDown={event => moveNodeWithKeyboard(event, 'task')} onPointerDown={event => startNodeDrag(event, 'task')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>03</span><b>{zh ? '生成确认' : 'Generation review'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-task-body">
               <div className="canvas-task-model"><span className="canvas-task-model-icon" aria-hidden="true">▣</span><div><b>{modelName(model)}</b><small>{referenceMode === 'text' ? (zh ? '纯文本生视频 · 固定 8 秒' : 'Text-to-video · fixed 8s') : referenceMode === 'omni' ? (zh ? '全能参考 · 最多 9 张' : 'Omni · up to 9 images') : (zh ? '首尾帧参考' : 'Start / end')}</small></div><button type="button" onClick={() => { setTemplateOpen(false); setMinimapOpen(false); setPreferencesOpen(true); }}>{zh ? '设置' : 'Set'}</button></div>
               <div className="canvas-cost"><span>{selectedModel?.ownerUnlimited ? (zh ? '主人积分' : 'Owner credits') : (zh ? '预计消耗' : 'Estimated cost')}</span><b>{selectedModel?.ownerUnlimited ? (zh ? '无限' : 'Unlimited') : estimatedCredits ? estimatedCredits + ' cr' : '—'}</b></div>
               <ul><li className={hasReferenceInput ? 'done' : ''}>{referenceMode === 'text' ? (zh ? '纯文本输入' : 'Text input') : referenceMode === 'omni' ? (zh ? `${referenceFrames.length}/9 参考图片` : `${referenceFrames.length}/9 references`) : (zh ? 'START 图片' : 'START frame')}</li><li className={prompt.trim() ? 'done' : ''}>Motion Prompt</li><li className={selectedModel?.enabled && referenceModeSupported ? 'done' : ''}>{zh ? '模型可用' : 'Model ready'}</li><li className={preflight.ok ? 'done' : ''}>{zh ? '提交前检查' : 'Preflight'}</li></ul>
               <div className={'canvas-task-state ' + (generation?.status || 'draft')}><span />{generation ? statusLabel(generation.status, zh, generation.errorCode) : (zh ? '等待提交' : 'Ready to submit')}</div>
               {!generation && <strong className={'canvas-task-next ' + (canGenerate ? 'ready' : '')}>{canGenerate ? (zh ? '参数已齐，可以生成' : 'Ready to generate') : generationBlockedReason}</strong>}
-              <small>{zh ? '在底部生成台补齐参数并提交。仅成功后扣除积分。' : 'Complete the settings in the composer below. Credits settle only on success.'}</small>
+              <small>{zh ? '在下方镜头编辑器确认参数后提交。仅成功后扣除积分。' : 'Review the settings in the shot editor below before submitting. Credits settle only on success.'}</small>
             </div>
             <span className="node-port output" aria-hidden="true" />
-            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('task')} aria-label={zh ? '在视频生成后添加下一步' : 'Add a next step after video generation'}>＋</button>
+            <button type="button" className="canvas-node-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('task')} aria-label={zh ? '在生成确认后添加下一步' : 'Add a next step after generation review'}>＋</button>
           </article>
 
           <article className={'video-canvas-node result-node ' + (selectedNodeId === 'result' ? 'is-selected' : '')} data-canvas-node="result" data-canvas-role={canvasSemantics.nodes.result?.role} data-shot-id={canvasSemantics.nodes.result?.shotId} data-generation-id={canvasSemantics.nodes.result?.generationId || undefined} data-version-id={canvasSemantics.nodes.result?.versionId || undefined} data-version={canvasSemantics.nodes.result?.version || undefined} data-best-take={canvasSemantics.nodes.result?.bestTake ? 'true' : undefined} data-status={canvasSemantics.nodes.result?.status} data-selected={selectedNodeId === 'result' ? 'true' : undefined} onClick={() => selectCanvasNode('result')} style={{ left: nodes.result.x, top: nodes.result.y, width: nodeSize.result.width, minHeight: nodeSize.result.height }}>
             <span className="node-port input" aria-hidden="true" />
-            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '视频结果节点。拖动，或使用方向键移动。' : 'Video result node. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('result')} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '视频结果' : 'Video result'}</b><i>⋮⋮</i></div>
+            <div className="canvas-node-grip" role="group" tabIndex={0} aria-label={zh ? '镜头结果。拖动，或使用方向键移动。' : 'Shot result. Drag it or use the arrow keys to move it.'} onFocus={() => selectCanvasNode('result')} onKeyDown={event => moveNodeWithKeyboard(event, 'result')} onPointerDown={event => startNodeDrag(event, 'result')} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><span>04</span><b>{zh ? '镜头结果' : 'Shot result'}</b><i>⋮⋮</i></div>
             <div className="canvas-node-body canvas-result-body" aria-live="polite">
               {!generation ? <div className="canvas-result-empty"><span aria-hidden="true">▶</span><b>{zh ? '等待镜头任务' : 'Waiting for a shot'}</b><p>{zh ? '完成左侧节点后，结果和进度会自动出现在这里。' : 'Complete the upstream nodes and the result will appear here.'}</p></div> : <>
                 <div className={'canvas-status ' + generation.status} data-time-mode={generationTimeCopy?.mode || undefined}>
@@ -3168,7 +3234,7 @@ export default function VideoCanvasStudio({
                 {!generation.thumbnailAssetId && generation.status === 'completed' && <small>{zh ? '模型未返回可复用的结果帧；视频仍可下载。' : 'The model did not return a reusable result frame; the video remains downloadable.'}</small>}
               </>}
             </div>
-            <button type="button" className="canvas-node-add-next result-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('result')} aria-label={zh ? '在视频结果后添加下一步' : 'Add a next step after video result'}>＋</button>
+            <button type="button" className="canvas-node-add-next result-add-next" onPointerDown={event => event.stopPropagation()} onClick={() => openNodePaletteFor('result')} aria-label={zh ? '在镜头结果后添加下一步' : 'Add a next step after shot result'}>＋</button>
               </article>
           {customNodes.map(node => {
             const labels = CUSTOM_NODE_LABELS[node.type];
@@ -3189,7 +3255,7 @@ export default function VideoCanvasStudio({
           </div>
 
       {nodePaletteOpen && <aside id="canvas-node-palette" className="canvas-node-palette" role="region" aria-labelledby="canvas-node-palette-title" onKeyDown={event => { if (event.key === 'Escape') closeNodePalette(); }}>
-        <div className="canvas-node-palette-head"><div><span>{nodePaletteParentId ? (zh ? '连接下一步' : 'CONNECT NEXT STEP') : (zh ? '工作区工具' : 'WORKSPACE TOOLS')}</span><b id="canvas-node-palette-title">{nodePaletteParentId ? (zh ? `接到「${paletteParentName}」` : `Connect after ${paletteParentName}`) : (zh ? '添加节点' : 'Add a node')}</b><small>{nodePaletteParentId ? (zh ? '选择文字、图片、视频或其他；只添加画布步骤，不会自动提交生成。' : 'Choose text, image, video, or other. This only adds a canvas step; it never submits a task.') : (zh ? '把输入素材放进当前镜头。' : 'Bring an input into the current shot.')}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭添加节点面板' : 'Close add node panel'} onClick={closeNodePalette}>×</button></div>
+        <div className="canvas-node-palette-head"><div><span>{nodePaletteParentId ? (zh ? '扩展镜头' : 'EXTEND SHOT') : (zh ? '镜头素材' : 'SHOT ASSETS')}</span><b id="canvas-node-palette-title">{nodePaletteParentId ? (zh ? `接到「${paletteParentName}」` : `Connect after ${paletteParentName}`) : (zh ? '添加素材或步骤' : 'Add an asset or step')}</b><small>{nodePaletteParentId ? (zh ? '选择文字、图片、视频或其他；只添加当前镜头内容，不会自动提交生成。' : 'Choose text, image, video, or another step. This only updates the current shot; it never submits work.') : (zh ? '把素材放进当前镜头。' : 'Bring assets into the current shot.')}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭素材面板' : 'Close assets panel'} onClick={closeNodePalette}>×</button></div>
         <div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
           <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
           <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{nodePaletteParentId ? (zh ? '添加图片步骤' : 'Add an image step') : (zh ? '加入 START / 参考图' : 'Add START / reference')}</small></label>
@@ -3245,9 +3311,9 @@ export default function VideoCanvasStudio({
         <p className="canvas-history-footnote">{zh ? '版本只改变当前镜头的选择状态，不会重新提交或重复扣费。' : 'Version selection never resubmits a task or charges credits again.'}</p>
       </aside>}
 
-      <section className={'video-canvas-composer ' + (composerCollapsed ? 'is-composer-collapsed ' : '') + (customLayoutMode ? 'is-layout-mode' : '')} aria-label={zh ? '视频生成控制台' : 'Video generation composer'}>
+      <section className={'video-canvas-composer ' + (composerCollapsed ? 'is-composer-collapsed ' : '') + (customLayoutMode ? 'is-layout-mode' : '')} aria-label={zh ? '镜头编辑器' : 'Shot editor'}>
           <div className="canvas-composer-toolbar">
-            <div className="canvas-composer-toolbar-copy"><span>{zh ? `镜头 ${String(shot).padStart(2, '0')} · 生成台` : `SHOT ${String(shot).padStart(2, '0')} · GENERATOR`}</span><b>{generationInFlight ? (zh ? '任务进行中' : 'Task in progress') : composerCollapsed ? (zh ? '已折叠，参数仍保留' : 'Collapsed · settings retained') : (zh ? '参数与素材' : 'Inputs and settings')}</b></div>
+            <div className="canvas-composer-toolbar-copy"><span>{zh ? `镜头 ${String(shot).padStart(2, '0')} · 编辑器` : `SHOT ${String(shot).padStart(2, '0')} · EDITOR`}</span><b>{generationInFlight ? (zh ? '任务进行中' : 'Task in progress') : composerCollapsed ? (zh ? '已折叠，参数仍保留' : 'Collapsed · settings retained') : (zh ? '素材、描述与生成确认' : 'Assets, direction, and generation review')}</b></div>
             <div className="canvas-composer-toolbar-actions">
               <button type="button" className={'canvas-composer-arrange-button ' + (customLayoutMode ? 'is-active' : '')} aria-pressed={customLayoutMode} onClick={toggleCustomLayoutMode}><span aria-hidden="true">⌘</span>{customLayoutMode ? (zh ? '完成排列' : 'Finish layout') : (zh ? '自定义排列' : 'Custom layout')}</button>
               <button type="button" className="canvas-composer-collapse-button" aria-expanded={!composerCollapsed} aria-controls="canvas-composer-content" onClick={() => setComposerCollapsed(current => !current)}>{composerCollapsed ? (zh ? '展开生成台' : 'Expand composer') : (zh ? '折叠' : 'Collapse')}<span aria-hidden="true">{composerCollapsed ? '⌃' : '⌄'}</span></button>
