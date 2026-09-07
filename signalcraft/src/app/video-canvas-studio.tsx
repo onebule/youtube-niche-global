@@ -102,6 +102,7 @@ import { VIRAL_CASE_CANVAS_HANDOFF_KEY, normalizeViralCaseCanvasHandoff } from '
 import ImageGenerationPanel from './image-generation-panel';
 import CanvasInspector from './canvas-inspector';
 import CreatorProjectBible from './creator-project-bible';
+import CreatorPlanPreview from './creator-plan-preview';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
@@ -3602,6 +3603,7 @@ export default function VideoCanvasStudio({
               {preflight.ok && preflight.warnings.length === 0 && <small>{zh ? '素材、模型能力和参数均已检查。' : 'Assets, model capability, and settings passed the checks.'}</small>}
             </div>
             {agentPlan && <div className="canvas-agent-plan-result" aria-live="polite">
+              <CreatorPlanPreview plan={agentPlan} project={project} shotTitle={canvasSemantics.shot.title} shotNumber={shot} zh={zh} />
               <div><b>{agentPlan.agentFallback ? (zh ? '规则规划已接管' : 'Rules fallback is active') : (zh ? 'Agent 已生成方案' : 'Agent plan ready')}</b><span>{agentPlan.director.label} · {agentPlan.director.model} · {agentPlan.modelLabel} · {agentPlan.duration}{typeof agentPlan.confidence === 'number' ? ` · ${Math.round(agentPlan.confidence * 100)}%` : ''}</span></div>
               <p>{agentPlan.reasoning}</p>
               <div className="canvas-agent-prompt-review">
