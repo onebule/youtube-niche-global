@@ -91,6 +91,7 @@ import {
   creatorShotDirection,
   creatorFlowStage,
   mergeCreatorBibleIntoPrompt,
+  mergeCreatorShotIntentIntoPrompt,
   normalizeCreatorProject,
   projectBriefToShotDraft,
   type CreatorBibleField,
@@ -103,12 +104,14 @@ import ImageGenerationPanel from './image-generation-panel';
 import CanvasInspector from './canvas-inspector';
 import CreatorProjectBible from './creator-project-bible';
 import CreatorPlanPreview from './creator-plan-preview';
+import CreatorShotIntent from './creator-shot-intent';
 
 type Point = { x: number; y: number };
 type Viewport = Point & { scale: number };
 type NodeId = CanvasNodeId;
 type NodePositions = CanvasNodePositions;
 type ReferenceMode = CanvasReferenceMode;
+type ShotIntentField = 'purpose' | 'character' | 'scene' | 'camera' | 'motion';
 type PromptMentionCandidate = {
   frame: UploadedFrame;
   index: number;
@@ -2511,6 +2514,30 @@ export default function VideoCanvasStudio({
     setCanvasSemantics(previous => patchCanvasShot(previous, { title: title.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 80) }));
   };
 
+  const updateCurrentShotIntent = (field: ShotIntentField, value: string) => {
+    const maximum = field === 'purpose' ? 240 : 160;
+    const cleanValue = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, maximum);
+    setCanvasSemantics(previous => patchCanvasShot(previous, { [field]: cleanValue }));
+    setAgentPlan(null);
+  };
+
+  const applyCurrentShotIntent = () => {
+    const merged = mergeCreatorShotIntentIntoPrompt(prompt, canvasSemantics.shot, zh ? 'zh' : 'en');
+    if (merged.reason === 'empty') {
+      notify(zh ? '先写下至少一项当前镜头意图，再带入 Prompt。' : 'Add at least one current-shot intent before applying it to the Prompt.');
+      return;
+    }
+    if (merged.reason === 'too_long') {
+      setError(zh ? '当前 Prompt 加上镜头意图会超过 1200 字；请先精简内容。' : 'This Prompt plus shot intent would exceed 1,200 characters. Shorten the content first.');
+      return;
+    }
+    setPrompt(merged.prompt);
+    setAgentPlan(null);
+    patchSemanticNode('prompt', { status: 'draft' });
+    notify(zh ? '镜头意图已写入当前 Prompt 的可见规则块；你仍可继续编辑，再决定是否请求 AI 导演。' : 'Shot intent is now a visible rule block in the current Prompt. You can still edit it before deciding to ask AI Director.');
+    focusMotionPrompt();
+  };
+
   const changeCanvasModelMode = (next: CanvasModelMode) => {
     const resolved = resolveCanvasModelMode(next, manualModelRef.current);
     setModelMode(next);
@@ -3077,6 +3104,8 @@ export default function VideoCanvasStudio({
     </section>
 
     <CreatorProjectBible project={project} zh={zh} onFieldChange={updateProjectBibleField} onToggleLock={toggleProjectBibleLock} onApply={applyProjectBibleToShot} />
+
+    <CreatorShotIntent shot={canvasSemantics.shot} zh={zh} onChange={updateCurrentShotIntent} onApply={applyCurrentShotIntent} />
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
       <span className="video-canvas-model-mark" aria-hidden="true">✦</span>

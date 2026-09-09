@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { creatorAgentContext, creatorBibleSummary, creatorFlowStage, creatorShotDirection, mergeCreatorBibleIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
+import { creatorAgentContext, creatorBibleSummary, creatorFlowStage, creatorShotDirection, mergeCreatorBibleIntoPrompt, mergeCreatorShotIntentIntoPrompt, normalizeCreatorProject, projectBriefToShotDraft } from '../src/lib/creator-flow.ts';
+import { createCanvasSemantics, normalizeCanvasSemantics } from '../src/lib/canvas-domain.ts';
 
 test('creator project restores safely from an incomplete local snapshot', () => {
   assert.deepEqual(normalizeCreatorProject({ title: '  夏日产品片  ', brief: '  清晨的玻璃瓶  ', format: 'landscape' }), {
@@ -49,6 +50,25 @@ test('project bible can seed a new shot without being mistaken for a shot direct
   assert.equal(draft.applied, true);
   assert.equal(creatorShotDirection(draft.prompt), '');
   assert.equal(creatorFlowStage({ brief: '测试', hasReference: true, hasPrompt: Boolean(creatorShotDirection(draft.prompt)) }), 'direction');
+});
+
+test('shot intent restores safely, remains independent from Project Bible, and only enters Prompt on request', () => {
+  const restored = normalizeCanvasSemantics({ shot: { purpose: '让观众看清质感', camera: '中近景缓慢推进', unknown: 'drop-me' } });
+  assert.equal(restored.shot.purpose, '让观众看清质感');
+  assert.equal(restored.shot.camera, '中近景缓慢推进');
+  assert.equal(restored.shot.unknown, undefined);
+
+  const project = normalizeCreatorProject({ bible: { style: '自然电影感', locks: { style: true } } });
+  const withBible = mergeCreatorBibleIntoPrompt('玻璃瓶在晨光下。', project, 'zh');
+  const withIntent = mergeCreatorShotIntentIntoPrompt(withBible.prompt, { ...createCanvasSemantics().shot, purpose: '让观众看清玻璃边缘的反光', motion: '停顿后缓慢转动瓶身' }, 'zh');
+  assert.equal(withIntent.applied, true);
+  assert.match(withIntent.prompt, /SIGNALCRAFT_SHOT_INTENT/);
+  assert.match(withIntent.prompt, /玻璃边缘的反光/);
+  assert.equal(creatorShotDirection(withIntent.prompt), '玻璃瓶在晨光下。');
+
+  const reappliedBible = mergeCreatorBibleIntoPrompt(withIntent.prompt, project, 'zh');
+  assert.match(reappliedBible.prompt, /SIGNALCRAFT_SHOT_INTENT/);
+  assert.equal(mergeCreatorShotIntentIntoPrompt('x'.repeat(1190), { ...createCanvasSemantics().shot, purpose: '镜头目的' }, 'zh').reason, 'too_long');
 });
 
 test('AI Director context carries a bounded project, sequence, and explicit lock state', () => {

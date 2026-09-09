@@ -107,6 +107,11 @@ export type CanvasShotSemantic = {
   id: string;
   index: number;
   title: string;
+  purpose: string;
+  character: string;
+  scene: string;
+  camera: string;
+  motion: string;
   status: CanvasShotStatus;
   order: number;
   collapsed: boolean;
@@ -239,7 +244,7 @@ export function createCanvasSemantics(shotIndex = 1): CanvasSemantics {
   ];
   return {
     version: 1,
-    shot: { id: shotId, index, title: `Shot ${String(index).padStart(2, '0')}`, status: 'draft', order: index, collapsed: false },
+    shot: { id: shotId, index, title: `Shot ${String(index).padStart(2, '0')}`, purpose: '', character: '', scene: '', camera: '', motion: '', status: 'draft', order: index, collapsed: false },
     nodes: {
       source: defaultNode('reference', shotId),
       prompt: defaultNode('generic', shotId),
@@ -515,6 +520,11 @@ export function normalizeCanvasSemantics(value: unknown, shotIndex = 1): CanvasS
       id: shotId,
       index,
       title: text(shotCandidate.title, `Shot ${String(index).padStart(2, '0')}`, 160),
+      purpose: text(shotCandidate.purpose, '', 240),
+      character: text(shotCandidate.character, '', 160),
+      scene: text(shotCandidate.scene, '', 160),
+      camera: text(shotCandidate.camera, '', 160),
+      motion: text(shotCandidate.motion, '', 160),
       status: oneOf(shotCandidate.status, SHOT_STATUSES, 'draft'),
       order: integer(shotCandidate.order, index, 1, 999),
       collapsed: Boolean(shotCandidate.collapsed),

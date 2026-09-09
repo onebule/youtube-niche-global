@@ -17,7 +17,7 @@ export default function CreatorPlanPreview({ plan, project, shotTitle, shotNumbe
     : `${plan.estimatedCredits} ${zh ? '积分（预估）' : 'credits estimated'}`;
 
   return <section className="creator-plan-preview" aria-labelledby="creator-plan-preview-title">
-    <div className="creator-plan-preview-copy"><span>04 · {zh ? '计划预览' : 'PLAN PREVIEW'}</span><h3 id="creator-plan-preview-title">{zh ? '先看清会发生什么，再决定是否采用。' : 'See the change before deciding to use it.'}</h3><p>{zh ? 'AI 导演只给出当前镜头的文字方案；没有任务已经提交。' : 'AI Director has proposed text for this shot only. No task has been submitted.'}</p></div>
+    <div className="creator-plan-preview-copy"><span>05 · {zh ? '计划预览' : 'PLAN PREVIEW'}</span><h3 id="creator-plan-preview-title">{zh ? '先看清会发生什么，再决定是否采用。' : 'See the change before deciding to use it.'}</h3><p>{zh ? 'AI 导演只给出当前镜头的文字方案；没有任务已经提交。' : 'AI Director has proposed text for this shot only. No task has been submitted.'}</p></div>
     <dl className="creator-plan-preview-facts">
       <div><dt>{zh ? '影响范围' : 'Affects'}</dt><dd>{zh ? `镜头 ${String(shotNumber).padStart(2, '0')} · ${shotLabel}` : `Shot ${String(shotNumber).padStart(2, '0')} · ${shotLabel}`}</dd></div>
       <div><dt>{zh ? '拟用规格' : 'Proposed output'}</dt><dd>{plan.modelLabel} · {plan.duration} · {plan.aspectRatio || '—'} · {plan.resolution}</dd></div>

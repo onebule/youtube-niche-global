@@ -4,6 +4,7 @@
  * or billing path: a project brief only helps a creator start a shot draft.
  */
 import type { CanvasCreatorContext } from './canvas-domain';
+import type { CanvasShotSemantic } from './canvas-domain';
 
 export type CreatorProjectFormat = 'short' | 'landscape' | 'square' | 'series';
 export type CreatorBibleField = 'character' | 'scene' | 'style' | 'camera' | 'motion';
@@ -33,6 +34,7 @@ export const CREATOR_BIBLE_FIELDS: CreatorBibleField[] = ['character', 'scene', 
 const BIBLE_BLOCK_START = '[SIGNALCRAFT_PROJECT_RULES]';
 const BIBLE_BLOCK_END = '[/SIGNALCRAFT_PROJECT_RULES]';
 const BIBLE_BLOCK_PATTERN = /\s*\[SIGNALCRAFT_PROJECT_RULES\][\s\S]*?\[\/SIGNALCRAFT_PROJECT_RULES\]\s*/g;
+const SHOT_INTENT_BLOCK_PATTERN = /\s*\[SIGNALCRAFT_SHOT_INTENT\][\s\S]*?\[\/SIGNALCRAFT_SHOT_INTENT\]\s*/g;
 
 function clean(value: unknown, maximum: number) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, maximum);
@@ -110,7 +112,21 @@ export function creatorBiblePromptBlock(project: CreatorProject, locale: 'zh' | 
 
 /** Project rules help a shot, but are not themselves a shot direction. */
 export function creatorShotDirection(input: string) {
-  return String(input || '').replace(BIBLE_BLOCK_PATTERN, '\n').trim();
+  return String(input || '').replace(BIBLE_BLOCK_PATTERN, '\n').replace(SHOT_INTENT_BLOCK_PATTERN, '\n').trim();
+}
+
+export function mergeCreatorShotIntentIntoPrompt(input: string, shot: CanvasShotSemantic, locale: 'zh' | 'en', maximum = 1200) {
+  const labels = locale === 'zh'
+    ? { purpose: '目的', character: '人物', scene: '场景', camera: '镜头', motion: '动作' }
+    : { purpose: 'Purpose', character: 'Character', scene: 'Scene', camera: 'Camera', motion: 'Motion' };
+  const fields = ['purpose', 'character', 'scene', 'camera', 'motion'] as const;
+  const lines = fields.flatMap(field => shot[field].trim() ? [`${labels[field]}：${shot[field].trim()}`] : []);
+  const withoutPrevious = String(input || '').replace(SHOT_INTENT_BLOCK_PATTERN, '\n').trim();
+  if (!lines.length) return { prompt: withoutPrevious, applied: false, reason: 'empty' as const };
+  const block = `[SIGNALCRAFT_SHOT_INTENT]\n${lines.join('\n')}\n[/SIGNALCRAFT_SHOT_INTENT]`;
+  const prompt = [withoutPrevious, block].filter(Boolean).join('\n\n');
+  if (prompt.length > maximum) return { prompt: String(input || '').trim(), applied: false, reason: 'too_long' as const };
+  return { prompt, applied: true, reason: null };
 }
 
 /**
@@ -118,7 +134,9 @@ export function creatorShotDirection(input: string) {
  * Reapplying replaces the old block, and refuses to truncate locked rules.
  */
 export function mergeCreatorBibleIntoPrompt(input: string, project: CreatorProject, locale: 'zh' | 'en', maximum = 1200) {
-  const withoutPrevious = creatorShotDirection(input);
+  // Keep the current shot's intent block intact. Project Bible is project-wide;
+  // replacing it must never silently erase a separate shot-level decision.
+  const withoutPrevious = String(input || '').replace(BIBLE_BLOCK_PATTERN, '\n').trim();
   const block = creatorBiblePromptBlock(project, locale);
   if (!block) return { prompt: withoutPrevious, applied: false, reason: 'empty' as const };
   const prompt = [withoutPrevious, block].filter(Boolean).join('\n\n');
