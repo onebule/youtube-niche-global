@@ -70,6 +70,21 @@ test('YouTube normalizer retains valid incomplete rows and never creates a singl
   }
 });
 
+test('ranking preserves the explicit all-views filter across the API boundary', async () => {
+  const previousFetch = globalThis.fetch;
+  let requestedUrl = '';
+  globalThis.fetch = async url => {
+    requestedUrl = String(url);
+    return new Response(JSON.stringify({ shortOpportunities: [], longOpportunities: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await searchYouTubeSignals({ query: '', language: '英语', format: 'short', locale: 'zh', region: 'US', window: '365d', minimumViews: '0', maxSubscribers: 'all', ranking: true });
+    assert.equal(new URL(requestedUrl).searchParams.get('minimumViews'), '0');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test('YouTube client turns an upstream HTML error into an actionable typed error', async () => {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('<!DOCTYPE html><title>500</title>', {

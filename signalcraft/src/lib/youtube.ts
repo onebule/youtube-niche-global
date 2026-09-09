@@ -40,6 +40,9 @@ type ApiResponse = {
   shortOpportunities?:ApiOpportunity[];
   recentDays?:number;
   noCandidatesMessage?:string;
+  emptyReason?:'MARKET_EMPTY'|'FILTER_TOO_STRICT'|'CLASSIFICATION_ERROR'|null;
+  totalAvailable?:number;
+  hasMore?:boolean;
   nextPageToken?:string|null;
   dataScope?:PublicRankingScope;
   error?:unknown;
@@ -74,11 +77,15 @@ const thumbnailEndpoint = productionEndpoint.replace('/api/youtube-signals','/ap
 export async function searchYouTubeSignals(input:{query:string;language:string;locale?:'zh'|'en';region?:string;window:string;maxSubscribers?:string;minimumViews?:string;format?:'short'|'long';category?:string;entity?:'videos'|'channels';ranking?:boolean;refresh?:boolean;limit?:number;pageToken?:string}){
   const days = input.window==='24h'?1:input.window==='7d'?7:input.window==='28d'?28:input.window==='90d'?90:input.window==='180d'?180:365;
   const maxSubscribers=input.maxSubscribers==='all'?'all':input.maxSubscribers||'100000';
-  // A 1M-view floor made newer, smaller channels disappear before the
-  // opportunity score could evaluate them. Keep the public sample broad,
-  // then let the UI's channel-size and score filters do the ranking.
   const region=input.region||'US';
-  const minimumViews=Number(input.minimumViews||0)>0?String(input.minimumViews):'10000';
+  // `0` is the explicit UI meaning of “any view count”. Preserve it over the
+  // API boundary: turning it into an undocumented floor makes the result and
+  // the visible ranking filters disagree.
+  const parsedMinimumViews=Number(input.minimumViews);
+  // Preserve the existing research request default. Only rankings interpret a
+  // missing value as "all"; their filter UI explicitly exposes that choice.
+  const defaultMinimumViews=input.ranking?0:10000;
+  const minimumViews=Number.isFinite(parsedMinimumViews)&&parsedMinimumViews>=0?String(Math.floor(parsedMinimumViews)):String(defaultMinimumViews);
   const params=new URLSearchParams({query:input.query,language:languageCode[input.language]||'en',region,recentDays:String(days),maxSubscribers,minimumViews});
   params.set('locale',input.locale||'en');
   if(input.format) params.set('format',input.format);
