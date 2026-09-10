@@ -29,9 +29,17 @@ function sourceCopy(scope: PublicRankingScope, source: ReturnType<typeof deriveR
 
 function formatCapturedAt(value: string | null, locale: UiLocale) {
   if (!value || !Number.isFinite(new Date(value).getTime())) return locale === 'zh' ? '未提供' : 'Not provided';
-  return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(new Date(value));
+  const date = new Date(value);
+  const time = new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(date);
+  if (locale !== 'zh') return new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(date);
+
+  const now = new Date();
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()) return `今天 ${time}`;
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${time}`;
 }
 
 function emptyStateCopy(state: ReturnType<typeof deriveRankingTrust>['emptyState'], locale: UiLocale) {
@@ -55,14 +63,12 @@ export default function RankingDataScope({ scope, locale, resultCount, comparabl
   const source = sourceCopy(scope, trust.source, locale);
   const emptyMessage = emptyStateCopy(trust.emptyState, locale);
   const isChinese = locale === 'zh';
-  const countText = isChinese ? `当前筛选匹配 ${resultCount} 条已收录公开视频` : `${resultCount} recorded public videos match this filter`;
   const marketText = scope.markets.length ? scope.markets.join(' · ') : (isChinese ? '当前请求市场' : 'Requested market');
 
   return <section className="ranking-data-scope ranking-trust-layer" aria-label={isChinese ? '排行榜数据范围' : 'Ranking data scope'} aria-live="polite">
     <div className="ranking-trust-head">
       <div>
         <span className="eyebrow">DATA SCOPE · TRUST LAYER</span>
-        <strong>{countText}</strong>
         <p>{source.description}</p>
       </div>
       <div className="ranking-trust-statuses">
@@ -71,7 +77,7 @@ export default function RankingDataScope({ scope, locale, resultCount, comparabl
       </div>
     </div>
     <dl className="ranking-trust-facts">
-      <div><dt>{isChinese ? '数据来源' : 'Source'}</dt><dd>{source.label}</dd></div>
+      <div><dt>{isChinese ? '数据来源' : 'Source'}</dt><dd className="ranking-trust-source">{source.label}</dd></div>
       <div><dt>{isChinese ? '覆盖市场' : 'Markets'}</dt><dd>{marketText}</dd></div>
       <div><dt>{isChinese ? '分析窗口' : 'Window'}</dt><dd>{isChinese ? `近 ${scope.publishedWindowDays} 天` : `${scope.publishedWindowDays} days`}</dd></div>
       <div><dt>{isChinese ? '最后成功更新' : 'Last successful update'}</dt><dd><time dateTime={scope.latestCapturedAt || undefined}>{formatCapturedAt(scope.latestCapturedAt, locale)}</time></dd></div>
