@@ -10,7 +10,7 @@ type ApiOpportunity = {
 };
 
 export type PublicRankingScope = {
-  source:'stored-corpus'|'live-chart';
+  source:'stored-corpus'|'live-chart'|'longform_video_features';
   markets:string[];
   marketCount:number;
   publishedWindowDays:number;
@@ -19,12 +19,19 @@ export type PublicRankingScope = {
   growthComparableCount?:number;
   freshness?:'verified'|'snapshot';
   revalidatedCount?:number;
+  storedEligibleCount?:number|null;
+  requestedLimit?:number;
+  returnedCount?:number;
+  sourceSelectionReason?:string;
+  liveFallbackReason?:string|null;
+  corpusStatus?:'SAMPLED_RESULTS_AVAILABLE'|'NO_MATCHING_STORED_RESULTS'|'DEDICATED_LONGFORM_CORPUS'|'NOT_EVALUATED';
+  liveEnrichmentStatus?:'NOT_REQUESTED'|'VERIFIED'|'FAILED_USING_SNAPSHOT'|'SNAPSHOT_RETAINED';
 };
 
 const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
   if(!value||typeof value!=='object')return false;
   const scope=value as Partial<PublicRankingScope>;
-  return (scope.source==='stored-corpus'||scope.source==='live-chart')
+  return (scope.source==='stored-corpus'||scope.source==='live-chart'||scope.source==='longform_video_features')
     && Array.isArray(scope.markets)
     && Number.isFinite(scope.marketCount)
     && Number.isFinite(scope.publishedWindowDays)
@@ -32,7 +39,14 @@ const isPublicRankingScope=(value:unknown):value is PublicRankingScope=>{
     && (scope.latestCapturedAt===null||typeof scope.latestCapturedAt==='string')
     && (scope.growthComparableCount===undefined||Number.isFinite(scope.growthComparableCount))
     && (scope.freshness===undefined||scope.freshness==='verified'||scope.freshness==='snapshot')
-    && (scope.revalidatedCount===undefined||Number.isFinite(scope.revalidatedCount));
+    && (scope.revalidatedCount===undefined||Number.isFinite(scope.revalidatedCount))
+    && (scope.storedEligibleCount===undefined||scope.storedEligibleCount===null||Number.isFinite(scope.storedEligibleCount))
+    && (scope.requestedLimit===undefined||Number.isFinite(scope.requestedLimit))
+    && (scope.returnedCount===undefined||Number.isFinite(scope.returnedCount))
+    && (scope.sourceSelectionReason===undefined||typeof scope.sourceSelectionReason==='string')
+    && (scope.liveFallbackReason===undefined||scope.liveFallbackReason===null||typeof scope.liveFallbackReason==='string')
+    && (scope.corpusStatus===undefined||['SAMPLED_RESULTS_AVAILABLE','NO_MATCHING_STORED_RESULTS','DEDICATED_LONGFORM_CORPUS','NOT_EVALUATED'].includes(scope.corpusStatus))
+    && (scope.liveEnrichmentStatus===undefined||['NOT_REQUESTED','VERIFIED','FAILED_USING_SNAPSHOT','SNAPSHOT_RETAINED'].includes(scope.liveEnrichmentStatus));
 };
 
 type ApiResponse = {
