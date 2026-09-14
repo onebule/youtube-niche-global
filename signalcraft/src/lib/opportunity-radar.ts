@@ -20,6 +20,10 @@ export type OpportunityRadarEvent = {
   eventType: RadarEventType;
   title: string;
   topic: string;
+  /** Optional conservative semantic hypothesis; topic remains the source category. */
+  specificTopic?: string;
+  specificTopicLabel?: string;
+  audience?: string;
   mechanism?: string;
   format: string;
   language?: string;

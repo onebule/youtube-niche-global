@@ -15,6 +15,10 @@ export type ShortformRadarEvent = {
   eventType: 'SHORTS_BREAKOUT' | 'SHORTS_EMERGING' | 'SHORTS_CROWDED';
   title: string;
   topic: string;
+  /** Optional conservative semantic hypothesis; topic remains the source category. */
+  specificTopic?: string;
+  specificTopicLabel?: string;
+  audience?: string;
   mechanism: string;
   format: 'SHORT_FORM';
   language?: string;

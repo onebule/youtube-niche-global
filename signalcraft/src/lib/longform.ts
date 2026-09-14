@@ -31,6 +31,10 @@ const LONGFORM_OPPORTUNITIES_ENDPOINT = process.env.NEXT_PUBLIC_LONGFORM_OPPORTU
 export type LongformOpportunity = {
   key: string;
   topic: string;
+  /** Optional semantic hypothesis supplied by the existing discovery engine. */
+  specificTopic?: string | null;
+  specificTopicLabel?: string | null;
+  audience?: string | null;
   mechanism: string;
   productionType: string;
   sampleSize: number;
@@ -90,6 +94,14 @@ export type LongformOpportunity = {
   /** P4 Phase 4 provider compatibility/routing; Long-form only and execution-free. */
   providerRouting?: ProviderRoutingReport;
   recommendation?: 'BUILD' | 'TEST' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
+  decisionDimensions?: {
+    opportunity?: { value: number | null; dataClass: string; state: string; note: string };
+    growth?: { value: number | null; dataClass: string; state: string; note: string };
+    competition?: { value: number | null; dataClass: string; state: string; note: string };
+    monetization?: { value: number | null; dataClass: string; state: string; note: string };
+    beginnerFit?: { value: number | null; dataClass: string; state: string; note: string };
+    aiSuitability?: { value: number | null; dataClass: string; state: string; note: string };
+  };
   lanes: string[];
   metrics: Record<string, number | null>;
   execution: { score: number | null; coverage: number; rationale: string };

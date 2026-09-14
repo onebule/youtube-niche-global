@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { scopedStorageKey } from '@/src/lib/account-storage';
 import { normalizeProfile, PROFILE_OPTIONS, recommend, entryWindow, marketDecision, creatorFit, differentiation, firstTests, buildProductionHandoff, type CreatorProfile, type OpportunityUnit, type ProductionHandoff, type Decision } from '@/src/lib/product-convergence';
+import { buildDecisionIntelligence, buildFirstVideoIdeas, validationDecisionRules, type DecisionSignal } from '@/src/lib/decision-intelligence';
 import type { UiLocale } from '@/src/lib/ui-language';
 import './discovery-workbench.css';
 
@@ -49,24 +50,62 @@ function RadarVideoEvidence({ unit, locale }: { unit: OpportunityUnit; locale: U
   if (!unit.representativeVideos?.length) return null;
   return <div className="discovery-video-evidence"><b>{zh ? '代表视频 · 打开核验' : 'Representative videos · verify at source'}</b><ul>{unit.representativeVideos.map(video => <li key={video.videoId}><a href={`https://www.youtube.com/watch?v=${video.videoId}`} target="_blank" rel="noopener noreferrer">{video.title || (zh ? '无标题视频' : 'Untitled video')} ↗</a><small>{video.channelTitle || (zh ? '频道未提供' : 'Channel unavailable')}{video.views !== null ? ` · ${video.views.toLocaleString()} ${zh ? '次播放' : 'views'}` : ''}</small></li>)}</ul></div>;
 }
-function radarSignal(value: number | null | undefined, bands: Array<[number, string]>, fallback: string) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return fallback;
-  return bands.find(([minimum]) => value >= minimum)?.[1] || fallback;
+function signalValue(signal: DecisionSignal & { rangeUsd?: [number, number] | null }, locale: UiLocale) {
+  if (signal.rangeUsd) return `$${signal.rangeUsd[0]}–$${signal.rangeUsd[1]}`;
+  if (signal.score === null) return locale === 'zh' ? '未知' : 'Unknown';
+  return `${signal.score}/100`;
 }
 function RadarSignalRow({ unit, locale }: { unit: OpportunityUnit; locale: UiLocale }) {
   const zh = locale === 'zh';
-  const opportunity = radarSignal(unit.market.opportunityScore, [[70, zh ? '较强' : 'Stronger'], [45, zh ? '可观察' : 'Watch'], [0, zh ? '有限' : 'Limited']], zh ? '待确认' : 'Review');
-  const growth = radarSignal(unit.market.growth, [[25, zh ? '快' : 'Fast'], [1, zh ? '增长' : 'Growing']], zh ? '待确认' : 'Review');
-  const competition = radarSignal(unit.market.concentration, [[75, zh ? '偏高' : 'Higher'], [45, zh ? '中等' : 'Medium'], [0, zh ? '偏低' : 'Lower']], zh ? '待确认' : 'Review');
-  const smallCreator = radarSignal(unit.market.smallCreatorBreakouts, [[2, zh ? '较高' : 'High'], [1, zh ? '存在' : 'Present'], [0, zh ? '未见' : 'None']], zh ? '待确认' : 'Review');
-  return <dl className="discovery-signal-row">
-    <div><dt>{zh ? '机会' : 'Opportunity'}</dt><dd>{opportunity}</dd></div>
-    <div><dt>{zh ? '增长' : 'Growth'}</dt><dd>{growth}</dd></div>
-    <div><dt>{zh ? '竞争' : 'Competition'}</dt><dd>{competition}</dd></div>
-    <div><dt>{zh ? '小频道机会' : 'Small creator'}</dt><dd>{smallCreator}</dd></div>
-    <div><dt>{zh ? 'AI 适配' : 'AI fit'}</dt><dd>{zh ? '待评估' : 'Review'}</dd></div>
-    <div><dt>{zh ? '变现' : 'Monetization'}</dt><dd>{zh ? '暂无数据' : 'No data'}</dd></div>
-  </dl>;
+  const intelligence = buildDecisionIntelligence(unit);
+  const score = intelligence.riskAdjustedScore ?? intelligence.opportunityScore;
+  return <><dl className="discovery-signal-row">
+    <div><dt>{zh ? '决策参考分' : 'Decision score'}</dt><dd>{score === null ? (zh ? '未知' : 'Unknown') : `${score}/100`}</dd></div>
+    <div><dt>{zh ? '供需缺口' : 'Demand-supply gap'}</dt><dd>{signalValue(intelligence.demandSupplyGap, locale)}</dd></div>
+    <div><dt>{zh ? '小频道机会' : 'Small creator'}</dt><dd>{signalValue(intelligence.smallCreatorOpportunity, locale)}</dd></div>
+    <div><dt>{zh ? '置信度' : 'Confidence'}</dt><dd>{signalValue(intelligence.confidence, locale)}</dd></div>
+    <div><dt>{zh ? 'AI 适配' : 'AI fit'}</dt><dd>{signalValue(intelligence.aiSuitability, locale)}</dd></div>
+    <div><dt>{zh ? '变现' : 'Monetization'}</dt><dd>{signalValue(intelligence.monetization, locale)}</dd></div>
+  </dl><DecisionRiskSummary unit={unit} locale={locale} compact/></>;
+}
+
+function DecisionSignalGrid({ unit, locale }: { unit: OpportunityUnit; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const intelligence = buildDecisionIntelligence(unit);
+  const rows: Array<[string, DecisionSignal]> = [
+    [zh ? '需求－供给缺口' : 'Demand-supply gap', intelligence.demandSupplyGap],
+    [zh ? '中小创作者机会' : 'Small-creator opportunity', intelligence.smallCreatorOpportunity],
+    [zh ? '证据置信度' : 'Evidence confidence', intelligence.confidence],
+    [zh ? '评论需求' : 'Comment demand', intelligence.commentDemand],
+    [zh ? 'AI 制作适配' : 'AI production fit', intelligence.aiSuitability],
+    [zh ? '变现参考' : 'Monetization reference', intelligence.monetization],
+  ];
+  return <><div className="decision-signal-grid">{rows.map(([label, signal]) => <article key={label} data-support={signal.supportType}>
+    <div><span>{label}</span><b>{signalValue(signal, locale)}</b></div>
+    <p>{signal.explanation}</p><small>{signal.supportType}</small>
+  </article>)}</div><DecisionRiskSummary unit={unit} locale={locale}/></>;
+}
+
+function DecisionRiskSummary({ unit, locale, compact = false }: { unit: OpportunityUnit; locale: UiLocale; compact?: boolean }) {
+  const zh = locale === 'zh';
+  const intelligence = buildDecisionIntelligence(unit);
+  const primary = intelligence.mainRisks[0];
+  return <aside className={`decision-risk-summary${compact ? ' is-compact' : ''}`}>
+    <b>{zh ? '主要风险' : 'Primary risk'} · {intelligence.riskPenalty ? `-${intelligence.riskPenalty}` : '0'}</b>
+    <p>{primary || (zh ? '当前没有触发额外风险项，但仍需用真实发布结果验证。' : 'No added risk rule fired; real publishing results are still required.')}</p>
+    {!compact && <small>{zh ? '扣分只调整决策参考分，不会改写原始市场事实。' : 'The penalty adjusts the decision reference only; source market facts remain unchanged.'}</small>}
+  </aside>;
+}
+
+function FirstTenPlan({ unit, locale }: { unit: OpportunityUnit; locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const ideas = buildFirstVideoIdeas(unit);
+  const rules = validationDecisionRules();
+  return <section className="decision-first-ten"><header><div><span className="discovery-eyebrow">FIRST 10 · VALIDATION PLAN</span><h2>{zh ? '第一批 10 条验证假设' : 'Your first 10 validation hypotheses'}</h2></div><strong>{ideas.length ? `${ideas.length}/10` : '0/10'}</strong></header>
+    {ideas.length ? <ol>{ideas.map((idea, index) => <li key={idea.id}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{idea.titleConcept}</b><p>{idea.hook}</p><small>{idea.group} · {idea.supportType} · {idea.whyThisTopic}</small></div></li>)}</ol> : <div className="discovery-empty">{zh ? '需要先有可核验的细分主题、内容机制和来源视频，系统才会给出测试假设。' : 'A specific niche, content mechanism and source video are required before test hypotheses are created.'}</div>}
+    <div className="decision-validation-rules"><h3>{zh ? '第 10 条以后怎么决定' : 'Decision after video 10'}</h3>{rules.map(rule => <article key={rule.decision}><b>{rule.decision}</b><p>{rule.when}</p><small>{rule.action}</small></article>)}</div>
+    <p className="decision-plan-boundary">{zh ? '所有题目均为待验证推断；回填频道基线与同赛道基线后才能作出 CONTINUE / ADJUST / STOP 判断，单条失败永远不会直接触发 STOP。' : 'Every topic is a test hypothesis. CONTINUE / ADJUST / STOP requires channel and niche baselines; one failed video never triggers STOP.'}</p>
+  </section>;
 }
 export function DiscoveryCards({ units, format, locale, onEvaluate, marketOnly = false }: { units: OpportunityUnit[]; format: OpportunityUnit['format']; locale: UiLocale; onEvaluate: (unit: OpportunityUnit) => void; marketOnly?: boolean }) {
   const { profile } = useCreatorProfile(); const zh = locale === 'zh';
@@ -98,9 +137,11 @@ export function DecisionWorkbench({ unit, locale, onCreate, creating = false, br
   const handoff = buildProductionHandoff(unit, profile, selected, reviewed, alternative);
   const headings = zh ? ['市场判断', '对你适配', '推荐做法', '差异化建议'] : ['Market', 'Creator fit', 'Recommended pattern', 'Differentiation'];
   return <section className="decision-workbench"><GoldenPath step={1} locale={locale}/><header className="decision-heading"><span className="discovery-eyebrow">{discoveryLabel(unit.format, locale)} · {zh ? '赛道评估' : 'Niche evaluation'}</span><h1>{unit.subNiche || unit.niche}</h1>{unit.subNiche && <small>{zh ? `来源分类：${unit.niche}` : `Source category: ${unit.niche}`}</small>}<strong data-decision={verified?.decision || decision}>{verified?.decision || discoveryLabel(decision, locale)}</strong><p>{!unit.subNiche ? (zh ? '尚缺可核验的子赛道。先补足具体受众问题，再承诺制作。' : 'A grounded sub-niche is missing. Establish a specific audience question before production.') : (zh ? '先选择一个有证据来源的测试，再进入制作。' : 'Select one evidence-backed test before production.')}</p></header>
-    <div className="decision-sections"><section><h2>01 {headings[0]}</h2><p>{unit.market.videos} {zh ? '条公开样本，来自' : 'public samples from'} {unit.market.creators} {zh ? '个独立频道' : 'independent creators'}</p><p>{verified ? `${verified.entryWindow} · ${zh ? '置信度' : 'Confidence'} ${verified.confidence} · ${verified.falsePositive}` : `${discoveryLabel(entryWindow(unit), locale)} · ${zh ? '可信度' : 'Confidence'} ${discoveryLabel(unit.market.confidence, locale)}`}</p>{verified?.whyNow[0] && <p>{zh ? 'Why now：' : 'Why now: '}{verified.whyNow[0].message}</p>}{verified?.risks[0] && <p>{zh ? '最大风险：' : 'Primary risk: '}{verified.risks[0].message}</p>}<small>{zh ? '收益潜力：未知。没有可靠估算，不展示 RPM 或收入数字。' : 'Monetization potential: unknown. No unsupported RPM or earnings.'}</small></section><section><h2>02 {headings[1]}</h2><b>{discoveryLabel(fit.level, locale)}</b>{fit.reasons.map(r => <p key={r.field}>{r.text}<small> · {r.source === 'EXPLICIT_PROFILE' ? (zh ? '显式选择' : 'Explicit profile') : (zh ? '公开证据' : 'Public evidence')}</small></p>)}{fit.whyNot.map(r => <p key={r.field}>{r.text}</p>)}<small>{zh ? '缺少研究成本、出镜或预算要求时，不推断“很适合你”。' : 'Unknown time, presence, and budget requirements are not inferred as a fit.'}</small></section><section><h2>03 {headings[2]}</h2><b>{unit.pattern?.label || (zh ? '机制证据不足' : 'Insufficient pattern evidence')}</b><p>{zh ? '模式趋势：' : 'Pattern trend: '}{discoveryLabel(unit.pattern?.trend || 'INSUFFICIENT', locale)}</p><p>{zh ? '保留可复用机制，不复制具体案例。标题元数据不能证明镜头、剪辑、音频或留存机制。' : 'Retain the mechanism, not the case. Titles do not establish editing, audio, or retention mechanisms.'}</p></section><section><h2>04 {headings[3]}</h2><p>{zh ? '原创性风险：' : 'Originality risk: '}{discoveryLabel(originality.risk, locale)}</p>{changes.axes.map(axis => <p key={axis.axis}><b>{axis.axis}</b> · {axis.suggestion}</p>)}<button type="button" className="discovery-link" onClick={() => { setAlternative(!alternative); setReviewed(false); }}>{zh ? '换一组差异化建议' : 'Try alternative differentiation'}</button><small>{zh ? '规则建议，不是已验证的市场空白。' : 'Rule-based suggestions, not verified market gaps.'}</small></section></div>
+    <DecisionSignalGrid unit={unit} locale={locale}/>
+    <div className="decision-sections"><section><h2>01 {headings[0]}</h2><p>{unit.market.videos} {zh ? '条公开样本，来自' : 'public samples from'} {unit.market.creators} {zh ? '个独立频道' : 'independent creators'}</p><p>{verified ? `${verified.entryWindow} · ${zh ? '置信度' : 'Confidence'} ${verified.confidence} · ${verified.falsePositive}` : `${discoveryLabel(entryWindow(unit), locale)} · ${zh ? '可信度' : 'Confidence'} ${discoveryLabel(unit.market.confidence, locale)}`}</p>{verified?.whyNow[0] && <p>{zh ? 'Why now：' : 'Why now: '}{verified.whyNow[0].message}</p>}{verified?.risks[0] && <p>{zh ? '最大风险：' : 'Primary risk: '}{verified.risks[0].message}</p>}<small>{zh ? '缺失的 Google 搜索与评论正文保持未知，不参与结论。' : 'Missing Google search and comment text remain unknown and do not affect the verdict.'}</small></section><section><h2>02 {headings[1]}</h2><b>{discoveryLabel(fit.level, locale)}</b>{fit.reasons.map(r => <p key={r.field}>{r.text}<small> · {r.source === 'EXPLICIT_PROFILE' ? (zh ? '显式选择' : 'Explicit profile') : (zh ? '公开证据' : 'Public evidence')}</small></p>)}{fit.whyNot.map(r => <p key={r.field}>{r.text}</p>)}<small>{zh ? '缺少研究成本、出镜或预算要求时，不推断“很适合你”。' : 'Unknown time, presence, and budget requirements are not inferred as a fit.'}</small></section><section><h2>03 {headings[2]}</h2><b>{unit.pattern?.label || (zh ? '机制证据不足' : 'Insufficient pattern evidence')}</b><p>{unit.audience ? `${zh ? '目标受众：' : 'Audience: '}${unit.audience}` : (zh ? '目标受众仍需人工确认。' : 'Audience still requires review.')}</p><p>{zh ? '模式趋势：' : 'Pattern trend: '}{discoveryLabel(unit.pattern?.trend || 'INSUFFICIENT', locale)}</p><p>{zh ? '保留可复用机制，不复制具体案例。标题元数据不能证明镜头、剪辑、音频或留存机制。' : 'Retain the mechanism, not the case. Titles do not establish editing, audio, or retention mechanisms.'}</p></section><section><h2>04 {headings[3]}</h2><p>{zh ? '原创性风险：' : 'Originality risk: '}{discoveryLabel(originality.risk, locale)}</p>{changes.axes.map(axis => <p key={axis.axis}><b>{axis.axis}</b> · {axis.suggestion}</p>)}<button type="button" className="discovery-link" onClick={() => { setAlternative(!alternative); setReviewed(false); }}>{zh ? '换一组差异化建议' : 'Try alternative differentiation'}</button><small>{zh ? '规则建议，不是已验证的市场空白。' : 'Rule-based suggestions, not verified market gaps.'}</small></section></div>
     <details className="decision-evidence"><summary>{zh ? '查看依据、代表视频与数据详情' : 'Evidence, proof videos and data details'}</summary><RadarVideoEvidence unit={unit} locale={locale}/><p>{unit.originality.reason}</p>{unit.market.facts.map(fact => <p key={fact}>{fact}</p>)}<p>{unit.market.provenance} · {unit.market.capturedAt || 'UNKNOWN'}</p><p>{zh ? '阈值状态：需校准。市场事实不会被个人条件改写。' : 'CALIBRATION_REQUIRED. Personal conditions never rewrite market facts.'}</p><div>{unit.market.evidenceVideoIds.slice(0, 8).filter(id => /^[\w-]{11}$/.test(id)).map(id => <a key={id} href={`https://www.youtube.com/watch?v=${id}`} target="_blank" rel="noreferrer">{zh ? '公开视频' : 'Public video'} · {id} ↗</a>)}</div></details>
     <section className="decision-tests"><h2>{zh ? '建议先测试' : 'Test first'} · {unit.format === 'SHORTS' ? 'First 10' : 'First 3'}</h2><p>{zh ? `${tests.length} 条有来源方向；不足时保留空缺，不拼凑标题。` : `${tests.length} grounded directions; missing tests are not padded.`} {unit.format === 'SHORTS' ? (zh ? '目标结构 4 个核心 / 3 个适配 / 3 个探索，以实际证据为限。' : 'Target: 4 core / 3 adaptation / 3 exploration, evidence permitting.') : (zh ? '保持核心机制稳定，只改变问题、角度或主题。' : 'Keep the core pattern stable; vary question, angle, or subject.')}</p>{tests.length ? <fieldset><legend>{zh ? '选择一个测试方向' : 'Select one test'}</legend>{tests.map(test => <label key={test.id} className="decision-test"><input type="radio" name={`test-${unit.id}`} checked={selected === test.id} onChange={() => { setSelected(test.id); setReviewed(false); }}/><span><b>{test.audienceQuestion}</b><small>{test.direction}</small><span>{test.promise}</span><details><summary>{zh ? '测试设计与风险' : 'Test design and risks'}</summary><p>{zh ? '机制：' : 'Pattern: '}{test.pattern}</p><p>{test.differentiation.join('；')}</p><p>{test.evidenceNeeded.join('；')}</p><p>{test.visualDirection}</p><p>{zh ? '验证成本：' : 'Validation cost: '}{discoveryLabel(test.difficulty, locale)}</p><p>{test.mainRisk}</p><p>{test.whyTest}</p><small>{test.provenance} · {test.sourceVideoIds.join(', ')}</small></details></span></label>)}</fieldset> : <div className="discovery-empty">{zh ? '现有数据尚未提供有具体受众问题和来源的测试。先核验内容模式与案例，不自动拼出十条相似标题。' : 'No sourced audience-question tests are available. Verify patterns and cases before generating test directions.'}</div>}</section>
+    <FirstTenPlan unit={unit} locale={locale}/>
     {changes.requiresReview && <div className="decision-originality" role="status"><b>{zh ? '进入制作前，先确认差异化' : 'Review differentiation before production'}</b><p>{zh ? `保留“${changes.retain}”；改变具体对象、证据和结论。` : `Retain “${changes.retain}”; change the subject, evidence, and payoff.`}</p><label><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)}/>{zh ? '我已检查上述改动，不复用原案例的具体表达' : 'I reviewed the changes and will not duplicate the source expression'}</label></div>}
     <footer className="decision-footer"><div><b>{zh ? '下一步：只制作选中的一个测试' : 'Next: produce only the selected test'}</b><small>{bridgeNote || (zh ? '只创建方案，不触发视频生成、付费调用或 Canvas。' : 'Plan only. No video generation, paid call, or Canvas action.')}</small></div><button type="button" className="discovery-primary" disabled={!handoff || !onCreate || creating} onClick={() => { if (handoff) onCreate?.(handoff); }}>{creating ? (zh ? '创建中…' : 'Creating…') : (zh ? '创建制作方案' : 'Create production plan')} →</button></footer>
   </section>;

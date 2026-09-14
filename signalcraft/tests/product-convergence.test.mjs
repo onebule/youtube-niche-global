@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeProfile, DISCOVERY_RULES, entryWindow, marketDecision, creatorFit, recommend, differentiation, firstTests, buildProductionHandoff, addReviewedShortTest, fromRadar, isActionableMicroNiche } from '../src/lib/product-convergence.ts';
 import { buildNicheEvaluationHref, contextFromQuery, saveNicheAnalysisContext, readNicheAnalysisContext } from '../src/lib/niche-analysis-context.ts';
+import { buildDecisionIntelligence, buildFirstVideoIdeas, validationDecisionRules } from '../src/lib/decision-intelligence.ts';
 
 function unit(id = 'a', format = 'SHORTS', patch = {}) {
   return { id, format, niche: 'Science', subNiche: 'Everyday materials', pattern: { id: 'pattern-1', label: 'Compare evidence', trend: 'GROWING', provenance: 'TEST_FIXTURE' },
@@ -125,6 +126,49 @@ test('radar does not invent sub-niches, patterns, originality, or tests', () => 
   const e = { id: 'e', topic: 'Pets', format: 'LONG_FORM', lifecycle: 'CONFIRMED', sampleVideoCount: 8, independentChannelCount: 4, baseline: { previousSampleCount: 4, windowDays: 14 }, metrics: {}, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public' } };
   const a = fromRadar(e, 'LONG_FORM');
   assert.equal(a.subNiche, null); assert.equal(a.pattern, null); assert.equal(a.originality.risk, 'UNKNOWN'); assert.deepEqual(a.tests, []);
+});
+
+test('radar keeps its source category while allowing an existing semantic hypothesis to become the micro-niche', () => {
+  const event = { id: 'semantic', topic: '宠物动物', specificTopic: 'animal_behavior', specificTopicLabel: '动物行为', audience: '动物与自然兴趣者', mechanism: '解释科普', format: 'LONG_FORM', lifecycle: 'EMERGING', sampleVideoCount: 12, independentChannelCount: 6, baseline: { previousSampleCount: 8, windowDays: 28 }, metrics: { demandProxyGrowth: 28, supplyGrowth: 9 }, confidence: 'HIGH', dataQuality: 'COMPLETE', facts: [], evidenceVideoIds: ['aaaaaaaaaaa'], evidence: { provenance: 'Public metadata' } };
+  const result = fromRadar(event, 'LONG_FORM');
+  assert.equal(result.niche, '宠物动物');
+  assert.equal(result.subNiche, '动物行为 · 解释科普');
+  assert.equal(result.audience, '动物与自然兴趣者');
+  assert.equal(result.market.supplyGrowth, 9);
+  assert.equal(result.classification?.state, 'READY');
+});
+
+test('decision intelligence does not invent demand-supply or comment demand when evidence is missing', () => {
+  const result = buildDecisionIntelligence(unit());
+  assert.equal(result.demandSupplyGap.score, null);
+  assert.equal(result.demandSupplyGap.supportType, 'UNAVAILABLE');
+  assert.equal(result.commentDemand.score, null);
+  assert.equal(result.commentDemand.supportType, 'UNAVAILABLE');
+});
+
+test('decision intelligence scores observed demand-supply and applies an explicit risk penalty', () => {
+  const candidate = unit();
+  candidate.market.supplyGrowth = 5;
+  candidate.market.opportunityScore = 82;
+  candidate.market.concentration = 80;
+  const result = buildDecisionIntelligence(candidate);
+  assert.equal(result.demandSupplyGap.supportType, 'DATA_BACKED');
+  assert.ok(result.demandSupplyGap.score > 50);
+  assert.ok(result.riskPenalty > 0);
+  assert.ok(result.riskAdjustedScore < result.opportunityScore);
+  assert.ok(result.mainRisks.length > 0);
+});
+
+test('first 10 plan is deterministic, visibly inferential and keeps the 4/3/3 validation structure', () => {
+  const candidate = unit();
+  const ideas = buildFirstVideoIdeas(candidate);
+  assert.equal(ideas.length, 10);
+  assert.equal(new Set(ideas.map(item => item.id)).size, 10);
+  assert.deepEqual(['CORE', 'ADAPTATION', 'EXPLORE'].map(group => ideas.filter(item => item.group === group).length), [4, 3, 3]);
+  assert.equal(ideas.every(item => ['INFERENCE', 'LOW_CONFIDENCE'].includes(item.supportType)), true);
+  assert.equal(buildFirstVideoIdeas({ ...candidate, subNiche: null }).length, 0);
+  assert.equal(validationDecisionRules().find(item => item.decision === 'STOP').when.includes('一批'), true);
+  assert.equal(validationDecisionRules().find(item => item.decision === 'STOP').action.includes('单条失败'), true);
 });
 
 test('profile mismatch hides personal priorities but preserves real market leads', () => {

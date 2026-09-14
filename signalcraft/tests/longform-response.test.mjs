@@ -45,6 +45,19 @@ test('normalized responses preserve real fields and reject invalid scores', () =
   assert.equal(result.opportunities[0].sampleSize, 0);
 });
 
+test('semantic micro-niche and optional decision dimensions survive normalization without becoming required API fields', () => {
+  const result = normalizeLongformResponse({ opportunities: [{
+    key: 'animal-behavior', topic: '宠物动物', specificTopic: 'animal_behavior', specificTopicLabel: '动物行为', audience: '动物与自然兴趣者',
+    decisionDimensions: { aiSuitability: { value: 64, dataClass: 'INFERENCE', state: 'AVAILABLE', note: '由机制推断' } },
+  }] });
+  const opportunity = result.opportunities[0];
+  assert.equal(opportunity.topic, '宠物动物');
+  assert.equal(opportunity.specificTopicLabel, '动物行为');
+  assert.equal(opportunity.audience, '动物与自然兴趣者');
+  assert.equal(opportunity.decisionDimensions.aiSuitability.value, 64);
+  assert.equal(opportunity.decisionDimensions.competition, undefined);
+});
+
 test('optional Long-form niche signals survive the response boundary', () => {
   const nicheSignals = buildNicheBreakoutSummary({ nicheId: 'topic-a', observations: Array.from({ length: 5 }, (_, index) => ({ nicheId: 'topic-a', videoId: `v${index}`, creatorId: `c${index}`, format: 'long', views: 100, subscriberCount: 20_000, baselineStatus: 'VERIFIED', baselineConfidence: 'HIGH', breakoutClassification: index < 3 ? 'BREAKOUT' : 'NORMAL', breakoutMultiple: index < 3 ? 4 : 1, repeatBreakoutStatus: 'NONE' })) });
   const result = normalizeLongformResponse({ opportunities: [{ key: 'topic-a', nicheSignals }] });

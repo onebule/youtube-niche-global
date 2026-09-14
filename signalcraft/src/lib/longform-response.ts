@@ -25,6 +25,22 @@ const numberOr = (value: unknown, fallback: number) => typeof value === 'number'
 const nullableNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const textList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+function normalizeDecisionDimensions(value: unknown): LongformOpportunity['decisionDimensions'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const keys = ['opportunity', 'growth', 'competition', 'monetization', 'beginnerFit', 'aiSuitability'] as const;
+  const entries = keys.flatMap(key => {
+    const raw = value[key];
+    if (!isRecord(raw)) return [];
+    return [[key, {
+      value: nullableNumber(raw.value),
+      dataClass: textOr(raw.dataClass, 'UNKNOWN'),
+      state: textOr(raw.state, 'UNAVAILABLE'),
+      note: textOr(raw.note, '暂无说明。'),
+    }]] as const;
+  });
+  return entries.length ? Object.fromEntries(entries) as LongformOpportunity['decisionDimensions'] : undefined;
+}
+
 const recommendationValues = new Set<NonNullable<LongformOpportunity['recommendation']>>(['BUILD', 'TEST', 'WATCH', 'AVOID', 'INSUFFICIENT_DATA']);
 const confidenceValues = new Set<LongformOpportunity['confidenceLabel']>(['HIGH', 'MEDIUM', 'LOW']);
 
@@ -82,6 +98,9 @@ function normalizeOpportunity(value: unknown, index: number, capturedAt: string 
   const opportunity: LongformOpportunity = {
     key: textOr(value.key, `longform-direction-${index + 1}`),
     topic: textOr(value.topic, '未分类方向'),
+    specificTopic: nullableText(value.specificTopic),
+    specificTopicLabel: nullableText(value.specificTopicLabel),
+    audience: nullableText(value.audience),
     mechanism: textOr(value.mechanism, '待识别机制'),
     productionType: textOr(value.productionType, '待识别形式'),
     sampleSize: Math.max(0, Math.round(numberOr(value.sampleSize, 0))),
@@ -93,6 +112,7 @@ function normalizeOpportunity(value: unknown, index: number, capturedAt: string 
     confidence: Math.max(0, Math.min(100, Math.round(numberOr(value.confidence, 0)))),
     confidenceLabel: confidenceValues.has(rawConfidenceLabel) ? rawConfidenceLabel : 'LOW',
     recommendation: recommendationValues.has(rawRecommendation) ? rawRecommendation : undefined,
+    decisionDimensions: normalizeDecisionDimensions(value.decisionDimensions),
     nicheSignals: normalizeNicheBreakoutSummary(value.nicheSignals) || undefined,
     nicheLifecycle: normalizeNicheLifecycleSummary(value.nicheLifecycle) || undefined,
     lanes: textList(value.lanes),
