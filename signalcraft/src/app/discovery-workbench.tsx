@@ -142,6 +142,20 @@ function AiProductionFitSection({ unit, locale }: { unit: OpportunityUnit; local
   </section>;
 }
 
+export function AiProductionFitEmptyState({ locale }: { locale: UiLocale }) {
+  const zh = locale === 'zh';
+  const pendingSignals = zh
+    ? ['AI 制作适配度', 'AI 制作优势', '原创空间', '主要风险', '推荐生产方式']
+    : ['AI production fit', 'AI production advantage', 'Originality capacity', 'Primary risks', 'Recommended workflow'];
+  return <section className="ai-production-fit is-idle is-empty" aria-labelledby="ai-production-empty-title">
+    <span className="discovery-eyebrow">AI PRODUCTION FIT · {zh ? '尚未分析' : 'NOT ANALYZED'}</span>
+    <h2 id="ai-production-empty-title">{zh ? 'AI 制作适配' : 'AI production fit'}</h2>
+    <p>{zh ? '选择一个细分方向后，系统将判断：' : 'Select a micro-niche first, then the system will assess:'}</p>
+    <ul className="ai-production-empty-list">{pendingSignals.map(item => <li key={item}>{item}</li>)}</ul>
+    <button type="button" className="discovery-primary" disabled>{zh ? '等待细分方向生成' : 'Waiting for a micro-niche'}</button>
+  </section>;
+}
+
 function FirstTenPlan({ unit, locale }: { unit: OpportunityUnit; locale: UiLocale }) {
   const zh = locale === 'zh';
   const ideas = buildFirstVideoIdeas(unit);

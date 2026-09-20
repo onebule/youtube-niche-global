@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { AI_PRODUCTION_ANALYSIS_VERSION, normalizeAiProductionAnalysis } from '../src/lib/ai-production-analysis.ts';
 
 const reason = { text: '结构可由 AI 辅助，但仍需发布验证。', stance: 'POSITIVE', sourceType: 'INFERENCE', evidenceRef: 'LLM_INFERENCE' };
@@ -26,4 +27,13 @@ test('normalizes the client AI production contract without changing scores', () 
 test('rejects an incomplete analysis instead of filling fake defaults', () => {
   assert.throws(() => normalizeAiProductionAnalysis({ ...payload, formats: [] }), /缺少内容形式/);
   assert.throws(() => normalizeAiProductionAnalysis({ ...payload, productionFit: { ...metric(), confidence: 140 } }), /productionFit 无效/);
+});
+
+test('keeps the AI production-fit entry visible before a micro-niche exists', () => {
+  const workbench = readFileSync(new URL('../src/app/discovery-workbench.tsx', import.meta.url), 'utf8');
+  const longform = readFileSync(new URL('../src/app/longform-opportunities.tsx', import.meta.url), 'utf8');
+  assert.match(workbench, /export function AiProductionFitEmptyState/);
+  assert.match(workbench, /等待细分方向生成/);
+  assert.match(workbench, /AI 制作适配度.*AI 制作优势.*原创空间.*主要风险.*推荐生产方式/s);
+  assert.match(longform, /opportunities\.length[\s\S]*AiProductionFitEmptyState locale=\{locale\}/);
 });
