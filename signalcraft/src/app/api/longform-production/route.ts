@@ -10,8 +10,11 @@ export async function POST(request: NextRequest) {
   const authorization = request.headers.get('authorization');
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ error: '请求格式无效。', code: 'INVALID_JSON' }, { status: 400 }); }
+  const action = body && typeof body === 'object' ? (body as Record<string, unknown>).action : null;
+  const isAiAnalysis = action === 'AI_PRODUCTION_ANALYSIS';
+  const upstreamSignal = AbortSignal.any([request.signal, AbortSignal.timeout(isAiAnalysis ? 35000 : 30000)]);
   try {
-    if (body && typeof body === 'object' && (body as Record<string, unknown>).action === 'SAVE_TEST_PLAN') {
+    if (action === 'SAVE_TEST_PLAN') {
       // Old backends ignore unknown actions and may start LLM materialization.
       // Fail closed before POST, not after a paid side effect has happened.
       const probe = await fetch(`${upstream}?bridge=test-plan-v1`, {
@@ -27,13 +30,14 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json', ...(authorization ? { authorization } : {}) },
       body: JSON.stringify(body), cache: 'no-store',
+      signal: upstreamSignal,
     });
     const text = await response.text();
     let payload: Record<string, unknown> = {};
     try { const parsed: unknown = text ? JSON.parse(text) : null; if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>; } catch { /* keep a safe client error */ }
-    if (!response.ok) return Response.json({ ...payload, error: clientErrorMessage(payload.error, `制作方案服务暂时不可用（HTTP ${response.status}）。`) }, { status: response.status, headers: { 'cache-control': 'no-store' } });
+    if (!response.ok) return Response.json({ ...payload, error: clientErrorMessage(payload.error, `${isAiAnalysis ? 'AI 制作适配分析' : '制作方案服务'}暂时不可用（HTTP ${response.status}）。`) }, { status: response.status, headers: { 'cache-control': 'no-store' } });
     return Response.json(payload, { status: response.status, headers: { 'cache-control': 'no-store' } });
   } catch {
-    return Response.json({ error: '制作方案服务暂时不可达，请稍后重试。', code: 'PRODUCTION_MATERIALIZER_UNAVAILABLE' }, { status: 502, headers: { 'cache-control': 'no-store' } });
+    return Response.json({ error: isAiAnalysis ? 'AI 制作适配分析暂时不可达，请稍后重试。' : '制作方案服务暂时不可达，请稍后重试。', code: isAiAnalysis ? 'AI_PRODUCTION_UNAVAILABLE' : 'PRODUCTION_MATERIALIZER_UNAVAILABLE' }, { status: 502, headers: { 'cache-control': 'no-store' } });
   }
 }
