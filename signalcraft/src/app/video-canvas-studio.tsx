@@ -34,6 +34,7 @@ import {
 } from '@/src/lib/canvas-shot-workspace';
 import {
   canvasVersionForGeneration,
+  canvasHistoryRestoreTarget,
   bindCanvasAssetReference,
   createCanvasSemantics,
   markCanvasAssetUnavailable,
@@ -54,7 +55,9 @@ import {
 } from '@/src/lib/canvas-domain';
 import { CANVAS_TEMPLATES, type CanvasTemplate } from '@/src/lib/canvas-templates';
 import {
-  createVideoGeneration,
+  buildGenerationSpecV2,
+  createManualGenerationJob,
+  cancelGenerationJob,
   cancelVideoGeneration,
   estimateVideoCredits,
   estimateVideoGenerationTime,
@@ -68,6 +71,7 @@ import {
   normalizeVideoDuration,
   planVideoGeneration,
   preflightVideoGeneration,
+  refreshGenerationJob,
   refreshVideoGeneration,
   uploadVideoInput,
   videoDurationOptions,
@@ -125,7 +129,7 @@ type UploadedReferenceMedia = {
   previewUrl: string;
 };
 type SavedCanvas = {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   nodes: NodePositions;
   prompt: string;
   model: VideoModelId;
@@ -140,6 +144,7 @@ type SavedCanvas = {
   referenceMode?: ReferenceMode;
   referenceFrames?: Array<Omit<UploadedFrame, 'previewUrl'>>;
   generationId: string | null;
+  generationJobId?: string | null;
   generationGroupId?: string | null;
   semantics?: CanvasSemantics;
   activeShot?: number;
@@ -170,6 +175,10 @@ function scriptOcrDraftFromState(state: ScriptOcrState): ScriptOcrDraft | null {
 }
 
 const STORAGE_KEY = 'signalcraft-video-canvas-v1';
+// Deterministic first-render identities avoid SSR/client hydration drift. They
+// are replaced with persisted or freshly generated UUIDs before autosave starts.
+const INITIAL_PROJECT_ID = '00000000-0000-4000-8000-000000000001';
+const INITIAL_SHOT_ID = '00000000-0000-4000-8000-000000000002';
 const STAGE_SIZE = { width: 1900, height: 900 };
 const INITIAL_VIEWPORT: Viewport = { x: 46, y: 28, scale: 0.82 };
 const INITIAL_NODES: NodePositions = {
@@ -214,6 +223,7 @@ const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGen
   if (!previous || previous.id !== next.id) return next;
   return {
     ...next,
+    generationJobId: next.generationJobId ?? previous.generationJobId ?? null,
     generationSpec: next.generationSpec ?? previous.generationSpec ?? null,
     generationGroupId: next.generationGroupId ?? previous.generationGroupId ?? null,
     shotId: next.shotId ?? previous.shotId ?? null,
@@ -223,6 +233,8 @@ const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGen
     continuityFromShotId: next.continuityFromShotId ?? previous.continuityFromShotId ?? null,
   };
 };
+const generationProjectId = (generation: VideoGeneration) => generation.generationGroupId || generation.generationSpec?.generationGroupId || null;
+const generationShotId = (generation: VideoGeneration) => generation.shotId || generation.generationSpec?.shotId || null;
 const canvasNodeName = (nodeId: NodeId, zh: boolean) => ({
   source: zh ? '视觉参考' : 'Visual reference',
   prompt: 'Motion Prompt',
@@ -510,7 +522,7 @@ export default function VideoCanvasStudio({
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [capabilitiesRetry, setCapabilitiesRetry] = useState(0);
   const [error, setError] = useState('');
-  const [project, setProject] = useState<CreatorProject>(() => createCreatorProject());
+  const [project, setProject] = useState<CreatorProject>(() => createCreatorProject(INITIAL_PROJECT_ID));
   const [prompt, setPrompt] = useState('');
   const [h3Brief, setH3Brief] = useState('');
   const [model, setModel] = useState<VideoModelId>('seedance-2');
@@ -529,6 +541,7 @@ export default function VideoCanvasStudio({
   const [uploading, setUploading] = useState<'start' | 'end' | 'reference' | 'video-reference' | 'audio-reference' | null>(null);
   const [scriptOcr, setScriptOcr] = useState<ScriptOcrState>({ assetId: null, status: 'idle', text: '', result: null, error: '' });
   const [generation, setGeneration] = useState<VideoGeneration | null>(null);
+  const [generationJobId, setGenerationJobId] = useState<string | null>(null);
   const [agentPlan, setAgentPlan] = useState<VideoGenerationPlan | null>(null);
   const [restoredGenerationId, setRestoredGenerationId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -568,7 +581,7 @@ export default function VideoCanvasStudio({
   const [nodePaletteParentId, setNodePaletteParentId] = useState<string | null>(null);
   const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-  const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1));
+  const [canvasSemantics, setCanvasSemantics] = useState<CanvasSemantics>(() => createCanvasSemantics(1, INITIAL_SHOT_ID));
   const [shotSnapshots, setShotSnapshots] = useState<ShotSnapshot[]>([]);
   const [appliedAgentActionIds, setAppliedAgentActionIds] = useState<string[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -584,11 +597,6 @@ export default function VideoCanvasStudio({
   const referenceFramesRef = useRef<UploadedFrame[]>([]);
   const referenceVideosRef = useRef<UploadedReferenceMedia[]>([]);
   const referenceAudiosRef = useRef<UploadedReferenceMedia[]>([]);
-  // One UUID groups generations created in this canvas session. It is sent as
-  // lineage metadata only; the server still validates it and never uses it for
-  // routing or billing. A fresh browser session intentionally starts a fresh
-  // generation group.
-  const generationGroupIdRef = useRef<string | null>(null);
   const generationContextRef = useRef<VideoGeneration | null>(null);
   const manualModelRef = useRef<Exclude<VideoModelId, 'auto'>>('seedance-2');
   const historyRestoreRequestRef = useRef(0);
@@ -630,6 +638,7 @@ export default function VideoCanvasStudio({
     referenceMode,
     referenceFrames: referenceFrames.map(frame => ({ ...frame })),
     generation,
+    generationJobId,
     restoredGenerationId,
     videoUrl,
     agentPlan,
@@ -657,6 +666,7 @@ export default function VideoCanvasStudio({
       ? { assetId: snapshot.scriptOcr.assetId, status: 'ready', text: snapshot.scriptOcr.text, result: null, error: '' }
       : { assetId: null, status: 'idle', text: '', result: null, error: '' });
     setActiveGeneration(snapshot.generation);
+    setGenerationJobId(snapshot.generationJobId || snapshot.generation?.generationJobId || null);
     setCancelling(false);
     setRestoredGenerationId(snapshot.restoredGenerationId);
     setVideoUrl(snapshot.videoUrl);
@@ -1006,18 +1016,30 @@ export default function VideoCanvasStudio({
       const merged = [next, ...previous.filter(item => item.id !== next.id)];
       return merged.toSorted((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
     });
-    setCanvasSemantics(previous => recordCanvasEvent(recordCanvasGeneration(previous, next), {
+    const targetProjectId = generationProjectId(next);
+    const targetShotId = generationShotId(next);
+    if (!targetProjectId || targetProjectId !== project.id || !targetShotId) return;
+    const recordForTarget = (previous: CanvasSemantics) => recordCanvasEvent(recordCanvasGeneration(previous, next), {
       id: `generation-status-${next.id}-${next.status}`,
       type: 'generation.status',
       actor: 'system',
       message: next.status,
       metadata: {
         generationId: next.id,
+        generationJobId: next.generationJobId || null,
         status: next.status,
         progress: Math.round(Number(next.progress) || 0),
       },
-    }));
-  }, []);
+    });
+    setCanvasSemantics(previous => previous.shot.id === targetShotId ? recordForTarget(previous) : previous);
+    setShotSnapshots(previous => previous.map(snapshot => snapshot.semantics.shot.id === targetShotId ? {
+      ...snapshot,
+      generation: mergeGenerationContext(snapshot.generation, next),
+      generationJobId: next.generationJobId || snapshot.generationJobId || null,
+      restoredGenerationId: next.id,
+      semantics: recordForTarget(snapshot.semantics),
+    } : snapshot));
+  }, [project.id]);
 
   const patchSemanticNode = useCallback((nodeId: NodeId, patch: Parameters<typeof patchCanvasNode>[2]) => {
     setCanvasSemantics(previous => patchCanvasNode(previous, nodeId, patch));
@@ -1138,7 +1160,22 @@ export default function VideoCanvasStudio({
 
   const restoreHistoryItem = async (item: VideoGeneration) => {
     const requestId = ++historyRestoreRequestRef.current;
+    const targetShotId = canvasHistoryRestoreTarget(item, project.id, [canvasSemantics.shot.id, ...shotSnapshots.map(snapshot => snapshot.semantics.shot.id)]);
+    const targetSnapshot = targetShotId === canvasSemantics.shot.id
+      ? captureCurrentShot()
+      : shotSnapshots.find(snapshot => snapshot.semantics.shot.id === targetShotId) || null;
+    if (!targetShotId || !targetSnapshot) {
+      // Never copy a legacy, deleted, or foreign history job into the active
+      // Shot state. It remains available in the history list only.
+      notify(zh ? '该历史结果没有当前项目中可确认的镜头归属，未载入当前镜头。' : 'This history item has no confirmed Shot in the current project and was not loaded.');
+      return;
+    }
+    if (targetShotId !== canvasSemantics.shot.id) {
+      setShotSnapshots(previous => upsertShotSnapshot(previous, captureCurrentShot()));
+      applyShotSnapshot(targetSnapshot);
+    }
     const activeItem = setActiveGeneration(item);
+    setGenerationJobId(item.generationJobId || targetSnapshot.generationJobId || null);
     setCancelling(false);
     if (activeItem) rememberGeneration(activeItem);
     setRestoredGenerationId(item.id);
@@ -1262,11 +1299,13 @@ export default function VideoCanvasStudio({
   }, [compareOpen, historyOpen, minimapOpen, nodePaletteOpen, templateOpen]);
 
   useEffect(() => {
+    let restoredCanvas = false;
     try {
       const raw = localStorage.getItem(canvasStorageKey);
       if (raw) {
         const saved = JSON.parse(raw) as SavedCanvas;
-        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5 || saved.version === 6 || saved.version === 7) {
+        if (saved.version === 1 || saved.version === 2 || saved.version === 3 || saved.version === 4 || saved.version === 5 || saved.version === 6 || saved.version === 7 || saved.version === 8) {
+          restoredCanvas = true;
           // Hydration intentionally mirrors an external localStorage snapshot
           // after mount; this is the one synchronous state sync in this effect.
           // v3 reserves a dedicated composer row, so older layouts need the
@@ -1274,7 +1313,8 @@ export default function VideoCanvasStudio({
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setNodes(saved.version >= 3 ? restoreNodePositions(saved.nodes) : INITIAL_NODES);
           setPrompt(saved.prompt || '');
-          setProject(normalizeCreatorProject(saved.project));
+          const restoredProject = normalizeCreatorProject({ ...saved.project, id: saved.project?.id || saved.generationGroupId });
+          setProject(restoredProject);
           const restoredReferenceMode = saved.referenceMode || 'start-end';
           const restoredModel = saved.model || 'seedance-2';
           setModel(restoredModel);
@@ -1290,7 +1330,7 @@ export default function VideoCanvasStudio({
           setReferenceMode(restoredReferenceMode);
           setReferenceFrames((saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })));
           setRestoredGenerationId(saved.generationId || null);
-          if (saved.generationGroupId) generationGroupIdRef.current = saved.generationGroupId;
+          setGenerationJobId(saved.generationJobId || null);
           setCanvasSemantics(normalizeCanvasSemantics(saved.semantics, saved.shot || 1));
           const restoredCustomNodes = normalizeCustomNodes(saved.customNodes);
           setCustomNodes(restoredCustomNodes);
@@ -1302,6 +1342,10 @@ export default function VideoCanvasStudio({
       }
     } catch {
       localStorage.removeItem(canvasStorageKey);
+    }
+    if (!restoredCanvas) {
+      setProject(createCreatorProject());
+      setCanvasSemantics(createCanvasSemantics(1));
     }
     try {
       const handoffRaw = localStorage.getItem(handoffStorageKey);
@@ -1337,6 +1381,7 @@ export default function VideoCanvasStudio({
       referenceMode,
       referenceFrames: referenceFrames.map(frame => ({ ...frame })),
       generation,
+      generationJobId,
       restoredGenerationId,
       videoUrl,
       agentPlan,
@@ -1348,7 +1393,7 @@ export default function VideoCanvasStudio({
     const savedShots = limitShotSnapshots(upsertShotSnapshot(shotSnapshots, currentSnapshot), shot, 24)
       .map(serializeShotSnapshot);
     const saved: SavedCanvas = {
-      version: 7,
+      version: 8,
       project,
       nodes,
       prompt,
@@ -1364,7 +1409,8 @@ export default function VideoCanvasStudio({
       referenceMode,
       referenceFrames: referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
       generationId: generation?.id || restoredGenerationId,
-      generationGroupId: generationGroupIdRef.current,
+      generationJobId: generationJobId || generation?.generationJobId || null,
+      generationGroupId: project.id,
       semantics: canvasSemantics,
       activeShot: shot,
       shots: savedShots,
@@ -1373,7 +1419,7 @@ export default function VideoCanvasStudio({
       customEdges: customEdges.map(edge => ({ ...edge })),
     };
     localStorage.setItem(canvasStorageKey, JSON.stringify(saved));
-  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, hydrated, model, modelMode, nodes, project, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
+  }, [agentPlan, aspectRatio, canvasSemantics, canvasStorageKey, customEdges, customNodes, duration, endFrame, generation, generationJobId, hydrated, model, modelMode, nodes, project, prompt, referenceFrames, referenceMode, resolution, restoredGenerationId, routingStrategy, scriptOcr, shot, shotSnapshots, startFrame, videoUrl]);
 
   useEffect(() => {
     if (!hasAccount) {
@@ -1430,7 +1476,9 @@ export default function VideoCanvasStudio({
           }
         }
         if (restoredGenerationId && !generation) {
-          const next = await refreshVideoGeneration(restoredGenerationId);
+          const jobResult = generationJobId ? await refreshGenerationJob(generationJobId) : null;
+          const restored = jobResult?.generation || await refreshVideoGeneration(restoredGenerationId);
+          const next = { ...restored, generationJobId: generationJobId || restored.generationJobId || null };
           if (!cancelled) {
             // A user may switch shots while this refresh is in flight. Do not
             // let a late response for the previous history item replace the
@@ -1446,7 +1494,7 @@ export default function VideoCanvasStudio({
     };
     void restore();
     return () => { cancelled = true; };
-  }, [effectiveAccess, endFrame, generation, referenceFrames, rememberGeneration, restoredGenerationId, setActiveGeneration, startFrame]);
+  }, [effectiveAccess, endFrame, generation, generationJobId, referenceFrames, rememberGeneration, restoredGenerationId, setActiveGeneration, startFrame]);
 
   useEffect(() => {
     if (effectiveAccess !== 'ready') return;
@@ -1478,7 +1526,9 @@ export default function VideoCanvasStudio({
     let timer: number | undefined;
     const poll = async () => {
       try {
-        const next = await refreshVideoGeneration(generationId);
+        const jobResult = generationJobId ? await refreshGenerationJob(generationJobId) : null;
+        const refreshed = jobResult?.generation || await refreshVideoGeneration(generationId);
+        const next = { ...refreshed, generationJobId: generationJobId || refreshed.generationJobId || null };
         if (cancelled || generationContextRef.current?.id !== generationId) return;
         const activeNext = setActiveGeneration(next);
         if (activeNext) rememberGeneration(activeNext);
@@ -1492,7 +1542,7 @@ export default function VideoCanvasStudio({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [generationId, generationStatus, rememberGeneration, setActiveGeneration]);
+  }, [generationId, generationJobId, generationStatus, rememberGeneration, setActiveGeneration]);
 
   useEffect(() => {
     if (!generationInFlight) return;
@@ -2210,7 +2260,8 @@ export default function VideoCanvasStudio({
         if (endFrame) assertMiniMaxFrame(endFrame, 'END');
       }
     }
-    return createVideoGeneration({
+    const clientActionId = globalThis.crypto?.randomUUID?.() || uuidV4Fallback();
+    const generationInput = {
       model: selectedModelId,
       prompt: prompt.trim(),
       startImageAssetId: referenceMode === 'text' ? null : primaryFrame?.assetId || null,
@@ -2223,9 +2274,26 @@ export default function VideoCanvasStudio({
       duration,
       aspectRatio,
       resolution,
-      generationGroupId: generationGroupIdRef.current || (generationGroupIdRef.current = globalThis.crypto?.randomUUID?.() || uuidV4Fallback()),
+      generationGroupId: project.id,
       shotId: canvasSemantics.shot.id,
       shotOrder: canvasSemantics.shot.order,
+    };
+    const generationSpec = buildGenerationSpecV2(generationInput, {
+      requestId: clientActionId,
+      idempotencyKey: clientActionId,
+      generationGroupId: project.id,
+      shotId: canvasSemantics.shot.id,
+      shotOrder: canvasSemantics.shot.order,
+      userConfirmed: true,
+    });
+    return createManualGenerationJob({
+      specificationId: `canvas:${project.id}:shot:${canvasSemantics.shot.id}:spec-v1`,
+      generationUnitId: `canvas:${project.id}:shot:${canvasSemantics.shot.id}:unit:${clientActionId}`,
+      routingDecisionId: `canvas:${project.id}:shot:${canvasSemantics.shot.id}:model:${selectedModelId}`,
+      selectedModelId,
+      executionMode: 'MANUAL_SINGLE_JOB',
+      clientActionId: `canvas:${project.id}:${canvasSemantics.shot.id}:${clientActionId}`,
+      generationSpec,
     });
   };
 
@@ -2236,7 +2304,10 @@ export default function VideoCanvasStudio({
     setError('');
     setVideoUrl('');
     try {
-      const next = await submitGenerationForModel(effectiveModel, primaryFrame);
+      const result = await submitGenerationForModel(effectiveModel, primaryFrame);
+      if (!result.generation) throw new Error(zh ? '生成任务已建立，但暂未返回视频任务记录。' : 'The generation job was created without a video-generation record.');
+      setGenerationJobId(result.job.id);
+      const next = { ...result.generation, generationJobId: result.job.id };
       const activeNext = setActiveGeneration(next);
       if (activeNext) {
         rememberGeneration(activeNext);
@@ -2251,28 +2322,12 @@ export default function VideoCanvasStudio({
   };
 
   const compareGenerate = async () => {
-    const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     const selected = [...new Set(compareModels)].slice(0, 3);
-    if (!canCompare || (referenceMode !== 'text' && !primaryFrame) || selected.length < 2) return;
-    setSubmitting(true);
-    setError('');
-    setVideoUrl('');
-    try {
-      for (const selectedModelId of selected) {
-        const next = await submitGenerationForModel(selectedModelId, primaryFrame);
-        const activeNext = setActiveGeneration(next);
-        if (activeNext) {
-          rememberGeneration(activeNext);
-          setRestoredGenerationId(activeNext.id);
-        }
-      }
-      setCompareOpen(true);
-      notify(zh ? `已为当前镜头提交 ${selected.length} 个模型版本，结果会保留在对比面板。` : `Submitted ${selected.length} model versions for this shot. Results stay in the compare panel.`);
-    } catch (cause) {
-      setError(clientMessage(cause));
-    } finally {
-      setSubmitting(false);
-    }
+    if (!canCompare || selected.length < 2) return;
+    setCompareOpen(true);
+    notify(zh
+      ? '单任务安全闸门已启用：请分别手动生成每个版本，完成后再在对比面板查看。'
+      : 'The single-job safety gate is active. Generate each version manually, then compare completed versions here.');
   };
 
   const continueWithResult = async () => {
@@ -2320,6 +2375,7 @@ export default function VideoCanvasStudio({
         referenceMode: 'start-end',
         referenceFrames: [],
         generation: null,
+        generationJobId: null,
         restoredGenerationId: null,
         videoUrl: '',
         agentPlan: null,
@@ -2661,8 +2717,11 @@ export default function VideoCanvasStudio({
     setCancelling(true);
     setError('');
     try {
-      const result = await cancelVideoGeneration(generation.id);
-      const activeGeneration = setActiveGeneration(result.generation);
+      const result = generationJobId
+        ? await cancelGenerationJob(generationJobId)
+        : await cancelVideoGeneration(generation.id);
+      const nextGeneration = result.generation ? { ...result.generation, generationJobId } : null;
+      const activeGeneration = setActiveGeneration(nextGeneration);
       if (activeGeneration) {
         rememberGeneration(activeGeneration);
         setRestoredGenerationId(activeGeneration.id);
@@ -2841,6 +2900,7 @@ export default function VideoCanvasStudio({
       endFrame: cloneFrame(currentSnapshot.endFrame),
       referenceFrames: currentSnapshot.referenceFrames.map(frame => ({ ...frame })),
       generation: null,
+      generationJobId: null,
       restoredGenerationId: null,
       videoUrl: '',
       agentPlan: null,
@@ -2858,6 +2918,7 @@ export default function VideoCanvasStudio({
       referenceMode: 'start-end',
       referenceFrames: [],
       generation: null,
+      generationJobId: null,
       restoredGenerationId: null,
       videoUrl: '',
       agentPlan: null,

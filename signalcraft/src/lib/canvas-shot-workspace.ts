@@ -37,6 +37,7 @@ export type ShotSnapshot = {
   referenceMode: CanvasReferenceMode;
   referenceFrames: UploadedFrame[];
   generation: VideoGeneration | null;
+  generationJobId: string | null;
   restoredGenerationId: string | null;
   videoUrl: string;
   agentPlan: VideoGenerationPlan | null;
@@ -60,6 +61,7 @@ export type SavedShot = {
   referenceMode?: CanvasReferenceMode;
   referenceFrames?: PersistedFrame[];
   generationId: string | null;
+  generationJobId?: string | null;
   semantics?: CanvasSemantics;
   scriptOcr?: ScriptOcrDraft | null;
   customNodes?: CanvasCustomNode[];
@@ -132,6 +134,7 @@ export function restoreSavedShot(saved: SavedShot, restoreNodes: (value: unknown
     referenceMode: saved.referenceMode || 'start-end',
     referenceFrames: (saved.referenceFrames || []).slice(0, 9).map(frame => ({ ...frame, previewUrl: '' })),
     generation: null,
+    generationJobId: saved.generationJobId || null,
     restoredGenerationId: saved.generationId || null,
     videoUrl: '',
     agentPlan: null,
@@ -272,6 +275,7 @@ export function serializeShotSnapshot(snapshot: ShotSnapshot): SavedShot {
     referenceMode: snapshot.referenceMode,
     referenceFrames: snapshot.referenceFrames.map(stripFrame).filter((frame): frame is PersistedFrame => Boolean(frame)),
     generationId: snapshot.generation?.id || snapshot.restoredGenerationId,
+    generationJobId: snapshot.generationJobId || snapshot.generation?.generationJobId || null,
     semantics: snapshot.semantics,
     scriptOcr: snapshot.scriptOcr,
     customNodes,

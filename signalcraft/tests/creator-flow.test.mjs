@@ -4,20 +4,31 @@ import { creatorAgentContext, creatorBibleSummary, creatorFlowStage, creatorShot
 import { createCanvasSemantics, normalizeCanvasSemantics } from '../src/lib/canvas-domain.ts';
 
 test('creator project restores safely from an incomplete local snapshot', () => {
-  assert.deepEqual(normalizeCreatorProject({ title: '  夏日产品片  ', brief: '  清晨的玻璃瓶  ', format: 'landscape' }), {
+  const first = normalizeCreatorProject({ title: '  夏日产品片  ', brief: '  清晨的玻璃瓶  ', format: 'landscape' });
+  assert.match(first.id, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual({ ...first, id: undefined }, {
+    id: undefined,
     title: '夏日产品片',
     brief: '清晨的玻璃瓶',
     format: 'landscape',
     sequenceTitle: '主镜头序列',
     bible: { character: '', scene: '', style: '', camera: '', motion: '', locks: { character: false, scene: false, style: false, camera: false, motion: false } },
   });
-  assert.deepEqual(normalizeCreatorProject({ title: '', format: 'unsupported' }), {
+  const second = normalizeCreatorProject({ title: '', format: 'unsupported' });
+  assert.match(second.id, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual({ ...second, id: undefined }, {
+    id: undefined,
     title: '未命名项目',
     brief: '',
     format: 'short',
     sequenceTitle: '主镜头序列',
     bible: { character: '', scene: '', style: '', camera: '', motion: '', locks: { character: false, scene: false, style: false, camera: false, motion: false } },
   });
+});
+
+test('creator project keeps one persistent identity when restored', () => {
+  const id = '123e4567-e89b-42d3-a456-426614174000';
+  assert.equal(normalizeCreatorProject({ id, title: '项目 A' }).id, id);
 });
 
 test('creator project keeps a creator-defined sequence title when restoring', () => {

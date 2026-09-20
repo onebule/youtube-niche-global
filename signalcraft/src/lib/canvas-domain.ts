@@ -85,6 +85,7 @@ export type CanvasAssetMentionValidation = {
 export type CanvasGenerationSemantic = {
   id: string;
   shotId: string;
+  generationJobId?: string | null;
   provider: string;
   model: VideoModelId;
   status: GenerationStatus;
@@ -230,13 +231,22 @@ export function shotIdFor(index: number) {
   return `shot-${String(Math.max(1, Math.floor(index || 1))).padStart(2, '0')}`;
 }
 
+/** New Shots use a durable identity independent from their visual order. */
+export function createCanvasShotIdentity() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, token => {
+    const value = Math.floor(Math.random() * 16);
+    return (token === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
 function defaultNode(role: CanvasNodeRole, shotId: string): CanvasNodeSemantic {
   return { role, shotId, status: 'draft' };
 }
 
-export function createCanvasSemantics(shotIndex = 1): CanvasSemantics {
+export function createCanvasSemantics(shotIndex = 1, stableShotId = createCanvasShotIdentity()): CanvasSemantics {
   const index = Math.max(1, Math.floor(shotIndex || 1));
-  const shotId = shotIdFor(index);
+  const shotId = text(stableShotId, shotIdFor(index), 120);
   const edges: CanvasEdgeSemantic[] = [
     { id: 'source-agent', from: 'source', to: 'agent', type: 'REFERENCE' },
     { id: 'agent-task', from: 'agent', to: 'task', type: 'GENERATION' },
@@ -432,6 +442,7 @@ function normalizeGeneration(value: unknown, shotId: string): CanvasGenerationSe
   return {
     id,
     shotId: text(candidate.shotId, shotId),
+    generationJobId: nullableText(candidate.generationJobId),
     provider: text(candidate.provider, 'unknown', 80),
     model: oneOf(candidate.model, VIDEO_MODELS, 'auto'),
     status: oneOf(candidate.status, ['queued', 'processing', 'completed', 'failed'] as const, 'failed'),
@@ -582,6 +593,10 @@ export function registerCanvasAsset(semantics: CanvasSemantics, asset: CanvasAss
 
 /** Records a generation as a version and mirrors its lifecycle onto nodes. */
 export function recordCanvasGeneration(semantics: CanvasSemantics, generation: VideoGeneration): CanvasSemantics {
+  const lineageShotId = text(generation.shotId || generation.generationSpec?.shotId, '', 120);
+  // History and late polling responses must never be attached to whichever
+  // Shot happens to be open. The caller can route them to the matching Shot.
+  if (lineageShotId && lineageShotId !== semantics.shot.id) return semantics;
   // A generation can be observed more than once while it moves from queued to
   // processing to completed. Reuse its existing version in that case; a new
   // generation for the same Shot becomes the next visible version.
@@ -598,6 +613,7 @@ export function recordCanvasGeneration(semantics: CanvasSemantics, generation: V
   const nextGeneration: CanvasGenerationSemantic = {
     id: generation.id,
     shotId: semantics.shot.id,
+    generationJobId: generation.generationJobId || previousGeneration?.generationJobId || null,
     provider: generation.provider,
     model: generation.model,
     status: generation.status,
@@ -652,6 +668,21 @@ export function recordCanvasGeneration(semantics: CanvasSemantics, generation: V
     'result',
     { role: 'video_result', generationId: generation.id, versionId, provider: generation.provider, model: generation.model, status: generation.status, version: nextVersionNumber, bestTake: previousVersion?.bestTake || false },
   );
+}
+
+/**
+ * A history item can only become the active Shot result when both parts of its
+ * persisted lineage still exist in the open Project. Legacy and foreign items
+ * remain visible in history, but cannot mutate the current Shot.
+ */
+export function canvasHistoryRestoreTarget(
+  generation: VideoGeneration,
+  projectId: string,
+  availableShotIds: readonly string[],
+) {
+  const targetProjectId = text(generation.generationGroupId || generation.generationSpec?.generationGroupId, '', 120);
+  const targetShotId = text(generation.shotId || generation.generationSpec?.shotId, '', 120);
+  return targetProjectId === projectId && availableShotIds.includes(targetShotId) ? targetShotId : null;
 }
 
 export function canvasVersionForGeneration(semantics: CanvasSemantics, generationId: string | null | undefined) {

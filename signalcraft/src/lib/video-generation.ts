@@ -305,6 +305,8 @@ export function estimateVideoCredits(model: VideoModel | null | undefined, durat
 
 export type VideoGeneration = {
   id: string;
+  /** Present when this generation was created through the canonical /jobs path. */
+  generationJobId?: string | null;
   provider: string;
   generationGroupId?: string | null;
   shotId?: string | null;

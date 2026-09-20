@@ -18,6 +18,8 @@ export type CreatorBible = {
 };
 
 export type CreatorProject = {
+  /** Stable UUID reused as the existing generationGroupId across this project. */
+  id: string;
   title: string;
   brief: string;
   format: CreatorProjectFormat;
@@ -35,13 +37,22 @@ const BIBLE_BLOCK_START = '[SIGNALCRAFT_PROJECT_RULES]';
 const BIBLE_BLOCK_END = '[/SIGNALCRAFT_PROJECT_RULES]';
 const BIBLE_BLOCK_PATTERN = /\s*\[SIGNALCRAFT_PROJECT_RULES\][\s\S]*?\[\/SIGNALCRAFT_PROJECT_RULES\]\s*/g;
 const SHOT_INTENT_BLOCK_PATTERN = /\s*\[SIGNALCRAFT_SHOT_INTENT\][\s\S]*?\[\/SIGNALCRAFT_SHOT_INTENT\]\s*/g;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function clean(value: unknown, maximum: number) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, maximum);
 }
 
-export function createCreatorProject(): CreatorProject {
-  return { title: '未命名项目', brief: '', format: 'short', sequenceTitle: '主镜头序列', bible: createCreatorBible() };
+export function createProjectIdentity() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, token => {
+    const value = Math.floor(Math.random() * 16);
+    return (token === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function createCreatorProject(id = createProjectIdentity()): CreatorProject {
+  return { id: UUID_PATTERN.test(id) ? id : createProjectIdentity(), title: '未命名项目', brief: '', format: 'short', sequenceTitle: '主镜头序列', bible: createCreatorBible() };
 }
 
 export function createCreatorBible(): CreatorBible {
@@ -67,6 +78,7 @@ export function normalizeCreatorProject(value: unknown): CreatorProject {
   const candidate = value && typeof value === 'object' ? value as Partial<CreatorProject> : {};
   const format = FORMATS.includes(candidate.format as CreatorProjectFormat) ? candidate.format as CreatorProjectFormat : 'short';
   return {
+    id: UUID_PATTERN.test(clean(candidate.id, 80)) ? clean(candidate.id, 80) : createProjectIdentity(),
     title: clean(candidate.title, 80) || '未命名项目',
     brief: clean(candidate.brief, 1200),
     format,

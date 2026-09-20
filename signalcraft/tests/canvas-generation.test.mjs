@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeImageGenerationJob, normalizeVideoGenerationJob, resolveCanvasModelMode } from '../src/lib/canvas-generation.ts';
-import { canvasVersionForGeneration, createCanvasSemantics, recordCanvasGeneration, selectCanvasBestTake } from '../src/lib/canvas-domain.ts';
+import { canvasHistoryRestoreTarget, canvasVersionForGeneration, createCanvasSemantics, normalizeCanvasSemantics, recordCanvasGeneration, selectCanvasBestTake } from '../src/lib/canvas-domain.ts';
 
 test('canvas normalizes video lifecycle and preserves lineage fields', () => {
   const job = normalizeVideoGenerationJob({
@@ -73,6 +73,46 @@ test('canvas generation updates reuse a version and new generations append versi
   assert.equal(recovered.versions.length, 2);
   assert.equal(canvasVersionForGeneration(recovered, 'gen-2')?.number, 2);
   assert.equal(recovered.shot.status, 'completed');
+});
+
+test('canvas refuses to attach a generation from another Shot', () => {
+  const shot = createCanvasSemantics(1, '11111111-1111-4111-8111-111111111111');
+  const other = { ...videoGeneration('gen-other'), shotId: '22222222-2222-4222-8222-222222222222', generationJobId: 'job-other' };
+  assert.equal(recordCanvasGeneration(shot, other), shot);
+  const own = recordCanvasGeneration(shot, { ...videoGeneration('gen-own'), shotId: shot.shot.id, generationJobId: 'job-own' });
+  assert.equal(own.generations[0].generationJobId, 'job-own');
+});
+
+test('saved Shot restores the same identity and every generation version after refresh', () => {
+  const shotId = '33333333-3333-4333-8333-333333333333';
+  const first = recordCanvasGeneration(
+    createCanvasSemantics(1, shotId),
+    { ...videoGeneration('gen-v1'), shotId, generationJobId: 'job-v1' },
+  );
+  const second = recordCanvasGeneration(
+    first,
+    { ...videoGeneration('gen-v2'), shotId, generationJobId: 'job-v2' },
+  );
+  const saved = JSON.parse(JSON.stringify({
+    generationJobId: 'job-v2',
+    semantics: second,
+  }));
+  const restored = normalizeCanvasSemantics(saved.semantics, 1);
+
+  assert.equal(restored.shot.id, shotId);
+  assert.equal(saved.generationJobId, 'job-v2');
+  assert.deepEqual(restored.versions.map(version => version.generationId), ['gen-v1', 'gen-v2']);
+  assert.deepEqual(restored.generations.map(generation => generation.generationJobId), ['job-v1', 'job-v2']);
+});
+
+test('history restore rejects another project, a missing Shot, and legacy lineage', () => {
+  const projectId = '123e4567-e89b-42d3-a456-426614174000';
+  const shotId = '223e4567-e89b-42d3-a456-426614174000';
+  const generation = { ...videoGeneration('gen-history'), generationGroupId: projectId, shotId };
+  assert.equal(canvasHistoryRestoreTarget(generation, projectId, [shotId]), shotId);
+  assert.equal(canvasHistoryRestoreTarget({ ...generation, generationGroupId: '323e4567-e89b-42d3-a456-426614174000' }, projectId, [shotId]), null);
+  assert.equal(canvasHistoryRestoreTarget(generation, projectId, []), null);
+  assert.equal(canvasHistoryRestoreTarget(videoGeneration('gen-legacy'), projectId, [shotId]), null);
 });
 
 test('selecting a canvas best take is immutable and does not create a generation', () => {
