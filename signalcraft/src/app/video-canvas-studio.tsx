@@ -942,21 +942,33 @@ export default function VideoCanvasStudio({
   const alternateModelDetails = useMemo(() => models.find(item => item.id === alternateModel) || null, [alternateModel, models]);
   const shotSnapshotsByNumber = useMemo(() => new Map(shotSnapshots.map(snapshot => [snapshot.shot, snapshot])), [shotSnapshots]);
   const shotRailItems = useMemo(() => {
+    const currentShotVersions = canvasSemantics.versions.filter(version => version.shotId === canvasSemantics.shot.id);
     const current = {
       shot,
       order: canvasSemantics.shot.order || shot,
       status: canvasSemantics.shot.status,
       title: canvasSemantics.shot.title,
+      versionCount: currentShotVersions.length,
+      bestTakeVersion: currentShotVersions.find(version => version.bestTake)?.number || null,
     };
-    const byNumber = new Map(shotSnapshots.map(snapshot => [snapshot.shot, {
-      shot: snapshot.shot,
-      order: snapshot.semantics.shot.order || snapshot.shot,
-      status: snapshot.semantics.shot.status,
-      title: snapshot.semantics.shot.title,
-    }]));
+    const byNumber = new Map(shotSnapshots.map(snapshot => {
+      const versions = snapshot.semantics.versions.filter(version => version.shotId === snapshot.semantics.shot.id);
+      return [snapshot.shot, {
+        shot: snapshot.shot,
+        order: snapshot.semantics.shot.order || snapshot.shot,
+        status: snapshot.semantics.shot.status,
+        title: snapshot.semantics.shot.title,
+        versionCount: versions.length,
+        bestTakeVersion: versions.find(version => version.bestTake)?.number || null,
+      }] as const;
+    }));
     byNumber.set(shot, current);
     return Array.from(byNumber.values()).sort((left, right) => left.order - right.order || left.shot - right.shot);
-  }, [canvasSemantics.shot.order, canvasSemantics.shot.status, canvasSemantics.shot.title, shot, shotSnapshots]);
+  }, [canvasSemantics.shot.id, canvasSemantics.shot.order, canvasSemantics.shot.status, canvasSemantics.shot.title, canvasSemantics.versions, shot, shotSnapshots]);
+  const canvasV3VersionCount = shotRailItems.reduce((total, item) => total + item.versionCount, 0);
+  const canvasV3CompleteCount = shotRailItems.filter(item => item.status === 'completed').length;
+  const canvasV3BestTakeCount = shotRailItems.filter(item => item.bestTakeVersion !== null).length;
+  const currentBestTake = shotVersions.find(item => item.version.bestTake)?.version || null;
   const nextShotNumber = () => Math.max(shot, ...shotSnapshots.map(snapshot => snapshot.shot), 0) + 1;
 
   const currentShotRailIndex = shotRailItems.findIndex(item => item.shot === shot);
@@ -3178,19 +3190,51 @@ export default function VideoCanvasStudio({
     {error && <div className="video-canvas-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError('')}>{zh ? '关闭' : 'Dismiss'}</button></div>}
 
     <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
-      <div className="video-canvas-caption">
-        <div className="video-canvas-caption-project"><span className="canvas-project-mark" aria-hidden="true">SC</span><div><b>{project.title.trim() || (zh ? '未命名项目' : 'Untitled project')}</b><small><i aria-hidden="true" />{zh ? '私有项目 · 自动保存' : 'Private project · auto-saved'}</small></div></div>
-        <div className="video-canvas-caption-center">
-          <div className="canvas-shot-rail" aria-label={zh ? '镜头列表' : 'Shot list'}>
-            <small>SHOTS</small>
-            {shotRailItems.map(item => {
-              const index = item.shot;
-              return <button key={index} type="button" className={'canvas-shot-rail-item ' + (index === shot ? 'is-current' : '')} aria-current={index === shot ? 'step' : undefined} aria-label={zh ? `切换到镜头 ${String(index).padStart(2, '0')}` : `Switch to shot ${String(index).padStart(2, '0')}`} onClick={() => switchShot(index)}><b>{String(index).padStart(2, '0')}</b><i className={item.status} aria-hidden="true" /></button>;
-            })}
+      <div className="video-canvas-caption canvas-v3-workspace" data-canvas-workspace-version="3">
+        <section className="canvas-v3-project" aria-labelledby="canvas-v3-project-title">
+          <span className="canvas-v3-eyebrow">CREATOR CANVAS · V3</span>
+          <div className="canvas-v3-project-heading">
+            <span className="canvas-v3-project-mark" aria-hidden="true">SC</span>
+            <div><h2 id="canvas-v3-project-title">{project.title.trim() || (zh ? '未命名项目' : 'Untitled project')}</h2><p><i aria-hidden="true" />{zh ? '私有项目 · 自动保存' : 'Private project · auto-saved'}</p></div>
           </div>
-          <p>{zh ? '按镜头推进；生成前始终由你确认。' : 'Move through shots at your pace; you always confirm before generation.'}</p>
-        </div>
-        <div className="video-canvas-caption-actions"><button type="button" className="canvas-add-node-trigger" disabled={shotActionsDisabled} onClick={() => createNextShot(false)}><span aria-hidden="true">＋</span>{zh ? '新镜头' : 'New shot'}</button><button type="button" className={'canvas-add-node-trigger is-quiet ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭素材' : 'Close assets') : (zh ? '添加素材' : 'Add assets')}</button></div>
+          <dl className="canvas-v3-project-stats">
+            <div><dt>{zh ? '镜头' : 'Shots'}</dt><dd>{String(shotRailItems.length).padStart(2, '0')}</dd></div>
+            <div><dt>{zh ? '版本' : 'Versions'}</dt><dd>{String(canvasV3VersionCount).padStart(2, '0')}</dd></div>
+            <div><dt>{zh ? '成片' : 'Ready'}</dt><dd>{String(canvasV3CompleteCount).padStart(2, '0')}</dd></div>
+          </dl>
+        </section>
+
+        <section className="canvas-v3-storyboard" aria-labelledby="canvas-v3-storyboard-title">
+          <header className="canvas-v3-section-heading"><div><span>STORYBOARD</span><h3 id="canvas-v3-storyboard-title">{zh ? '镜头故事板' : 'Shot storyboard'}</h3></div><small>{zh ? `${canvasV3BestTakeCount} 个 Best Take` : `${canvasV3BestTakeCount} best take${canvasV3BestTakeCount === 1 ? '' : 's'}`}</small></header>
+          <div className="canvas-v3-shot-strip" role="list" aria-label={zh ? 'V3 镜头故事板' : 'V3 shot storyboard'}>
+            {shotRailItems.map((item, index) => {
+              const title = item.title.trim() || (zh ? `镜头 ${String(item.shot).padStart(2, '0')}` : `Shot ${String(item.shot).padStart(2, '0')}`);
+              const status = item.status === 'generating' ? (zh ? '生成中' : 'Rendering') : item.status === 'completed' ? (zh ? '已完成' : 'Complete') : item.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : (zh ? '草稿' : 'Draft');
+              return <button key={item.shot} type="button" role="listitem" className={'canvas-v3-shot-card ' + (item.shot === shot ? 'is-current ' : '') + 'is-' + item.status} aria-current={item.shot === shot ? 'step' : undefined} onClick={() => switchShot(item.shot)}>
+                <span className="canvas-v3-shot-number">{String(index + 1).padStart(2, '0')}</span>
+                <span className="canvas-v3-shot-copy"><b>{title}</b><small>{status} · {item.versionCount} {zh ? '个版本' : item.versionCount === 1 ? 'version' : 'versions'}</small></span>
+                {item.bestTakeVersion !== null && <em>BEST V{item.bestTakeVersion}</em>}
+                <i className={item.status} aria-hidden="true" />
+              </button>;
+            })}
+            <button type="button" className="canvas-v3-add-shot" disabled={shotActionsDisabled} onClick={() => createNextShot(false)}><span aria-hidden="true">＋</span><b>{zh ? '添加镜头' : 'Add shot'}</b><small>{zh ? '延续同一项目' : 'Keep project context'}</small></button>
+          </div>
+        </section>
+
+        <aside className="canvas-v3-versions" aria-labelledby="canvas-v3-versions-title">
+          <header className="canvas-v3-section-heading"><div><span>SHOT {String(shot).padStart(2, '0')}</span><h3 id="canvas-v3-versions-title">{zh ? '版本与 Best Take' : 'Versions & Best Take'}</h3></div>{currentBestTake && <small className="is-best">BEST V{currentBestTake.number}</small>}</header>
+          {shotVersions.length > 0 ? <div className="canvas-v3-version-strip" role="list" aria-label={zh ? '当前镜头版本' : 'Current shot versions'}>
+            {shotVersions.map(item => {
+              const semanticGeneration = canvasSemantics.generations.find(candidate => candidate.id === item.version.generationId);
+              const versionStatus = semanticGeneration?.status === 'completed' ? (zh ? '已完成' : 'Complete') : semanticGeneration?.status === 'failed' ? (zh ? '需处理' : 'Needs attention') : semanticGeneration?.status === 'processing' || semanticGeneration?.status === 'queued' ? (zh ? '生成中' : 'Rendering') : (zh ? '已记录' : 'Recorded');
+              return <button key={item.version.id} type="button" role="listitem" className={'canvas-v3-version-chip ' + (item.version.id === currentVersion?.id ? 'is-current ' : '') + (item.version.bestTake ? 'is-best' : '')} onClick={() => item.generation ? void selectGenerationAsCurrent(item.generation) : toggleHistory()}>
+                <b>V{item.version.number}</b><span>{item.version.bestTake ? 'BEST TAKE' : versionStatus}</span>
+              </button>;
+            })}
+          </div> : <div className="canvas-v3-version-empty"><span aria-hidden="true">◇</span><div><b>{zh ? '还没有生成版本' : 'No generations yet'}</b><p>{zh ? '完成一次生成后，V1 会保留在这里。' : 'Your first result will be kept here as V1.'}</p></div></div>}
+          <div className="canvas-v3-version-actions"><button type="button" onClick={toggleHistory}>{zh ? '全部历史' : 'All history'}</button>{shotVersions.length > 1 && <button type="button" onClick={toggleCompare}>{zh ? '对比版本' : 'Compare'}</button>}<button type="button" className="is-primary" onClick={focusMotionPrompt}>{shotVersions.length > 0 ? (zh ? '生成新版本' : 'New version') : (zh ? '编辑当前镜头' : 'Edit shot')}</button></div>
+          <button type="button" className={'canvas-v3-assets-trigger ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭素材库' : 'Close assets') : (zh ? '添加素材到画布' : 'Add assets to canvas')}</button>
+        </aside>
       </div>
       <div
         ref={viewportRef}
