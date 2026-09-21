@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeImageGenerationJob, normalizeVideoGenerationJob, resolveCanvasModelMode } from '../src/lib/canvas-generation.ts';
 import { canvasHistoryRestoreTarget, canvasVersionForGeneration, createCanvasSemantics, normalizeCanvasSemantics, recordCanvasGeneration, selectCanvasBestTake } from '../src/lib/canvas-domain.ts';
+import { failedImageGenerationFromRefresh, isTerminalImageGenerationRefreshError } from '../src/lib/image-generation-state.ts';
 
 test('canvas normalizes video lifecycle and preserves lineage fields', () => {
   const job = normalizeVideoGenerationJob({
@@ -26,6 +27,29 @@ test('canvas keeps image failures visible and cost nullable', () => {
   assert.equal(job.status, 'FAILED');
   assert.equal(job.cost, null);
   assert.equal(job.errorCode, 'TIMEOUT');
+});
+
+test('expired image task releases the busy state and keeps its prompt ready for resubmission', () => {
+  const active = {
+    provider: 'apimart', model: 'gpt-image-2', taskId: 'i1.expired.signature', prompt: 'A paper boat', size: '16:9', resolution: '2k',
+    status: 'processing', progress: 99, imageAssetId: null, providerCost: null, createdAt: '2026-09-01T00:00:00Z', completedAt: null,
+    errorCode: null, errorMessage: null,
+  };
+  const cause = { message: '图片任务标识已过期，请重新提交生成。', status: 410, code: 'IMAGE_TASK_ID_EXPIRED' };
+  assert.equal(isTerminalImageGenerationRefreshError(cause), true);
+  const failed = failedImageGenerationFromRefresh(active, cause, '图片生成服务暂时不可用。');
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.progress, 99);
+  assert.equal(failed.prompt, 'A paper boat');
+  assert.equal(failed.size, '16:9');
+  assert.equal(failed.resolution, '2k');
+  assert.equal(failed.errorCode, 'IMAGE_TASK_ID_EXPIRED');
+  assert.match(failed.errorMessage, /已过期/);
+});
+
+test('rate limiting stays retryable and does not become a local terminal image failure', () => {
+  const cause = { message: '请稍后重试。', status: 429, code: 'RATE_LIMITED' };
+  assert.equal(isTerminalImageGenerationRefreshError(cause), false);
 });
 
 test('custom model mode never gets replaced by auto routing', () => {

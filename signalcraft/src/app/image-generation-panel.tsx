@@ -13,6 +13,7 @@ import {
   upsertImageGenerationHistory,
   writeImageGenerationHistory,
 } from '@/src/lib/image-generation';
+import { failedImageGenerationFromRefresh, isTerminalImageGenerationRefreshError } from '@/src/lib/image-generation-state';
 import { VideoGenerationClientError } from '@/src/lib/video-generation';
 
 const SIZE_OPTIONS: Array<{ value: ImageGenerationSize; label: string }> = [
@@ -34,10 +35,12 @@ function clientMessage(cause: unknown, zh: boolean) {
   return zh ? '图片生成服务暂时不可用，请稍后重试。' : 'Image generation is temporarily unavailable. Try again later.';
 }
 
-function statusLabel(status: ImageGeneration['status'], zh: boolean) {
+function statusLabel(status: ImageGeneration['status'], zh: boolean, errorCode?: string | null) {
   if (status === 'queued') return zh ? '排队中' : 'Queued';
   if (status === 'processing') return zh ? '生成中' : 'Processing';
   if (status === 'completed') return zh ? '已完成' : 'Completed';
+  if (errorCode === 'IMAGE_TASK_ID_EXPIRED') return zh ? '任务已过期' : 'Task expired';
+  if (errorCode === 'IMAGE_TASK_ID_INVALID' || errorCode === 'IMAGE_TASK_ID_REQUIRED') return zh ? '任务已失效' : 'Task unavailable';
   return zh ? '生成失败' : 'Failed';
 }
 
@@ -142,11 +145,15 @@ export default function ImageGenerationPanel({
         if (!['completed', 'failed'].includes(next.status)) timeout = window.setTimeout(poll, 2400);
       } catch (cause) {
         if (!cancelled) {
-          setError(clientMessage(cause, zh));
+          const message = clientMessage(cause, zh);
+          const terminalClientError = isTerminalImageGenerationRefreshError(cause);
+          setError(message);
           // Expired/invalid handles cannot become valid by polling again.
           // Transient provider/storage failures remain retryable in-place.
-          const terminalClientError = cause instanceof VideoGenerationClientError
-            && cause.status >= 400 && cause.status < 500 && cause.status !== 429;
+          if (terminalClientError) {
+            pollingHandle.current = null;
+            setTask(previous => previous ? failedImageGenerationFromRefresh(previous, cause, message) : previous);
+          }
           if (!terminalClientError) timeout = window.setTimeout(poll, 4000);
         }
       }
@@ -179,6 +186,9 @@ export default function ImageGenerationPanel({
   const busy = submitting || task?.status === 'queued' || task?.status === 'processing';
   const restore = async (item: ImageGeneration) => {
     if (busy) return;
+    if (item.prompt) setPrompt(item.prompt);
+    if (item.size) setSize(item.size);
+    if (item.resolution) setResolution(item.resolution);
     setError('');
     setSubmitting(true);
     pollingHandle.current = item.taskId;
@@ -188,13 +198,18 @@ export default function ImageGenerationPanel({
       if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
       setTask(previous => ({ ...previous, ...next, taskId: pollingHandle.current || next.taskId }));
     } catch (cause) {
+      const message = clientMessage(cause, zh);
+      const terminalClientError = isTerminalImageGenerationRefreshError(cause);
       // A completed provider task may still need one more private-media copy.
       // If that copy failed, show recovery in progress instead of claiming
       // the image is complete while the retry is pending.
-      if (item.status === 'completed') {
+      if (terminalClientError) {
+        pollingHandle.current = null;
+        setTask(previous => failedImageGenerationFromRefresh(previous || item, cause, message));
+      } else if (item.status === 'completed') {
         setTask({ ...item, status: 'processing', progress: Math.max(1, Math.min(99, item.progress || 99)), errorMessage: null });
       }
-      setError(clientMessage(cause, zh));
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -239,20 +254,20 @@ export default function ImageGenerationPanel({
         {history.length > 0 ? <div className="image-generation-history-list">
           {history.slice(0, 6).map(item => <button type="button" className={'image-generation-history-item is-' + item.status} key={item.taskId} onClick={() => void restore(item)} disabled={busy}>
             <i aria-hidden="true" />
-            <span><strong>{item.prompt || (zh ? '未命名任务' : 'Untitled task')}</strong><small>{historyTime(item.createdAt, zh)} · {statusLabel(item.status, zh)}</small></span>
+            <span><strong>{item.prompt || (zh ? '未命名任务' : 'Untitled task')}</strong><small>{historyTime(item.createdAt, zh)} · {statusLabel(item.status, zh, item.errorCode)}</small></span>
             <em>{item.status === 'completed' ? '✓' : item.status === 'failed' ? '!' : `${Math.round(item.progress)}%`}</em>
           </button>)}
         </div> : <p className="image-generation-history-empty">{zh ? '当前浏览器还没有可恢复的任务。提交一次后，任务会保留在这里，重新打开即可继续查看。' : 'No resumable tasks on this browser yet. Submit once and the task will stay here for quick resume.'}</p>}
       </section>
-      {error && <p className="image-generation-error" role="alert">{error}</p>}
-      {task && <section className={'image-generation-result is-' + task.status} aria-live="polite">
-        <div className="image-generation-result-head"><div><span>{zh ? '任务状态' : 'TASK STATUS'}</span><b>{statusLabel(task.status, zh)}</b></div><strong>{Math.round(task.progress)}%</strong></div>
+      {error && task?.errorMessage !== error && <p className="image-generation-error" role="alert">{error}</p>}
+      {task && <section className={'image-generation-result is-' + task.status} aria-live="polite" role={task.status === 'failed' ? 'alert' : undefined}>
+        <div className="image-generation-result-head"><div><span>{zh ? '任务状态' : 'TASK STATUS'}</span><b>{statusLabel(task.status, zh, task.errorCode)}</b></div><strong>{task.status === 'failed' ? '!' : `${Math.round(task.progress)}%`}</strong></div>
         {(task.status === 'queued' || task.status === 'processing') && <div className="image-generation-progress"><i style={{ width: `${Math.max(4, task.progress)}%` }} /></div>}
         {task.status === 'completed' && task.imageUrl && <img className="image-generation-preview" src={task.imageUrl} alt={prompt || (zh ? '生成图片' : 'Generated image')} />}
         {task.status === 'failed' && <p>{task.errorMessage || (zh ? '图片生成失败，请调整描述后重试。' : 'Generation failed. Adjust the prompt and try again.')}</p>}
         {task.status === 'completed' && task.imageAssetId && task.imageUrl && <div className="image-generation-result-actions"><button type="button" className="is-primary" onClick={() => onUseAsReference(task.imageAssetId!, task.imageUrl!)}>{zh ? '加入当前画布参考' : 'Use in current canvas'}</button><a href={task.imageUrl} target="_blank" rel="noreferrer">{zh ? '打开高清图' : 'Open full image'}</a></div>}
       </section>}
-      <footer className="image-generation-panel-foot"><button type="button" className="image-generation-cancel" onClick={onClose}>{zh ? '稍后再做' : 'Do later'}</button><button type="button" className="image-generation-submit" onClick={() => void generate()} disabled={busy || modelState !== 'ready' || !prompt.trim()}>{busy ? (zh ? '生成中…' : 'Generating…') : modelState === 'checking' ? (zh ? '检查模型…' : 'Checking model…') : (zh ? '生成图片' : 'Generate image')}<span aria-hidden="true">→</span></button></footer>
+      <footer className="image-generation-panel-foot"><button type="button" className="image-generation-cancel" onClick={onClose}>{zh ? '稍后再做' : 'Do later'}</button><button type="button" className="image-generation-submit" onClick={() => void generate()} disabled={busy || modelState !== 'ready' || !prompt.trim()}>{busy ? (zh ? '生成中…' : 'Generating…') : modelState === 'checking' ? (zh ? '检查模型…' : 'Checking model…') : task?.status === 'failed' ? (zh ? '重新生成' : 'Generate again') : (zh ? '生成图片' : 'Generate image')}<span aria-hidden="true">→</span></button></footer>
     </aside>
   </div>;
 }
