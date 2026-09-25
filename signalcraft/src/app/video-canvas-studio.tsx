@@ -518,6 +518,7 @@ export default function VideoCanvasStudio({
   const handoffStorageKey = accountStorageKey(VIRAL_CASE_CANVAS_HANDOFF_KEY, account);
   const [nodes, setNodes] = useState<NodePositions>(INITIAL_NODES);
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
+  const [canvasViewMode, setCanvasViewMode] = useState<'shot' | 'workflow'>('shot');
   const [models, setModels] = useState<VideoModel[]>([]);
   const [access, setAccess] = useState<'loading' | 'ready' | 'signed-out' | 'team-only' | 'error'>(account ? 'loading' : 'signed-out');
   const [capabilitiesRetry, setCapabilitiesRetry] = useState(0);
@@ -2053,8 +2054,11 @@ export default function VideoCanvasStudio({
   };
 
   const focusMotionPrompt = () => {
-    promptRef.current?.focus();
-    promptRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setComposerCollapsed(false);
+    requestAnimationFrame(() => {
+      promptRef.current?.focus();
+      promptRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   };
 
   const handleAgentAction = () => {
@@ -2817,7 +2821,7 @@ export default function VideoCanvasStudio({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar')) return;
+    if (target.closest('.video-canvas-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar, .creator-v41-shot-focus')) return;
     setSelectedNodeId(null);
     setSelectedCustomNodeId(null);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -3139,10 +3143,20 @@ export default function VideoCanvasStudio({
 
   return <main className="app-page video-canvas-page">
     <header className="video-canvas-intro">
-      <div><span>CREATOR FLOW · PRIVATE PROJECT</span><h1>{zh ? '从想法开始，把它变成一组可生成的镜头。' : 'Start with an idea, then turn it into a set of generatable shots.'}</h1><p>{zh ? '先定项目，再逐镜头加入参考、描述和结果。模型、费用和任务仍沿用现有服务，每次生成都由你确认。' : 'Define the project, then add references, direction, and results shot by shot. Existing models, costs, and tasks stay in place, and every generation needs your confirmation.'}</p></div>
-      <aside><b>{zh ? '创作进度' : 'Creation progress'}</b><span>{creatorStageCopy}</span><button type="button" onClick={organizeCanvas}>{zh ? '整理当前镜头' : 'Tidy current shot'}</button></aside>
+      <div><span>CREATOR CANVAS · V4.1</span><h1>{zh ? '围绕镜头创作，随时查看完整流程。' : 'Create one shot at a time, with the full workflow one click away.'}</h1><p>{zh ? '默认进入简洁镜头工作区；需要时再打开节点流程。项目、镜头、生成任务和历史结果仍沿用当前保存与生成服务。' : 'Start in a focused shot workspace and open the node workflow only when needed. Projects, shots, generation jobs, and history keep using the existing services.'}</p></div>
+      <aside><b>{zh ? '创作进度' : 'Creation progress'}</b><span>{creatorStageCopy}</span><button type="button" onClick={() => {
+        if (canvasViewMode === 'shot') {
+          setCanvasViewMode('workflow');
+          canvasShellRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          organizeCanvas();
+        }
+      }}>{canvasViewMode === 'shot' ? (zh ? '查看节点流程' : 'View node workflow') : (zh ? '整理节点流程' : 'Tidy node workflow')}</button></aside>
     </header>
 
+    <details className="creator-v41-project-details">
+      <summary><span>{zh ? '项目资料与高级设定' : 'Project details & advanced settings'}</span><small>{project.title.trim() || (zh ? '未命名项目' : 'Untitled project')}</small></summary>
+      <div className="creator-v41-project-details-content">
     <section className="creator-flow-brief" aria-labelledby="creator-flow-project-title">
       <div className="creator-flow-brief-copy"><span>01 · {zh ? '项目' : 'PROJECT'}</span><h2 id="creator-flow-project-title">{zh ? '先告诉我你想做什么。' : 'Start by telling us what you want to make.'}</h2><p>{zh ? '这只是当前账号的私有创作概述。它可以带入首个镜头草稿，但不会自动调用模型或提交任务。' : 'This is a private creative brief for this account. It can seed a first-shot draft, but never calls a model or submits a task by itself.'}</p></div>
       <div className="creator-flow-brief-fields">
@@ -3179,6 +3193,8 @@ export default function VideoCanvasStudio({
     <CreatorProjectBible project={project} zh={zh} onFieldChange={updateProjectBibleField} onToggleLock={toggleProjectBibleLock} onApply={applyProjectBibleToShot} />
 
     <CreatorShotIntent shot={canvasSemantics.shot} zh={zh} onChange={updateCurrentShotIntent} onApply={applyCurrentShotIntent} />
+      </div>
+    </details>
 
     <div className="video-canvas-model-pill" role="status" aria-live="polite">
       <span className="video-canvas-model-mark" aria-hidden="true">✦</span>
@@ -3189,10 +3205,20 @@ export default function VideoCanvasStudio({
 
     {error && <div className="video-canvas-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError('')}>{zh ? '关闭' : 'Dismiss'}</button></div>}
 
-    <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? 'AI 图生视频无限画布' : 'AI image-to-video infinite canvas'}>
-      <div className="video-canvas-caption canvas-v3-workspace" data-canvas-workspace-version="3">
+    <section ref={canvasShellRef} className={'video-canvas-shell ' + (isCanvasFullscreen ? 'is-canvas-fullscreen' : '')} data-workspace-mode={canvasViewMode} data-shot-id={canvasSemantics.shot.id} data-shot-status={canvasSemantics.shot.status} aria-label={zh ? (canvasViewMode === 'shot' ? 'AI 视频镜头工作区' : 'AI 视频节点流程画布') : (canvasViewMode === 'shot' ? 'AI video shot workspace' : 'AI video node workflow')}>
+      <div className="video-canvas-caption canvas-v3-workspace" data-canvas-workspace-version="4.1">
+        <header className="creator-v41-mode-bar">
+          <div><span>CREATOR CANVAS · V4.1</span><b>{zh ? (canvasViewMode === 'shot' ? '镜头工作区' : '节点流程') : (canvasViewMode === 'shot' ? 'Shot workspace' : 'Node workflow')}</b><small>{zh ? `镜头 ${String(shot).padStart(2, '0')} · ${canvasSemantics.shot.title.trim() || '未命名镜头'}` : `Shot ${String(shot).padStart(2, '0')} · ${canvasSemantics.shot.title.trim() || 'Untitled shot'}`}</small></div>
+          <div className="creator-v41-mode-switch" role="group" aria-label={zh ? '画布工作模式' : 'Canvas workspace mode'}>
+            <button type="button" aria-pressed={canvasViewMode === 'shot'} className={canvasViewMode === 'shot' ? 'is-active' : ''} onClick={() => {
+              if (isCanvasFullscreen) void toggleCanvasFullscreen();
+              setCanvasViewMode('shot');
+            }}>{zh ? '镜头模式' : 'Shot mode'}</button>
+            <button type="button" aria-pressed={canvasViewMode === 'workflow'} className={canvasViewMode === 'workflow' ? 'is-active' : ''} onClick={() => setCanvasViewMode('workflow')}>{zh ? '流程模式' : 'Workflow'}</button>
+          </div>
+        </header>
         <section className="canvas-v3-project" aria-labelledby="canvas-v3-project-title">
-          <span className="canvas-v3-eyebrow">CREATOR CANVAS · V3</span>
+          <span className="canvas-v3-eyebrow">{zh ? '当前项目' : 'CURRENT PROJECT'}</span>
           <div className="canvas-v3-project-heading">
             <span className="canvas-v3-project-mark" aria-hidden="true">SC</span>
             <div><h2 id="canvas-v3-project-title">{project.title.trim() || (zh ? '未命名项目' : 'Untitled project')}</h2><p><i aria-hidden="true" />{zh ? '私有项目 · 自动保存' : 'Private project · auto-saved'}</p></div>
@@ -3239,19 +3265,34 @@ export default function VideoCanvasStudio({
       <div
         ref={viewportRef}
         className="video-canvas-viewport"
-        onPointerDown={startPan}
-        onPointerMove={movePan}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
-        onWheel={wheel}
+        onPointerDown={canvasViewMode === 'workflow' ? startPan : undefined}
+        onPointerMove={canvasViewMode === 'workflow' ? movePan : undefined}
+        onPointerUp={canvasViewMode === 'workflow' ? endPan : undefined}
+        onPointerCancel={canvasViewMode === 'workflow' ? endPan : undefined}
+        onWheel={canvasViewMode === 'workflow' ? wheel : undefined}
         onClick={event => {
           const target = event.target as HTMLElement;
-          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar, .canvas-inspector')) {
+          if (!target.closest('.video-canvas-node, .canvas-custom-node, .video-canvas-toolbar, .canvas-main-toolbar, .video-canvas-composer, .canvas-minimap-panel, .canvas-selected-asset-toolbar, .canvas-inspector, .creator-v41-shot-focus')) {
             setSelectedNodeId(null);
             setSelectedCustomNodeId(null);
           }
         }}
       >
+        {canvasViewMode === 'shot' && <section className="creator-v41-shot-focus" aria-labelledby="creator-v41-shot-title" onPointerDown={event => event.stopPropagation()}>
+          <div className="creator-v41-shot-focus-heading">
+            <div><span>{zh ? `SHOT ${String(shot).padStart(2, '0')} · ${project.sequenceTitle || '主镜头序列'}` : `SHOT ${String(shot).padStart(2, '0')} · ${project.sequenceTitle || 'Main sequence'}`}</span><h3 id="creator-v41-shot-title">{canvasSemantics.shot.title.trim() || (zh ? `镜头 ${String(shot).padStart(2, '0')}` : `Shot ${String(shot).padStart(2, '0')}`)}</h3></div>
+            <span className={'creator-v41-shot-status is-' + canvasSemantics.shot.status}>{canvasSemantics.shot.status === 'generating' ? (zh ? '生成中' : 'Generating') : canvasSemantics.shot.status === 'completed' ? (zh ? '已有结果' : 'Has result') : canvasSemantics.shot.status === 'failed' ? (zh ? '需要处理' : 'Needs attention') : (zh ? '草稿' : 'Draft')}</span>
+          </div>
+          <p>{prompt.trim() || (zh ? '先在下方写下这个镜头的画面与动作；参考图和生成规格也会绑定到当前镜头。' : 'Describe the shot and its motion below. References and generation settings stay with this shot.')}</p>
+          {generation?.status === 'completed' && <div className="creator-v41-shot-preview" aria-label={zh ? '当前镜头生成结果' : 'Current shot result'}>
+            {videoUrl ? <video src={videoUrl} controls playsInline preload="metadata" /> : <span>{zh ? '正在读取私有视频预览…' : 'Loading private video preview…'}</span>}
+          </div>}
+          <div className="creator-v41-shot-focus-actions">
+            <button type="button" className="is-primary" onClick={focusMotionPrompt}>{zh ? '编辑镜头描述' : 'Edit shot direction'}</button>
+            <button type="button" onClick={openImageGeneration}>{zh ? 'AI 生图' : 'Generate image'}</button>
+            <small>{shotVersions.length ? (zh ? `${shotVersions.length} 个生成版本 · 可从上方选择` : `${shotVersions.length} generation version${shotVersions.length === 1 ? '' : 's'} · select above`) : (zh ? '生成结果会保留为这个镜头的版本' : 'Generated results are kept as versions of this shot')}</small>
+          </div>
+        </section>}
         {selectedCanvasNodeId && selectedCanvasNodeLabel && <div className="canvas-selection-context" role="toolbar" aria-label={zh ? '当前节点操作' : 'Selected node actions'} aria-live="polite" onPointerDown={event => event.stopPropagation()}>
           <span className="canvas-selection-context-mark" aria-hidden="true">●</span>
           <span className="canvas-selection-context-copy"><small>{zh ? '当前选中节点' : 'SELECTED NODE'}</small><b>{selectedCanvasNodeLabel}</b></span>
