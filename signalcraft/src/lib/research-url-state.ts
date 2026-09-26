@@ -18,9 +18,10 @@ const clean = (value: string | null) => value && value.trim() ? value.trim() : u
 
 export function readResearchUrlState(search: string): ResearchUrlState {
   const params = new URLSearchParams(search);
+  const language = clean(params.get('language'));
   return {
     market: clean(params.get('market')),
-    language: clean(params.get('language')),
+    ...(language ? { language } : {}),
     window: clean(params.get('window')),
     lane: clean(params.get('lane')),
     topic: clean(params.get('topic')) || clean(params.get('nicheName')),

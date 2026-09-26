@@ -52,6 +52,7 @@ test('radar fixtures preserve count, order, and explicit empty/filter inputs', (
 test('research URL state round-trips meaningful controls without workspace data', () => {
   const state = readResearchUrlState('?market=US&window=28d&lane=BREAKOUT&topic=Format%20A&direction=a');
   assert.deepEqual(state, { market: 'US', window: '28d', lane: 'BREAKOUT', topic: 'Format A', direction: 'a' });
+  assert.deepEqual(readResearchUrlState('?market=US&language=en'), { market: 'US', language: 'en', window: undefined, lane: undefined, topic: undefined, direction: undefined });
   assert.equal(writeResearchUrlState('?source=trend-radar&market=US', { window: '90d', lane: 'ALL', direction: 'a' }), '?source=trend-radar&market=US&window=90d&lane=ALL&direction=a');
   assert.equal(writeResearchUrlState('?topic=Format%20A&lane=BREAKOUT', { topic: undefined, lane: 'ALL' }), '?lane=ALL');
 });

@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -20,6 +20,17 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
+  // This route may only forward nested /api/video operations. URL normalization
+  // would otherwise turn a parent segment into a different upstream API route.
+  if (!Array.isArray(path) || path.length === 0 || path.some(segment =>
+    typeof segment !== 'string' || !segment ||
+    segment === '.' || segment === '..' || /[/\\%]/.test(segment)
+  )) {
+    return Response.json(
+      { code: 'INVALID_VIDEO_PATH', error: '视频请求路径不合法。' },
+      { status: 400, headers: { 'cache-control': 'no-store' } },
+    );
+  }
   const target = new URL(`${upstream}/${path.map(segment => encodeURIComponent(segment)).join('/')}`);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
   const authorization = request.headers.get('authorization');

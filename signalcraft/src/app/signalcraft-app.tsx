@@ -332,7 +332,7 @@ function BillingCenter(){
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
   const refresh=useCallback(async()=>{setLoading(true);setError('');try{setStatus(await getBillingStatus())}catch(error){setError(error instanceof Error?error.message:'无法读取订阅状态。')}finally{setLoading(false)}},[]);
-  useEffect(()=>{void refresh()},[refresh]);
+  useEffect(()=>{const timer=window.setTimeout(()=>void refresh(),0);return()=>window.clearTimeout(timer)},[refresh]);
   const openPortal=async()=>{try{const {portalUrl}=await getBillingPortal();window.open(portalUrl,'_blank','noopener,noreferrer')}catch(error){setError(error instanceof Error?error.message:'无法打开订阅管理。')}};
   if(loading)return <main className="page"><PageIntro label="账单与订阅" title="正在确认当前账号的订阅状态" body="权益只在服务端签名回调确认后显示。"/></main>;
   if(error)return <main className="page"><PageIntro label="账单与订阅" title="暂时无法读取订阅状态" body={error}/><button className="primary" onClick={()=>void refresh()}>重新读取</button></main>;
@@ -342,7 +342,7 @@ function BillingCenter(){
 function BillingSuccess(){
   const [status,setStatus]=useState<'checking'|'confirmed'|'pending'|'error'>('checking');
   const check=useCallback(async()=>{try{const current=await getBillingStatus();setStatus(current.plan==='pro'?'confirmed':'pending')}catch{setStatus('error')}},[]);
-  useEffect(()=>{void check();const timer=window.setTimeout(()=>void check(),2500);return()=>window.clearTimeout(timer)},[check]);
+  useEffect(()=>{const initial=window.setTimeout(()=>void check(),0);const timer=window.setTimeout(()=>void check(),2500);return()=>{window.clearTimeout(initial);window.clearTimeout(timer)}},[check]);
   const copy=status==='confirmed'?['订阅已确认','Pro 权益已经写入当前账号。','进入工作室']:status==='pending'?['付款已提交，正在确认订阅','Waffo 回调通常需要一点时间；请勿重复付款。','查看订阅状态']:status==='error'?['暂时无法确认订阅','不会因页面错误给账号写入权益，请稍后在订阅中心重新读取。','打开订阅中心']:['正在安全确认订阅','页面只读取服务端已经确认的订阅账本。','稍后查看'];
   return <main className="page"><PageIntro label="SECURE BILLING" title={copy[0]} body={copy[1]}/><button className="primary" onClick={()=>navigate(status==='confirmed'?'/app':'/billing')}>{copy[2]}</button></main>;
 }
