@@ -14,6 +14,7 @@ import './upgrade-modal.css';
 import './owner-users.css';
 import './image-to-video-studio.css';
 import './video-canvas-studio.css';
+import './infinite-canvas-studio.css';
 import './longform-opportunities.css';
 import './longform-visual-assets.css';
 import './longform-generation-spec.css';

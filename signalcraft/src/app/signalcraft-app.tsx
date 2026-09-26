@@ -27,7 +27,7 @@ const RouteLoading = () => <main className="page"><div className="empty" aria-li
 const ChannelDoctor = dynamic(() => import('./channel-doctor'), { loading: RouteLoading });
 const OwnerConsole = dynamic(() => import('./owner-console'), { loading: RouteLoading });
 const ImageToVideoStudio = dynamic(() => import('./image-to-video-studio'), { loading: RouteLoading });
-const VideoCanvasStudio = dynamic(() => import('./video-canvas-studio'), { loading: RouteLoading });
+const VideoCanvasStudio = dynamic(() => import('./canvas-route'), { loading: RouteLoading });
 const LongformResearchDesk = dynamic(() => import('./longform-research-desk'), { loading: RouteLoading });
 const ShortformNicheEvaluation = dynamic(() => import('./shortform-niche-evaluation'), { loading: RouteLoading });
 const ViralCaseDesk = dynamic(() => import('./viral-case-desk'), { loading: RouteLoading });
