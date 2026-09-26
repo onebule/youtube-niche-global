@@ -1,0 +1,15 @@
+.shortform-radar-coverage{display:grid;gap:12px;margin:0 0 20px;padding:16px 18px;border:1px solid var(--line);border-left:3px solid var(--cyan);background:var(--surface)}
+.shortform-radar-coverage-kicker{color:var(--cyan);font:800 10px/1.4 ui-monospace,"Cascadia Mono",monospace;letter-spacing:.1em}
+.shortform-radar-coverage-metrics{display:grid;grid-template-columns:1.15fr 1fr 1.25fr 1.15fr;gap:18px}
+.shortform-radar-coverage-metrics>div{display:grid;align-content:start;gap:5px;min-width:0;padding-right:12px;border-right:1px solid var(--line)}
+.shortform-radar-coverage-metrics>div:last-child{border-right:0}
+.shortform-radar-coverage-metrics small{color:var(--muted);font-size:10px;font-weight:750;letter-spacing:.02em}
+.shortform-radar-coverage-metrics strong{overflow-wrap:anywhere;color:var(--ink);font-size:15px;line-height:1.35}
+.shortform-radar-coverage p{margin:0;color:var(--muted);font-size:11px;line-height:1.65}
+.shortform-radar-coverage details{padding-top:9px;border-top:1px solid var(--line)}
+.shortform-radar-coverage summary{width:max-content;max-width:100%;color:var(--cyan);font-size:12px;font-weight:750;cursor:pointer}
+.shortform-radar-market-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.shortform-radar-market-list span{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--soft);color:var(--ink);font-size:11px}
+.shortform-radar-coverage .shortform-radar-coverage-warning{padding:8px 10px;border-left:2px solid var(--brand);background:var(--soft);color:var(--brand)}
+@media(max-width:900px){.shortform-radar-coverage-metrics{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:15px}.shortform-radar-coverage-metrics>div:nth-child(2){border-right:0}}
+@media(max-width:520px){.shortform-radar-coverage-metrics{grid-template-columns:1fr}.shortform-radar-coverage-metrics>div{padding:0 0 9px;border-right:0;border-bottom:1px solid var(--line)}.shortform-radar-coverage-metrics>div:last-child{border-bottom:0}}

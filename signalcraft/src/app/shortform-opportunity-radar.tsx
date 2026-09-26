@@ -7,11 +7,52 @@ import { beginnerAccessForRadar, competitionForRadar, opportunityStatusForRadar 
 import type { UiLocale } from '@/src/lib/ui-language';
 import type { RadarReturnState } from '@/src/lib/niche-analysis-context';
 import SignalSparkline from './signal-sparkline';
+import './shortform-radar-scope.css';
 
 const compact = (value: number | null, locale: UiLocale) => value === null || !Number.isFinite(value)
   ? '—'
   : new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 const mediaUrl = (value: string | null | undefined) => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+const marketOptions = [
+  { code: 'US', zh: '美国', en: 'United States' }, { code: 'GB', zh: '英国', en: 'United Kingdom' },
+  { code: 'JP', zh: '日本', en: 'Japan' }, { code: 'BR', zh: '巴西', en: 'Brazil' },
+  { code: 'MX', zh: '墨西哥', en: 'Mexico' }, { code: 'IN', zh: '印度', en: 'India' },
+  { code: 'ID', zh: '印尼', en: 'Indonesia' },
+] as const;
+const normalizeMarket = (value: string) => value.trim().toUpperCase() === 'ALL' ? 'all' : value.trim().toUpperCase();
+const marketName = (code: string, zh: boolean) => marketOptions.find(item => item.code === code)?.[zh ? 'zh' : 'en'] || code;
+const capturedTime = (value: string | null | undefined, zh: boolean) => {
+  if (!value || !Number.isFinite(Date.parse(value))) return zh ? '暂无有效时间' : 'Not available';
+  return new Intl.DateTimeFormat(zh ? 'zh-CN' : 'en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(value));
+};
+type MarketCoverage = NonNullable<ShortformRadarResponse['dataScope']['marketCoverage']>[number];
+function marketCoverageSummary(item: MarketCoverage, zh: boolean) {
+  if (item.failed) return item.failureReason === 'STORE_UNCONFIGURED'
+    ? (zh ? '存储未配置' : 'Store unconfigured') : (zh ? '读取失败' : 'Read failed');
+  if (item.retrievedRows === 0) return zh ? '本次未读到记录' : 'No records retrieved';
+  if (item.sampledRows === 0) return zh ? '无合格短视频样本' : 'No qualified short-form samples';
+  if (item.currentRows === 0) return zh ? '仅历史或日期缺失' : 'Only history or undated samples';
+  return zh ? `本期 ${item.currentRows} 条` : `${item.currentRows} current`;
+}
+function emptyScopeReason(scope: ShortformRadarResponse['dataScope'], zh: boolean) {
+  if (scope.sourceConfigured === false) return zh ? '数据存储未配置，无法读取样本。' : 'The data store is not configured.';
+  if (scope.failedMarkets?.length) return zh ? '部分或全部市场读取失败；失败市场不会使用其他国家结果替代。' : 'Some market reads failed; no other market is substituted.';
+  const coverage = scope.marketCoverage || [];
+  if (coverage.length && coverage.every(item => item.retrievedRows === 0)) return zh
+    ? '选定发布时间范围内，本次未读到采集记录；不代表该市场没有 Shorts。'
+    : 'No collected records retrieved in this publication range; that does not mean no Shorts exist.';
+  if (coverage.some(item => typeof item.retrievedRows === 'number' && item.retrievedRows > 0)
+    && coverage.every(item => item.sampledRows === 0)) return zh
+    ? '已读到记录，但没有足够证据确认的短视频样本；不会只凭时长认定 Shorts。'
+    : 'Records exist, but none pass the short-form evidence gate.';
+  if (coverage.some(item => item.sampledRows > 0) && coverage.every(item => item.currentRows === 0)) return zh
+    ? '存在短视频候选，但没有发布时间落在本期窗口的有效样本。'
+    : 'Short-form candidates exist, but none have valid publication dates in this window.';
+  return zh ? '可能未采集、样本不在本期窗口内或分类证据不足；不借用其他市场数据。'
+    : 'Collection may be absent or outside this window, or evidence insufficient. Other markets are never substituted.';
+}
 const eventLabels: Record<ShortformRadarEvent['eventType'], { zh: string; en: string }> = {
   SHORTS_BREAKOUT: { zh: '中小频道突破', en: 'Creator breakout' },
   SHORTS_EMERGING: { zh: '短视频形式形成中', en: 'Emerging short-form' },
@@ -87,14 +128,14 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
           const returnState = saved?.returnState;
           restoreScrollRef.current = typeof returnState?.scrollPosition === 'number' && Number.isFinite(returnState.scrollPosition) ? returnState.scrollPosition : null;
           const restoredMarket = returnState?.filters?.market;
-          if (typeof restoredMarket === 'string' && restoredMarket) setMarket(restoredMarket);
+          if (typeof restoredMarket === 'string' && restoredMarket) setMarket(normalizeMarket(restoredMarket));
           if (saved?.timeWindow === '7d' || saved?.timeWindow === '14d' || saved?.timeWindow === '30d') setWindow(saved.timeWindow);
         } catch {
           // The URL still opens the radar if session storage is unavailable.
         }
       } else {
         const queryMarket = params.get('market');
-        if (queryMarket) setMarket(queryMarket);
+        if (queryMarket) setMarket(normalizeMarket(queryMarket));
         const queryLanguage = params.get('language');
         if (queryLanguage) setLanguage(queryLanguage);
         const queryWindow = params.get('window');
@@ -118,10 +159,13 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
   const load = useCallback(async () => {
     requestRef.current?.abort();
     const controller = new AbortController(); requestRef.current = controller;
-    setLoading(true); setError(null);
-    try { setData(await fetchShortformOpportunityRadar({ market, language, window, limit: 500 }, { signal: controller.signal })); }
-    catch (reason) { if (!controller.signal.aborted) setError(clientErrorMessage(reason, zh ? 'Shorts 趋势雷达数据暂时不可用。' : 'Shorts Trend Radar is temporarily unavailable.')); }
-    finally { if (!controller.signal.aborted) setLoading(false); }
+    setLoading(true); setError(null); setData(null);
+    try {
+      const result = await fetchShortformOpportunityRadar({ market, language, window, limit: 500 }, { signal: controller.signal });
+      if (!controller.signal.aborted && requestRef.current === controller) setData(result);
+    }
+    catch (reason) { if (!controller.signal.aborted && requestRef.current === controller) setError(clientErrorMessage(reason, zh ? 'Shorts 趋势雷达数据暂时不可用。' : 'Shorts Trend Radar is temporarily unavailable.')); }
+    finally { if (!controller.signal.aborted && requestRef.current === controller) setLoading(false); }
   }, [language, market, window, zh]);
   useEffect(() => { if (!contextReady) return; const timer = setTimeout(() => void load(), 0); return () => clearTimeout(timer); }, [contextReady, load]);
   useEffect(() => {
@@ -132,7 +176,14 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
     return () => globalThis.window.clearTimeout(timer);
   }, [data]);
   useEffect(() => () => requestRef.current?.abort(), []);
-  const events = useMemo(() => (data?.events || []).filter(event => {
+  // Never show the preceding country's response while a new selection is pending.
+  const visibleData = data && !loading && data.window === window
+    && (data.dataScope.language || 'all') === language
+    && (market === 'all'
+      ? data.dataScope.markets.length === marketOptions.length && marketOptions.every(item => data.dataScope.markets.includes(item.code))
+      : data.dataScope.markets.length === 1 && data.dataScope.markets[0] === market)
+    ? data : null;
+  const events = useMemo(() => (visibleData?.events || []).filter(event => {
     const decision = opportunityStatusForRadar(event);
     if (mode === 'ALL') return decision.key !== 'AVOID';
     if (mode === 'RECENT') return (event.lifecycle === 'EMERGING' || event.lifecycle === 'CONFIRMED') && decision.key !== 'AVOID';
@@ -144,16 +195,46 @@ export default function ShortformOpportunityRadar({ locale, embedded = false, on
     const leftMatch = left.topic.toLowerCase() === focusTopic.toLowerCase() || left.title.toLowerCase().includes(focusTopic.toLowerCase());
     const rightMatch = right.topic.toLowerCase() === focusTopic.toLowerCase() || right.title.toLowerCase().includes(focusTopic.toLowerCase());
     return Number(rightMatch) - Number(leftMatch);
-  }), [data, focusTopic, mode]);
+  }), [visibleData, focusTopic, mode]);
   const Container = embedded ? 'section' : 'main';
   return <Container className="shortform-radar-page">
     <section className="shortform-radar-hero"><div><span className="shortform-radar-kicker">SHORTS TREND RADAR</span><h1>{zh ? '识别 Shorts 最近出现的变化。' : 'Detect recent changes in Shorts.'}</h1><p>{zh ? '独立读取 Shorts 数据，观察跨频道扩散、中小频道突破和供给变化。这里是变化监测引擎，不会改变现有 Shorts 榜单、筛选、历史数据或评分。' : 'A separate Shorts-only engine for cross-channel spread, creator breakouts, and supply change. Existing Shorts rankings, filters, history, and scoring remain untouched.'}</p></div><div className="shortform-radar-stamp"><strong>SHORTS</strong><span>{zh ? '独立数据范围' : 'isolated data scope'}</span><i/></div></section>
     {onSwitchFormat ? <nav className="shortform-radar-format-tabs" aria-label={zh ? '内容形态' : 'Content format'}><button type="button" onClick={() => onSwitchFormat('ALL')}>{zh ? '全部' : 'All'}</button><button type="button" className="active" aria-current="page">Shorts</button><button type="button" onClick={() => onSwitchFormat('LONG_FORM')}>{zh ? '长视频' : 'Long-form'}</button></nav> : null}
-    <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}><label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => setMarket(event.target.value)}><option value="all">{zh ? '全部市场' : 'All markets'}</option><option value="US">US</option><option value="GB">GB</option><option value="IN">IN</option><option value="BR">BR</option><option value="JP">JP</option></select></label><label><span>{zh ? '时间窗口' : 'Window'}</span><select value={window} onChange={event => setWindow(event.target.value as '7d' | '14d' | '30d')}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label><label><span>{zh ? '内容语言' : 'Content language'}</span><select value={language} onChange={event => { const next = event.target.value; setLanguage(next); const params = new URLSearchParams(globalThis.window.location.search); if (next === 'all') params.delete('language'); else params.set('language', next); globalThis.window.history.replaceState({}, '', `${globalThis.window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`); }}><option value="all">{zh ? '全部语言（分开计算）' : 'All languages (separate)'}</option><option value="en">英语</option><option value="zh">中文</option><option value="ja">日本语</option><option value="es">Español</option><option value="pt">Português</option><option value="hi">हिन्दी</option></select></label><div className="shortform-radar-scope"><b>{data?.dataScope.currentRows ?? '—'}</b><span>{zh ? '当前短视频样本' : 'current Shorts sample'}</span></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button></section>
+    <section className="shortform-radar-toolbar" aria-label={zh ? '短视频雷达筛选' : 'Short-form radar filters'}>
+      <label><span>{zh ? '市场' : 'Market'}</span><select value={market} onChange={event => { requestRef.current?.abort(); setData(null); setMarket(event.target.value); }}>
+        <option value="all">{zh ? '全部可选市场（7）' : 'All selectable markets (7)'}</option>
+        {marketOptions.map(item => <option value={item.code} key={item.code}>{zh ? item.zh : item.en} ({item.code})</option>)}
+      </select></label>
+      <label><span>{zh ? '发布时间窗口' : 'Publication window'}</span><select value={window} onChange={event => { requestRef.current?.abort(); setData(null); setWindow(event.target.value as '7d' | '14d' | '30d'); }}><option value="7d">7D</option><option value="14d">14D</option><option value="30d">30D</option></select></label>
+      <label><span>{zh ? '内容语言' : 'Content language'}</span><select value={language} onChange={event => { const next = event.target.value; requestRef.current?.abort(); setData(null); setLanguage(next); const params = new URLSearchParams(globalThis.window.location.search); if (next === 'all') params.delete('language'); else params.set('language', next); globalThis.window.history.replaceState({}, '', `${globalThis.window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`); }}><option value="all">{zh ? '全部语言（分开计算）' : 'All languages (separate)'}</option><option value="en">英语</option><option value="zh">中文</option><option value="ja">日本语</option><option value="es">Español</option><option value="pt">Português</option><option value="hi">हिन्दी</option></select></label>
+      <div className="shortform-radar-scope"><b>{visibleData?.dataScope.currentRows ?? '—'}</b><span>{zh ? '本期去重样本' : 'deduplicated current sample'}</span></div>
+      <button type="button" onClick={() => void load()} disabled={loading}>{loading ? (zh ? '计算中…' : 'Computing…') : (zh ? '刷新雷达' : 'Refresh radar')}</button>
+    </section>
+    {visibleData ? <section className="shortform-radar-coverage" aria-label={zh ? '本次数据范围' : 'Current data scope'}>
+      <span className="shortform-radar-coverage-kicker">DATA SCOPE · {zh ? '本次已读取公开样本' : 'Retrieved public sample'}</span>
+      <div className="shortform-radar-coverage-metrics">
+        <div><small>{zh ? '已选择市场' : 'SELECTED MARKET'}</small><strong>{market === 'all' ? (zh ? '全部可选市场（7）' : 'All 7 selectable markets') : `${marketName(market, zh)} (${market})`}</strong></div>
+        <div><small>{zh ? '本期 Shorts（去重后）' : 'CURRENT SHORTS (DEDUPED)'}</small><strong>{visibleData.dataScope.currentRows}</strong></div>
+        <div><small>{zh ? '最近样本抓取时间' : 'LATEST SAMPLE CAPTURE'}</small><strong>{capturedTime(visibleData.dataScope.latestCapturedAt, zh)}</strong></div>
+        <div><small>{zh ? '实际有样本的市场' : 'MARKETS WITH SAMPLES'}</small><strong>{visibleData.dataScope.coveredMarkets?.length ? visibleData.dataScope.coveredMarkets.join(' · ') : (zh ? '暂无' : 'None observed')}</strong></div>
+      </div>
+      <p>{zh ? `历史窗口样本 ${visibleData.dataScope.historicalRows} 条；日期缺失 ${visibleData.dataScope.undatedRows ?? 0} 条（未纳入时间窗口）。按发布时间筛选，不等于播放量增长；短视频分类不能证明每条都是原生 Shorts。本次仅统计已读取样本，并非 YouTube 市场总量。` : `${visibleData.dataScope.historicalRows} historical samples; ${visibleData.dataScope.undatedRows ?? 0} missing publication dates excluded. Publication window is not view growth; short-form classification does not prove native Shorts. These are retrieved samples, not the total YouTube market.`}</p>
+      {visibleData.dataScope.marketCoverage ? <details><summary>{zh ? '查看各市场已读取数量与缺口' : 'Market-level samples and gaps'}</summary><div className="shortform-radar-market-list">{visibleData.dataScope.marketCoverage.map(item => <span key={item.market}>{item.market} · {item.failed ? (zh ? `读取失败${item.failureReason === 'STORE_UNCONFIGURED' ? '（存储未配置）' : ''}` : 'Read failed') : `${item.currentRows} ${zh ? '条本期样本' : 'current samples'}`}</span>)}</div><p>{zh ? '分市场数量在跨市场去重之前计算；不同国家出现同一个视频时，全部市场总数不会重复累加。' : 'Market-level counts are taken before cross-market deduplication; shared videos count once in the combined sample.'}</p></details> : <p>{zh ? '当前服务尚未提供逐市场覆盖明细。' : 'Per-market coverage was not supplied by this API version.'}</p>}
+      {visibleData.dataScope.failedMarkets?.length ? <p className="shortform-radar-coverage-warning" role="status">{zh ? `以下市场读取失败，当前结果仅覆盖其余成功返回的市场：${visibleData.dataScope.failedMarkets.join('、')}` : `Read failed for ${visibleData.dataScope.failedMarkets.join(', ')}; results cover only successfully retrieved markets.`}</p> : null}
+      {visibleData.dataScope.marketCoverage?.some(item => item.currentRows === 0) ? <p role="status">{visibleData.dataScope.marketCoverage.filter(item => item.currentRows === 0).map(item => `${item.market}: ${marketCoverageSummary(item, zh)}`).join('；')}</p> : null}
+    </section> : null}
     <div className="shortform-radar-boundary"><span>{zh ? '边界明确' : 'BOUNDARY'}</span><p>{zh ? 'Shorts 趋势雷达只回答“最近发生了什么变化”；长视频赛道评估回答“一个方向是否值得长期进入”。两者的数据范围、事件和指标彼此独立，现有 Shorts 产品行为保持不变。' : 'Shorts Trend Radar answers what changed recently; Long-form Niche Evaluation asks whether a direction is worth entering over time. Their scopes, events, and metrics stay separate, and the existing Shorts product remains unchanged.'}</p></div>
     <nav className="shortform-radar-quick-modes" aria-label={zh ? '快速发现方式' : 'Quick discovery modes'}>{[{ key: 'ALL', zh: '最近有机会', en: 'Worth a look' }, { key: 'BEGINNER', zh: '新人更友好', en: 'Beginner friendly' }, { key: 'BREAKOUT', zh: '小频道正在跑出来', en: 'Creator breakouts' }, { key: 'RECENT', zh: '正在形成', en: 'Emerging now' }, { key: 'CAUTION', zh: '需要谨慎', en: 'Use caution' }].map(option => <button key={option.key} type="button" className={mode === option.key ? 'active' : ''} onClick={() => setMode(option.key as typeof mode)}>{option[zh ? 'zh' : 'en']}</button>)}</nav>
     {focusTopic ? <div className="shortform-radar-focus"><span>{zh ? '已定位赛道' : 'Focused niche'}</span><b>{focusTopic}</b><button type="button" onClick={() => setFocusTopic(null)}>{zh ? '清除定位' : 'Clear focus'}</button></div> : null}
-    {error ? <div className="shortform-radar-state"><b>{error}</b><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div> : loading && !data ? <div className="shortform-radar-state"><b>{zh ? '正在读取 Shorts 跨频道变化…' : 'Reading cross-channel Shorts changes…'}</b></div> : events.length ? <div className="shortform-radar-grid">{events.map(event => <RadarCard key={event.id} event={event} locale={locale} onResearch={onShortResearch ? research : undefined}/>)}</div> : <div className="shortform-radar-state"><b>{zh ? '当前窗口没有足够强的 Shorts 趋势事件' : 'No strong Shorts trend events for this window'}</b><p>{zh ? '请扩大市场或时间窗口，等待更多 Shorts 快照。' : 'Expand the market or window and wait for more Shorts snapshots.'}</p></div>}
-    {data?.gaps?.length ? <section className="shortform-radar-gaps"><h2>{zh ? '数据边界' : 'Data boundaries'}</h2>{data.gaps.map(gap => <p key={gap}>→ {gap}</p>)}</section> : null}
+    {loading ? <div className="shortform-radar-state" role="status"><b>{zh ? '正在读取所选市场的 Shorts 数据…' : 'Loading Shorts for the selected market…'}</b></div>
+      : error ? <div className="shortform-radar-state" role="alert"><b>{error}</b><button type="button" onClick={() => void load()}>{zh ? '重试' : 'Try again'}</button></div>
+      : !visibleData ? <div className="shortform-radar-state" role="alert"><b>{zh ? '返回数据与所选市场不一致，已隐藏旧结果。' : 'Response scope does not match the selected market; stale results are hidden.'}</b><button type="button" onClick={() => void load()}>{zh ? '重新读取' : 'Reload'}</button></div>
+      : events.length ? <div className="shortform-radar-grid">{events.map(event => <RadarCard key={event.id} event={event} locale={locale} onResearch={onShortResearch ? research : undefined}/>)}</div>
+      : <div className="shortform-radar-state" role="status"><b>{visibleData.dataScope.currentRows === 0
+        ? (visibleData.dataScope.failedMarkets?.length ? (zh ? '所选范围的数据读取未完成' : 'Selected market data could not be fully loaded') : (zh ? '所选范围暂无符合条件的 Shorts 样本' : 'No qualifying Shorts observed for this selection'))
+        : (zh ? '已有 Shorts 样本，尚未形成达到证据门槛的趋势事件' : 'Shorts samples exist, but no trend event meets the evidence threshold')}</b><p>{visibleData.dataScope.currentRows === 0
+        ? emptyScopeReason(visibleData.dataScope, zh)
+        : (zh ? `本次读取 ${visibleData.dataScope.currentRows} 条本期样本，仍需跨频道与历史证据。` : `${visibleData.dataScope.currentRows} current samples retrieved; cross-channel and historical evidence is still required.`)}</p></div>}
+    {visibleData?.gaps?.length ? <section className="shortform-radar-gaps"><h2>{zh ? '数据边界' : 'Data boundaries'}</h2>{visibleData.gaps.map(gap => <p key={gap}>→ {gap}</p>)}</section> : null}
   </Container>;
 }

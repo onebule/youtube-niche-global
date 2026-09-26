@@ -93,12 +93,27 @@ export type ShortformRadarResponse = {
   dataScope: {
     source: string;
     markets: string[];
+    /** Markets with eligible Shorts in the returned sample, not global coverage. */
+    coveredMarkets?: string[];
+    marketCoverage?: Array<{
+      market: string;
+      retrievedRows?: number | null;
+      sampledRows: number;
+      currentRows: number;
+      latestCapturedAt: string | null;
+      failed: boolean;
+      failureReason?: 'STORE_UNCONFIGURED' | 'REQUEST_FAILED' | 'INVALID_STORE_RESPONSE' | null;
+    }>;
+    failedMarkets?: string[];
+    sourceConfigured?: boolean | null;
     language?: string;
     historyDays: number;
     currentWindowDays: number;
     currentRows: number;
     historicalRows: number;
+    undatedRows?: number;
     latestCapturedAt: string | null;
+    marketSampleLimit?: number;
     calculationPoolLimit?: number;
     visibleEventLimit?: number | null;
     note: string;
