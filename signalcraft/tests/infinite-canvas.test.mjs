@@ -27,6 +27,13 @@ test('text model choice and review result survive draft restore without replacin
   assert.equal(saved.projects[0].nodes[0].text, 'Original');
   assert.equal(saved.projects[0].nodes[0].textModel, 'claude-opus-5-5');
   assert.equal(saved.projects[0].nodes[0].textResult, 'Generated');
+  for (const model of ['gpt-6-sol', 'gpt-6-astra']) {
+    node.textModel = model;
+    const restored = normalizeInfiniteWorkspace({ version: 1, projects: [project] });
+    assert.equal(restored.projects[0].nodes[0].textModel, model);
+    assert.equal(restored.projects[0].nodes[0].text, 'Original');
+    assert.equal(restored.projects[0].nodes[0].textResult, 'Generated');
+  }
   node.textModel = 'untrusted-model';
   assert.equal(normalizeInfiniteWorkspace({ version: 1, projects: [project] }).projects[0].nodes[0].textModel, null);
 });

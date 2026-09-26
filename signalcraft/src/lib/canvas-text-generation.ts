@@ -5,9 +5,11 @@ import { clientErrorMessage } from './client-error';
 export const CANVAS_TEXT_MODEL_OPTIONS = [
   { id: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+  { id: 'gpt-6-sol', label: 'GPT-6 Sol' },
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra' },
 ] as const;
 export type CanvasTextModelId = typeof CANVAS_TEXT_MODEL_OPTIONS[number]['id'];
-export type CanvasTextModel = { id: CanvasTextModelId; label: string; enabled: boolean; reason: string | null };
+export type CanvasTextModel = { id: CanvasTextModelId; label: string; provider: 'claude' | 'gpt'; enabled: boolean; reason: string | null };
 const ENDPOINT = (process.env.NEXT_PUBLIC_VIDEO_GATEWAY_URL || 'https://youtube-niche-global-api.vercel.app/api/video').replace(/\/$/, '');
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${ENDPOINT}/${path}`, { method: body ? 'POST' : 'GET', cache: 'no-store', headers: { ...authHeaders(), accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });

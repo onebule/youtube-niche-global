@@ -122,7 +122,7 @@ export function normalizeInfiniteNode(value: unknown): InfiniteCanvasNode | null
     ...created,
     title: shortText(item.title, 70) || created.title,
     text: shortText(item.text, 12000),
-    textModel: kind === 'text' && (item.textModel === 'claude-fable-5-1' || item.textModel === 'claude-opus-5-5') ? item.textModel : null,
+    textModel: kind === 'text' && (item.textModel === 'claude-fable-5-1' || item.textModel === 'claude-opus-5-5' || item.textModel === 'gpt-6-sol' || item.textModel === 'gpt-6-astra') ? item.textModel : null,
     textResult: kind === 'text' ? shortText(item.textResult, 12000) : '',
     assetId: typeof item.assetId === 'string' && item.assetId.length <= 240 ? item.assetId : null,
     assetName: shortText(item.assetName, 200) || null,
