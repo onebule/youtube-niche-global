@@ -1,8 +1,10 @@
 import type { CanvasReferenceMode } from './canvas-shot-workspace';
 import type { VideoModelId } from './video-generation';
+import type { VideoModelDefinition } from './video-model-router';
 
 export type CanvasTemplate = {
   id: string;
+  purpose: 'commercial' | 'social' | 'continuity';
   labelZh: string;
   labelEn: string;
   descriptionZh: string;
@@ -18,6 +20,40 @@ export type CanvasTemplate = {
   tagsEn: string[];
 };
 
+/** Check a preset against the actual selected model before touching the draft. */
+export function resolveCanvasTemplateSettings(
+  template: CanvasTemplate,
+  definition: VideoModelDefinition | null,
+  modelReady: boolean,
+) {
+  if (!definition) return { ok: false as const, reason: 'no-model' as const };
+  if (!modelReady || definition.adapterStatus !== 'ready') return { ok: false as const, reason: 'not-ready' as const };
+  const { capabilities } = definition;
+  const supportsReferences = template.referenceMode === 'text'
+    ? capabilities.textToVideo
+    : template.referenceMode === 'omni'
+      ? capabilities.imageToVideo && capabilities.omniReference
+      : capabilities.imageToVideo && capabilities.startFrame && capabilities.endFrame;
+  if (!supportsReferences) return { ok: false as const, reason: 'reference-mode' as const };
+
+  const resolution = definition.resolutions.includes(template.resolution)
+    ? template.resolution
+    : definition.resolutions.includes('720p') ? '720p' : definition.resolutions[0];
+  const aspectRatio = definition.aspectRatios.includes(template.aspectRatio)
+    ? template.aspectRatio
+    : definition.aspectRatios.includes('16:9') ? '16:9' : definition.aspectRatios[0];
+  const requestedSeconds = Number.parseInt(template.duration, 10);
+  const duration = `${Math.min(definition.duration.maxSeconds, Math.max(definition.duration.minSeconds, requestedSeconds))}s`;
+  return {
+    ok: true as const,
+    reason: null,
+    resolution,
+    aspectRatio: aspectRatio as CanvasTemplate['aspectRatio'],
+    duration,
+    adjusted: resolution !== template.resolution || aspectRatio !== template.aspectRatio || duration !== template.duration,
+  };
+}
+
 /**
  * Curated starting points for common commercial shots. A template is only a
  * local preset: applying one changes the draft Prompt and compatible settings
@@ -26,6 +62,7 @@ export type CanvasTemplate = {
 export const CANVAS_TEMPLATES: CanvasTemplate[] = [
   {
     id: 'product-reveal',
+    purpose: 'commercial',
     labelZh: '产品揭幕',
     labelEn: 'Product reveal',
     descriptionZh: '让产品从静态参考中自然出现，强调材质与轮廓。',
@@ -42,6 +79,7 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
   },
   {
     id: 'vertical-hook',
+    purpose: 'social',
     labelZh: '竖屏开场钩子',
     labelEn: 'Vertical hook',
     descriptionZh: '适合短视频首 3 秒，主体快速进入画面。',
@@ -58,6 +96,7 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
   },
   {
     id: 'character-continuity',
+    purpose: 'continuity',
     labelZh: '角色连续动作',
     labelEn: 'Character continuity',
     descriptionZh: '首尾帧之间保持人物身份，适合连续镜头衔接。',
@@ -74,6 +113,7 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
   },
   {
     id: 'brand-atmosphere',
+    purpose: 'commercial',
     labelZh: '品牌氛围镜头',
     labelEn: 'Brand atmosphere',
     descriptionZh: '用慢速镜头与光线变化建立品牌情绪。',

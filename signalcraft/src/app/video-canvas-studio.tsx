@@ -53,7 +53,7 @@ import {
   type CanvasNodeId,
   type CanvasSemantics,
 } from '@/src/lib/canvas-domain';
-import { CANVAS_TEMPLATES, type CanvasTemplate } from '@/src/lib/canvas-templates';
+import { CANVAS_TEMPLATES, resolveCanvasTemplateSettings, type CanvasTemplate } from '@/src/lib/canvas-templates';
 import {
   buildGenerationSpecV2,
   createManualGenerationJob,
@@ -83,6 +83,7 @@ import {
   type ScriptOcrResult,
 } from '@/src/lib/video-generation';
 import {
+  VIDEO_MODEL_REGISTRY,
   analyzeShot,
   registryWithApiModels,
   routeShot,
@@ -212,13 +213,6 @@ const CUSTOM_NODE_LABELS: Record<CanvasCustomNodeType, { zh: string; en: string;
 
 const SCRIPT_OCR_MODEL_LABEL = 'GPT-5.6 Luna';
 const modelName = (model: VideoModelId) => model === 'minimax-h3' ? 'MiniMax H3' : model === 'seedance-2-5' ? 'Seedance 2.5' : model === 'seedance-2' ? 'Seedance 2.0' : model === 'kling-3' ? 'Kling 3.0' : model === 'veo-3.1-lite' ? 'Veo 3.1 Lite' : 'Auto';
-const compatibleTemplateResolution = (model: VideoModelId, resolution: string) => model === 'minimax-h3'
-  ? (resolution === '2K' ? '2K' : '768P')
-  : model === 'kling-3'
-    ? (['720p', '1080p', '4K'].includes(resolution) ? resolution : '720p')
-    : model === 'veo-3.1-lite'
-      ? (['720p', '1080p', '4K'].includes(resolution) ? resolution : '720p')
-    : ['480p', '720p', '1080p'].includes(resolution) ? resolution : '720p';
 const mergeGenerationContext = (previous: VideoGeneration | null, next: VideoGeneration) => {
   if (!previous || previous.id !== next.id) return next;
   return {
@@ -552,6 +546,10 @@ export default function VideoCanvasStudio({
   const [planning, setPlanning] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState('');
+  const [templatePurpose, setTemplatePurpose] = useState<'all' | 'commercial' | 'social' | 'continuity'>('all');
+  const [modelTaskFilter, setModelTaskFilter] = useState<'all' | 'start-end' | 'omni' | 'text'>('all');
+  const [modelProviderFilter, setModelProviderFilter] = useState('all');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<VideoGeneration[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -564,6 +562,9 @@ export default function VideoCanvasStudio({
   const [comparePreviewLoading, setComparePreviewLoading] = useState(false);
   const [comparePreviewError, setComparePreviewError] = useState('');
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
+  const [nodePaletteTab, setNodePaletteTab] = useState<'add' | 'manage'>('add');
+  const [nodePaletteQuery, setNodePaletteQuery] = useState('');
+  const [nodePaletteType, setNodePaletteType] = useState<'all' | 'core' | CanvasCustomNodeType>('all');
   const [imageGenerationOpen, setImageGenerationOpen] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
@@ -588,6 +589,10 @@ export default function VideoCanvasStudio({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasShellRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const templateTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const preferencesTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const nodeAssetsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const nodeManagerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const paletteImageInputRef = useRef<HTMLInputElement | null>(null);
   const promptReferenceInputRef = useRef<HTMLInputElement | null>(null);
   const dragRef = useRef<{ id: NodeId; clientX: number; clientY: number; origin: Point } | null>(null);
@@ -1951,6 +1956,10 @@ export default function VideoCanvasStudio({
   };
 
   const selectModel = (next: VideoModelId, modeOverride?: CanvasModelMode) => {
+    if (next !== 'auto' && !models.some(candidate => candidate.id === next && candidate.enabled)) {
+      notify(zh ? `${modelName(next)} 尚未就绪，请选择可用模型。` : `${modelName(next)} is not ready. Choose an available model.`);
+      return;
+    }
     // MiniMax H3 supports both FL2VA (start/end) and Ref2VA (multi-reference)
     // inputs. Keep the model selectable in either reference mode.
     setModel(next);
@@ -2095,6 +2104,7 @@ export default function VideoCanvasStudio({
 
   const openNodePaletteFor = (parentId: string) => {
     setNodePaletteParentId(parentId);
+    setNodePaletteTab('add');
     setNodePaletteOpen(true);
     setHistoryOpen(false);
     setCompareOpen(false);
@@ -2105,11 +2115,22 @@ export default function VideoCanvasStudio({
     setNodePaletteOpen(false);
     setNodePaletteParentId(null);
   };
+  const closeNodePaletteToTrigger = () => {
+    const trigger = nodePaletteTab === 'manage' ? nodeManagerTriggerRef.current : nodeAssetsTriggerRef.current;
+    closeNodePalette();
+    trigger?.focus({ preventScroll: true });
+  };
   const toggleNodePalette = () => {
+    if (nodePaletteOpen && nodePaletteTab === 'manage') {
+      setNodePaletteTab('add');
+      setNodePaletteParentId(null);
+      return;
+    }
     setNodePaletteOpen(current => {
       const next = !current;
       if (next) {
         setNodePaletteParentId(null);
+        setNodePaletteTab('add');
         setHistoryOpen(false);
         setCompareOpen(false);
         setTemplateOpen(false);
@@ -2119,6 +2140,19 @@ export default function VideoCanvasStudio({
       }
       return next;
     });
+  };
+  const openNodeManager = () => {
+    if (nodePaletteOpen && nodePaletteTab === 'manage') {
+      closeNodePalette();
+      return;
+    }
+    setNodePaletteParentId(null);
+    setNodePaletteTab('manage');
+    setNodePaletteOpen(true);
+    setHistoryOpen(false);
+    setCompareOpen(false);
+    setTemplateOpen(false);
+    setMinimapOpen(false);
   };
   const openImageGeneration = () => {
     setImageGenerationOpen(true);
@@ -2243,24 +2277,38 @@ export default function VideoCanvasStudio({
       return next;
     });
   };
-  const applyCanvasTemplate = (template: CanvasTemplate) => {
-    const nextResolution = compatibleTemplateResolution(model, template.resolution);
+  const templateSettingsFor = (template: CanvasTemplate, candidateId: VideoModelId | null) => resolveCanvasTemplateSettings(
+    template,
+    VIDEO_MODEL_REGISTRY.find(definition => definition.id === candidateId) || null,
+    Boolean(models.find(candidate => candidate.id === candidateId)?.enabled),
+  );
+  const applyCanvasTemplate = (template: CanvasTemplate, modelOverride?: Exclude<VideoModelId, 'auto'>) => {
+    const targetModel = modelOverride || effectiveModel;
+    const settings = templateSettingsFor(template, targetModel);
+    if (!settings.ok) {
+      setError(zh ? '当前模型不支持这个模板或尚未就绪。请先选择支持该参考模式的模型。' : 'This model is unavailable or does not support the template. Select a compatible model first.');
+      return;
+    }
     const merged = mergeCreatorBibleIntoPrompt(zh ? template.promptZh : template.promptEn, project, zh ? 'zh' : 'en');
     if (merged.reason === 'too_long') {
       setError(zh ? '模板加上项目 Bible 的锁定规则后超过 1200 字；请先精简规则。' : 'The template plus Project Bible rules exceeds 1,200 characters. Shorten the rules first.');
       return;
     }
+    // A deliberate template action may lock the recommended model; never switch it silently.
+    if (targetModel && (modelOverride || model === 'auto')) selectModel(targetModel);
+    setError('');
     setPrompt(merged.prompt);
     setReferenceMode(template.referenceMode);
-    setDuration(normalizeVideoDuration(model, template.duration));
-    setAspectRatio(template.aspectRatio);
-    setResolution(nextResolution);
+    setDuration(settings.duration);
+    setAspectRatio(settings.aspectRatio);
+    setResolution(settings.resolution);
     setAgentPlan(null);
     patchSemanticNode('prompt', { status: 'draft' });
     setTemplateOpen(false);
+    templateTriggerRef.current?.focus({ preventScroll: true });
     notify(zh
-      ? `已应用“${template.labelZh}”模板，保留当前 ${modelName(model)}；请检查参考图和参数后再生成。`
-      : `“${template.labelEn}” applied. ${modelName(model)} stays selected; review references and settings before generating.`);
+      ? `已应用“${template.labelZh}”，使用 ${modelName(targetModel || model)}${settings.adjusted ? '，参数已调整至模型支持的范围' : ''}；请检查参考素材后再生成。`
+      : `“${template.labelEn}” applied using ${modelName(targetModel || model)}${settings.adjusted ? ' with compatible settings' : ''}. Review references before generating.`);
   };
 
   const submitGenerationForModel = async (selectedModelId: Exclude<VideoModelId, 'auto'>, primaryFrame: UploadedFrame | null) => {
@@ -2312,7 +2360,6 @@ export default function VideoCanvasStudio({
       generationSpec,
     });
   };
-
   const generate = async () => {
     const primaryFrame = referenceMode === 'omni' ? referenceFrames[0] : startFrame;
     if (!canGenerate || !effectiveModel || (referenceMode !== 'text' && !primaryFrame)) return;
@@ -3038,6 +3085,16 @@ export default function VideoCanvasStudio({
   const minimapNodes = useMemo(() => Array.from(graphNodes.entries())
     .filter(([id]) => id !== 'prompt' && id !== 'model')
     .map(([id, node]) => ({ id, ...node })), [graphNodes]);
+  const managedNodes = minimapNodes.map(node => {
+    const custom = customNodes.find(item => item.id === node.id);
+    const type: 'core' | CanvasCustomNodeType = custom?.type || 'core';
+    const label = custom ? CUSTOM_NODE_LABELS[custom.type][zh ? 'zh' : 'en'] : canvasNodeName(node.id as NodeId, zh);
+    return { id: node.id, type, label, body: custom?.body || '' };
+  });
+  const nodeSearch = nodePaletteQuery.trim().toLocaleLowerCase();
+  const visibleManagedNodes = managedNodes.filter(node =>
+    (nodePaletteType === 'all' || node.type === nodePaletteType)
+    && (!nodeSearch || `${node.label} ${node.body}`.toLocaleLowerCase().includes(nodeSearch)));
 
   const minimapViewport = useMemo(() => {
     if (viewportSize.width <= 0 || viewportSize.height <= 0) return null;
@@ -3110,6 +3167,15 @@ export default function VideoCanvasStudio({
     selectCanvasNode(id);
     setMinimapOpen(false);
   };
+  const focusManagedNode = (id: string) => {
+    focusCanvasNode(id);
+    closeNodePalette();
+    requestAnimationFrame(() => {
+      const element = Array.from(viewportRef.current?.querySelectorAll<HTMLElement>('[data-canvas-node]') || [])
+        .find(node => node.dataset.canvasNode === id);
+      element?.querySelector<HTMLElement>('.canvas-node-grip')?.focus({ preventScroll: true });
+    });
+  };
 
   const focusSelectedCanvasNode = () => {
     if (selectedCanvasNodeId) focusCanvasNode(selectedCanvasNodeId);
@@ -3136,6 +3202,22 @@ export default function VideoCanvasStudio({
       ? canvasNodeName(nodePaletteParentId as NodeId, zh)
       : CUSTOM_NODE_LABELS[customNodes.find(node => node.id === nodePaletteParentId)?.type || 'other'][zh ? 'zh' : 'en'])
     : '';
+  const templateSearch = templateQuery.trim().toLocaleLowerCase();
+  const visibleTemplates = CANVAS_TEMPLATES.filter(template => {
+    const searchable = [template.labelZh, template.labelEn, template.descriptionZh, template.descriptionEn, ...template.tagsZh, ...template.tagsEn].join(' ').toLocaleLowerCase();
+    return (templatePurpose === 'all' || templatePurpose === template.purpose) && (!templateSearch || searchable.includes(templateSearch));
+  });
+  const modelCatalog = models.filter(item => item.id !== 'auto').map(item => ({
+    model: item,
+    definition: VIDEO_MODEL_REGISTRY.find(definition => definition.id === item.id),
+  }));
+  const modelProviders = [...new Set(modelCatalog.map(item => item.definition?.provider).filter((provider): provider is string => Boolean(provider)))];
+  const visibleModelCatalog = modelCatalog.filter(({ definition }) => {
+    if (!definition || (modelProviderFilter !== 'all' && definition.provider !== modelProviderFilter)) return false;
+    const { capabilities } = definition;
+    return modelTaskFilter === 'all' || (modelTaskFilter === 'start-end' && capabilities.startFrame && capabilities.endFrame)
+      || (modelTaskFilter === 'omni' && capabilities.omniReference) || (modelTaskFilter === 'text' && capabilities.textToVideo);
+  });
 
   if (effectiveAccess === 'signed-out') return <main className="app-page video-canvas-access"><span>AI CANVAS</span><h1>{zh ? '登录后进入镜头画布。' : 'Sign in to open the shot canvas.'}</h1><p>{zh ? '画布使用现有团队生成服务，不会在浏览器保存第三方密钥。' : 'The canvas uses the existing Team service and never stores provider keys in the browser.'}</p><button type="button" className="primary" onClick={onSignIn}>{zh ? '使用 Google 登录' : 'Sign in with Google'}</button></main>;
   if (effectiveAccess === 'team-only') return <main className="app-page video-canvas-access denied"><span>TEAM ACCESS</span><h1>{zh ? '这个账号还没有 AI 画布权限。' : 'This account does not have AI Canvas access.'}</h1><p>{zh ? '请让站点主人在账号目录中开通 Team 权限。' : 'Ask the owner to grant Team access in the account directory.'}</p></main>;
@@ -3215,6 +3297,10 @@ export default function VideoCanvasStudio({
               setCanvasViewMode('shot');
             }}>{zh ? '镜头模式' : 'Shot mode'}</button>
             <button type="button" aria-pressed={canvasViewMode === 'workflow'} className={canvasViewMode === 'workflow' ? 'is-active' : ''} onClick={() => setCanvasViewMode('workflow')}>{zh ? '流程模式' : 'Workflow'}</button>
+            <button type="button" className={'is-immersive ' + (canvasViewMode === 'workflow' && isCanvasFullscreen ? 'is-active' : '')} aria-pressed={canvasViewMode === 'workflow' && isCanvasFullscreen} title={isCanvasFullscreen ? (zh ? '退出沉浸画布（Esc）' : 'Exit immersive canvas (Esc)') : (zh ? '隐藏站点导航，专注节点流程' : 'Hide site navigation and focus on the node workflow')} onClick={() => {
+              setCanvasViewMode('workflow');
+              void toggleCanvasFullscreen();
+            }}>{isCanvasFullscreen ? (zh ? '退出沉浸' : 'Exit focus') : (zh ? '沉浸画布 ⛶' : 'Focus canvas ⛶')}</button>
           </div>
         </header>
         <section className="canvas-v3-project" aria-labelledby="canvas-v3-project-title">
@@ -3259,7 +3345,7 @@ export default function VideoCanvasStudio({
             })}
           </div> : <div className="canvas-v3-version-empty"><span aria-hidden="true">◇</span><div><b>{zh ? '还没有生成版本' : 'No generations yet'}</b><p>{zh ? '完成一次生成后，V1 会保留在这里。' : 'Your first result will be kept here as V1.'}</p></div></div>}
           <div className="canvas-v3-version-actions"><button type="button" onClick={toggleHistory}>{zh ? '全部历史' : 'All history'}</button>{shotVersions.length > 1 && <button type="button" onClick={toggleCompare}>{zh ? '对比版本' : 'Compare'}</button>}<button type="button" className="is-primary" onClick={focusMotionPrompt}>{shotVersions.length > 0 ? (zh ? '生成新版本' : 'New version') : (zh ? '编辑当前镜头' : 'Edit shot')}</button></div>
-          <button type="button" className={'canvas-v3-assets-trigger ' + (nodePaletteOpen ? 'is-open' : '')} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen ? (zh ? '关闭素材库' : 'Close assets') : (zh ? '添加素材到画布' : 'Add assets to canvas')}</button>
+          <button type="button" className={'canvas-v3-assets-trigger ' + (nodePaletteOpen && nodePaletteTab === 'add' ? 'is-open' : '')} aria-expanded={nodePaletteOpen && nodePaletteTab === 'add'} aria-controls="canvas-node-palette" onClick={toggleNodePalette}><span aria-hidden="true">＋</span>{nodePaletteOpen && nodePaletteTab === 'add' ? (zh ? '关闭素材库' : 'Close assets') : (zh ? '添加素材到画布' : 'Add assets to canvas')}</button>
         </aside>
       </div>
       <div
@@ -3321,8 +3407,11 @@ export default function VideoCanvasStudio({
           <small>{zh ? '点击色块定位节点；拖动和缩放仍在主画布完成。' : 'Click a block to focus a node. Pan and zoom in the main canvas.'}</small>
         </aside>}
         <div className="canvas-main-toolbar" role="toolbar" aria-label={zh ? '画布主工具' : 'Canvas tools'} onPointerDown={event => event.stopPropagation()}>
-          <button type="button" className="canvas-main-tool" onClick={toggleNodePalette} aria-expanded={nodePaletteOpen} aria-controls="canvas-node-palette" title={nodePaletteOpen ? (zh ? '关闭素材面板' : 'Close assets panel') : (zh ? '添加素材' : 'Add assets')}>
+          <button ref={nodeAssetsTriggerRef} type="button" className="canvas-main-tool" onClick={toggleNodePalette} aria-expanded={nodePaletteOpen && nodePaletteTab === 'add'} aria-controls="canvas-node-palette" title={nodePaletteOpen && nodePaletteTab === 'add' ? (zh ? '关闭素材面板' : 'Close assets panel') : (zh ? '添加素材' : 'Add assets')}>
             <span aria-hidden="true">＋</span><b>{zh ? '素材' : 'Assets'}</b>
+          </button>
+          <button ref={nodeManagerTriggerRef} type="button" className={'canvas-main-tool ' + (nodePaletteOpen && nodePaletteTab === 'manage' ? 'is-active' : '')} onClick={openNodeManager} aria-expanded={nodePaletteOpen && nodePaletteTab === 'manage'} aria-controls="canvas-node-palette" title={zh ? '搜索并定位当前镜头节点' : 'Find and focus nodes in this shot'}>
+            <span aria-hidden="true">⌕</span><b>{zh ? '节点' : 'Nodes'}</b>
           </button>
           <button type="button" className="canvas-main-tool" onClick={addTextNode} title={zh ? '聚焦 Motion Prompt' : 'Focus Motion Prompt'}>
             <span aria-hidden="true">T</span><b>{zh ? '描述' : 'Direction'}</b>
@@ -3533,9 +3622,10 @@ export default function VideoCanvasStudio({
             </div>
           </div>
 
-      {nodePaletteOpen && <aside id="canvas-node-palette" className="canvas-node-palette" role="region" aria-labelledby="canvas-node-palette-title" onKeyDown={event => { if (event.key === 'Escape') closeNodePalette(); }}>
-        <div className="canvas-node-palette-head"><div><span>{nodePaletteParentId ? (zh ? '扩展镜头' : 'EXTEND SHOT') : (zh ? '镜头素材' : 'SHOT ASSETS')}</span><b id="canvas-node-palette-title">{nodePaletteParentId ? (zh ? `接到「${paletteParentName}」` : `Connect after ${paletteParentName}`) : (zh ? '添加素材或步骤' : 'Add an asset or step')}</b><small>{nodePaletteParentId ? (zh ? '选择文字、图片、视频或其他；只添加当前镜头内容，不会自动提交生成。' : 'Choose text, image, video, or another step. This only updates the current shot; it never submits work.') : (zh ? '把素材放进当前镜头。' : 'Bring assets into the current shot.')}</small></div><button type="button" className="canvas-node-palette-close" aria-label={zh ? '关闭素材面板' : 'Close assets panel'} onClick={closeNodePalette}>×</button></div>
-        <div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
+      {nodePaletteOpen && <aside id="canvas-node-palette" className="canvas-node-palette" role="region" aria-labelledby="canvas-node-palette-title" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onWheel={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeNodePaletteToTrigger(); } }}>
+        <div className="canvas-node-palette-head"><div><span>{nodePaletteParentId ? (zh ? '扩展镜头' : 'EXTEND SHOT') : (zh ? '镜头节点' : 'SHOT NODES')}</span><b id="canvas-node-palette-title">{nodePaletteParentId ? (zh ? `接到「${paletteParentName}」` : `Connect after ${paletteParentName}`) : nodePaletteTab === 'manage' ? (zh ? '查找当前镜头节点' : 'Find nodes in this shot') : (zh ? '添加素材或步骤' : 'Add an asset or step')}</b><small>{nodePaletteParentId ? (zh ? '选择文字、图片、视频或其他；只添加当前镜头内容，不会自动提交生成。' : 'Choose text, image, video, or another step. This only updates the current shot; it never submits work.') : nodePaletteTab === 'manage' ? (zh ? '搜索、筛选并定位；节点内容保持原样。' : 'Search, filter, and focus. Node content stays as it is.') : (zh ? '把素材放进当前镜头。' : 'Bring assets into the current shot.')}</small></div><button type="button" className="canvas-node-palette-close" aria-label={nodePaletteTab === 'manage' && !nodePaletteParentId ? (zh ? '关闭节点面板' : 'Close nodes panel') : (zh ? '关闭素材面板' : 'Close assets panel')} onClick={closeNodePaletteToTrigger}>×</button></div>
+        {!nodePaletteParentId && <div className="canvas-node-palette-tabs" role="group" aria-label={zh ? '节点面板视图' : 'Node panel view'}><button type="button" aria-pressed={nodePaletteTab === 'add'} onClick={() => setNodePaletteTab('add')}>{zh ? '添加' : 'Add'}</button><button type="button" aria-pressed={nodePaletteTab === 'manage'} onClick={() => setNodePaletteTab('manage')}>{zh ? '查找节点' : 'Find nodes'} <small>{managedNodes.length}</small></button></div>}
+        {nodePaletteTab === 'add' && <><div className="canvas-node-palette-section"><span>{zh ? '节点' : 'NODES'}</span><div className="canvas-node-palette-grid">
           <button type="button" className="canvas-node-palette-item" onClick={addTextNode}><span aria-hidden="true">≡</span><b>{zh ? '文本' : 'Text'}</b><small>{zh ? '写 Motion Prompt' : 'Write a motion prompt'}</small></button>
           <label className="canvas-node-palette-item"><input ref={paletteImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">▧</span><b>{zh ? '图片' : 'Image'}</b><small>{nodePaletteParentId ? (zh ? '添加图片步骤' : 'Add an image step') : (zh ? '加入 START / 参考图' : 'Add START / reference')}</small></label>
           <button type="button" className="canvas-node-palette-item" onClick={addVideoNode}><span aria-hidden="true">▣</span><b>{zh ? '视频' : 'Video'}</b><em className="canvas-node-palette-badge">{selectedModel?.enabled ? modelName(model) : (zh ? '选择模型' : 'Choose model')}</em><small>{zh ? '选择模型并写动作提示' : 'Choose a model and prompt'}</small></button>
@@ -3545,7 +3635,16 @@ export default function VideoCanvasStudio({
         <div className="canvas-node-palette-section"><span>{zh ? '素材' : 'ASSETS'}</span><div className="canvas-node-palette-list">
           <label className="canvas-node-palette-row"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) { void handlePaletteImage(file); closeNodePalette(); } event.currentTarget.value = ''; }} /><span aria-hidden="true">↥</span><div><b>{zh ? '本地上传' : 'Local upload'}</b><small>{zh ? '从设备加入图片素材' : 'Add an image from this device'}</small></div></label>
           <button type="button" className="canvas-node-palette-row" onClick={addReferenceNode}><span aria-hidden="true">@</span><div><b>{zh ? '引用参考' : 'Reference set'}</b><small>{zh ? '切换到最多 9 张全能参考' : 'Switch to up to 9 omni references'}</small></div></button>
-        </div></div>
+        </div></div></>}
+        {nodePaletteTab === 'manage' && !nodePaletteParentId && <div className="canvas-node-manager">
+          <label className="canvas-node-manager-search"><span>{zh ? '搜索节点' : 'Search nodes'}</span><input type="search" value={nodePaletteQuery} onChange={event => setNodePaletteQuery(event.target.value)} placeholder={zh ? '名称或内容' : 'Name or content'} /></label>
+          <div className="canvas-node-manager-filters" role="group" aria-label={zh ? '按节点类型筛选' : 'Filter by node type'}>{([
+            ['all', zh ? '全部' : 'All'], ['core', zh ? '主流程' : 'Flow'], ['text', zh ? '文字' : 'Text'], ['image', zh ? '图片' : 'Image'], ['video', zh ? '视频' : 'Video'], ['other', zh ? '其他' : 'Other'],
+          ] as const).map(([type, label]) => <button type="button" key={type} aria-pressed={nodePaletteType === type} onClick={() => setNodePaletteType(type)}>{label}<small>{type === 'all' ? managedNodes.length : managedNodes.filter(node => node.type === type).length}</small></button>)}</div>
+          <small className="canvas-node-manager-count" aria-live="polite">{zh ? `找到 ${visibleManagedNodes.length} 个节点` : `${visibleManagedNodes.length} nodes found`}</small>
+          <div className="canvas-node-manager-list">{visibleManagedNodes.map(node => <button type="button" key={node.id} className={'canvas-node-manager-row ' + ((selectedNodeId === node.id || selectedCustomNodeId === node.id) ? 'is-selected' : '')} onClick={() => focusManagedNode(node.id)}><span className={'canvas-node-manager-icon is-' + node.type} aria-hidden="true">{node.type === 'core' ? '◇' : CUSTOM_NODE_LABELS[node.type].icon}</span><span className="canvas-node-manager-copy"><b>{node.label}</b><small>{node.body ? node.body.slice(0, 100) : node.type === 'core' ? (zh ? '镜头主流程' : 'Shot workflow') : (zh ? '暂无内容' : 'No content yet')}</small></span><span className="canvas-node-manager-arrow" aria-hidden="true">↗</span></button>)}</div>
+          {visibleManagedNodes.length === 0 && <p className="canvas-node-manager-empty">{zh ? '没有匹配的节点。试试其他关键词或类型。' : 'No matching nodes. Try another keyword or type.'}</p>}
+        </div>}
       </aside>}
 
       <ImageGenerationPanel
@@ -3708,24 +3807,46 @@ export default function VideoCanvasStudio({
             </div>
             <div className="canvas-composer-controls">
               <div className="canvas-template-wrap">
-                <button type="button" className={'canvas-template-trigger ' + (templateOpen ? 'is-open' : '')} aria-expanded={templateOpen} aria-controls="canvas-template-panel" onClick={toggleTemplatePicker}>
+                <button ref={templateTriggerRef} type="button" className={'canvas-template-trigger ' + (templateOpen ? 'is-open' : '')} aria-expanded={templateOpen} aria-controls="canvas-template-panel" onClick={toggleTemplatePicker}>
                   <span className="canvas-template-trigger-icon" aria-hidden="true">✦</span>
                   <span className="canvas-template-trigger-copy"><b>{zh ? '商业模板' : 'Shot templates'}</b><small>{zh ? 'Prompt + 参数预设' : 'Prompt + settings presets'}</small></span>
                   <span className="canvas-template-trigger-arrow" aria-hidden="true">{templateOpen ? '⌃' : '⌄'}</span>
                 </button>
-                {templateOpen && <div id="canvas-template-panel" className="canvas-template-panel" role="dialog" aria-labelledby="canvas-template-title">
-                  <div className="canvas-template-head"><div><span>{zh ? '可复用起点' : 'REUSABLE STARTING POINTS'}</span><b id="canvas-template-title">{zh ? '选择一个镜头模板' : 'Choose a shot template'}</b></div><button type="button" className="canvas-template-close" aria-label={zh ? '关闭模板' : 'Close templates'} onClick={() => setTemplateOpen(false)}>×</button></div>
-                  <p className="canvas-template-note">{zh ? '模板只填入草稿，不会提交任务；当前锁定的模型会保留。' : 'Templates only update the draft. No task is submitted and the locked model stays selected.'}</p>
+                {templateOpen && <div id="canvas-template-panel" className="canvas-template-panel" role="dialog" aria-labelledby="canvas-template-title" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setTemplateOpen(false); templateTriggerRef.current?.focus({ preventScroll: true }); } }}>
+                  <div className="canvas-template-head"><div><span>{zh ? '可复用起点' : 'REUSABLE STARTING POINTS'}</span><b id="canvas-template-title">{zh ? '选择一个镜头模板' : 'Choose a shot template'}</b></div><button type="button" className="canvas-template-close" aria-label={zh ? '关闭模板' : 'Close templates'} onClick={() => { setTemplateOpen(false); templateTriggerRef.current?.focus({ preventScroll: true }); }}>×</button></div>
+                  <p className="canvas-template-note">{zh ? '模板只修改草稿，不会提交任务。默认保留已锁定模型；不兼容时可明确选择切换。缩略图仅为构图示意。' : 'Templates only edit the draft. Your locked model stays selected unless you choose to switch. Thumbnails are visual cues.'}</p>
+                  <label className="canvas-template-search"><span>{zh ? '搜索模板' : 'Search templates'}</span><input type="search" value={templateQuery} onChange={event => setTemplateQuery(event.target.value)} placeholder={zh ? '名称、用途或标签' : 'Name, purpose or tag'} /></label>
+                  <div className="canvas-template-filters" role="group" aria-label={zh ? '模板用途' : 'Template purpose'}>{([
+                    ['all', zh ? '全部' : 'All'], ['commercial', zh ? '商业' : 'Commercial'], ['social', zh ? '短视频' : 'Short-form'], ['continuity', zh ? '连续性' : 'Continuity'],
+                  ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={templatePurpose === value} onClick={() => setTemplatePurpose(value)}>{label}</button>)}</div>
+                  <small className="canvas-template-count" aria-live="polite">{zh ? `${visibleTemplates.length} 个模板` : `${visibleTemplates.length} ${visibleTemplates.length === 1 ? 'template' : 'templates'}`}</small>
                   <div className="canvas-template-list">
-                    {CANVAS_TEMPLATES.map(template => <button type="button" className="canvas-template-card" key={template.id} onClick={() => applyCanvasTemplate(template)}>
-                      <span className="canvas-template-card-copy"><b>{zh ? template.labelZh : template.labelEn}</b><small>{zh ? template.descriptionZh : template.descriptionEn}</small><em>{(zh ? template.tagsZh : template.tagsEn).join(' · ')}</em></span>
+                    {visibleTemplates.map(template => {
+                      const currentSettings = templateSettingsFor(template, effectiveModel);
+                      const recommendedSettings = templateSettingsFor(template, template.recommendedModel);
+                      const canSwitch = !currentSettings.ok && recommendedSettings.ok && effectiveModel !== template.recommendedModel;
+                      const referenceLabel = template.referenceMode === 'omni' ? (zh ? '多图参考' : 'multi-image references') : template.referenceMode === 'text' ? (zh ? '纯文本生视频' : 'text-to-video') : (zh ? '首尾帧参考' : 'start/end frames');
+                      return <div className={'canvas-template-card ' + (currentSettings.ok ? '' : 'is-incompatible')} key={template.id}>
+                      <span className="canvas-template-card-preview" data-template={template.id} aria-hidden="true"><span className="canvas-template-preview-subject" /><span className="canvas-template-preview-accent" /><span className="canvas-template-preview-caption">{zh ? '构图示意' : 'Visual cue'}</span></span>
+                      <span className="canvas-template-card-copy"><b>{zh ? template.labelZh : template.labelEn}</b><small>{zh ? template.descriptionZh : template.descriptionEn}</small><span className="canvas-template-card-prompt">{zh ? template.promptZh : template.promptEn}</span><em>{(zh ? template.tagsZh : template.tagsEn).join(' · ')}</em></span>
                       <span className="canvas-template-card-meta"><strong>{zh ? '推荐' : 'Best with'} {modelName(template.recommendedModel)}</strong><small>{template.duration} · {template.aspectRatio} · {template.resolution}</small></span>
-                    </button>)}
+                      <div className="canvas-template-card-actions">
+                        <button type="button" disabled={!currentSettings.ok} onClick={() => applyCanvasTemplate(template)}>{model === 'auto' && effectiveModel ? (zh ? `锁定 ${modelName(effectiveModel)} 并应用` : `Lock ${modelName(effectiveModel)} & apply`) : (zh ? '应用模板' : 'Apply template')}</button>
+                        {canSwitch && <button type="button" className="is-secondary" onClick={() => applyCanvasTemplate(template, template.recommendedModel)}>{zh ? `切换至 ${modelName(template.recommendedModel)} 并应用` : `Switch to ${modelName(template.recommendedModel)} & apply`}</button>}
+                        {!currentSettings.ok && <small role="status">{currentSettings.reason === 'reference-mode'
+                          ? (zh ? `当前 ${modelName(effectiveModel || 'auto')} 不支持${referenceLabel}。` : `${modelName(effectiveModel || 'auto')} does not support ${referenceLabel}.`)
+                          : (zh ? '当前模型尚未就绪，请先选择可用模型。' : 'The current model is not ready. Choose an available model.')}</small>}
+                        {currentSettings.ok && currentSettings.adjusted && <small>{zh ? `将适配为 ${currentSettings.duration} · ${currentSettings.aspectRatio} · ${currentSettings.resolution}` : `Adjusted to ${currentSettings.duration} · ${currentSettings.aspectRatio} · ${currentSettings.resolution}`}</small>}
+                      </div>
+                      </div>;
+                    })}
+                    {visibleTemplates.length === 0 && <p className="canvas-template-empty">{zh ? '没有匹配的模板，试试其他关键词或用途。' : 'No matching template. Try another keyword or purpose.'}</p>}
                   </div>
                 </div>}
               </div>
               <div className="canvas-preferences-wrap">
                 <button
+                  ref={preferencesTriggerRef}
                   type="button"
                   className={'canvas-preferences-trigger ' + (preferencesOpen ? 'is-open' : '')}
                   aria-expanded={preferencesOpen}
@@ -3739,19 +3860,35 @@ export default function VideoCanvasStudio({
                   </span>
                   <span className="canvas-preferences-trigger-arrow" aria-hidden="true">{preferencesOpen ? '⌃' : '⌄'}</span>
                 </button>
-                {preferencesOpen && <div id="canvas-preferences-panel" className="canvas-preferences-panel" role="region" aria-labelledby="canvas-preferences-title" onKeyDown={event => { if (event.key === 'Escape') setPreferencesOpen(false); }}>
+                {preferencesOpen && <div id="canvas-preferences-panel" className="canvas-preferences-panel" role="region" aria-labelledby="canvas-preferences-title" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setPreferencesOpen(false); preferencesTriggerRef.current?.focus({ preventScroll: true }); } }}>
                   <div className="canvas-preferences-head">
                     <div><span>{zh ? '生成偏好' : 'Generation preferences'}</span><b id="canvas-preferences-title">{zh ? '把这一镜头的参数收在一起' : 'Keep this shot’s settings together'}</b></div>
-                    <button type="button" className="canvas-preferences-close" aria-label={zh ? '关闭生成偏好' : 'Close generation preferences'} onClick={() => setPreferencesOpen(false)}>×</button>
+                    <button type="button" className="canvas-preferences-close" aria-label={zh ? '关闭生成偏好' : 'Close generation preferences'} onClick={() => { setPreferencesOpen(false); preferencesTriggerRef.current?.focus({ preventScroll: true }); }}>×</button>
                   </div>
                   <div className="canvas-preferences-auto">
                     <div><b>{zh ? '智能推荐' : 'Auto recommend'}</b><small>{routingResult.recommendedModel ? (zh ? `推荐 ${modelName(routingResult.recommendedModel)} · ${routingResult.score} 分` : `Recommends ${modelName(routingResult.recommendedModel)} · ${routingResult.score}`) : (zh ? '当前镜头暂无可用模型' : 'No eligible model for this shot')}</small></div>
                     <select value={routingStrategy} aria-label={zh ? '模型路由策略' : 'Model routing strategy'} onChange={event => setRoutingStrategy(event.target.value as ModelRoutingStrategy)}><option value="BALANCED">{zh ? '均衡' : 'Balanced'}</option><option value="COST">{zh ? '成本优先' : 'Cost first'}</option><option value="QUALITY">{zh ? '质量优先' : 'Quality first'}</option></select>
                   </div>
                   {model === 'auto' && <div className="canvas-router-summary"><strong>{zh ? '本镜头推荐' : 'Recommended for this shot'}：{routingResult.recommendedModel ? modelName(routingResult.recommendedModel) : '—'}</strong><p>{routingResult.reason.slice(0, 3).join(' · ')}</p><div>{routingResult.alternatives.slice(0, 3).map(item => <span key={item.modelId}>{modelName(item.modelId as VideoModelId)} {item.score}</span>)}</div></div>}
+                  <details className="canvas-model-browser">
+                    <summary>{zh ? '按能力浏览模型' : 'Browse models by capability'} <small>{models.filter(item => item.id !== 'auto' && item.enabled).length}/{modelCatalog.length} {zh ? '已就绪' : 'ready'}</small></summary>
+                    <div className="canvas-model-browser-body">
+                      <div className="canvas-model-browser-filters">
+                        <label><span>{zh ? '任务' : 'Task'}</span><select value={modelTaskFilter} onChange={event => setModelTaskFilter(event.target.value as typeof modelTaskFilter)}><option value="all">{zh ? '全部' : 'All'}</option><option value="start-end">{zh ? '首尾帧' : 'Start / end'}</option><option value="omni">{zh ? '多图参考' : 'Multi-image'}</option><option value="text">{zh ? '纯文本' : 'Text only'}</option></select></label>
+                        <label><span>{zh ? '服务方' : 'Provider'}</span><select value={modelProviderFilter} onChange={event => setModelProviderFilter(event.target.value)}><option value="all">{zh ? '全部' : 'All'}</option>{modelProviders.map(provider => <option key={provider} value={provider}>{provider === 'minimax' ? 'MiniMax' : provider === 'seedance' ? 'Seedance' : provider === 'kling' ? 'Kling' : provider === 'veo' ? 'Veo' : provider}</option>)}</select></label>
+                      </div>
+                      <div className="canvas-model-browser-list">{visibleModelCatalog.map(({ model: candidate, definition }) => definition && <button type="button" key={candidate.id} className={'canvas-model-browser-card ' + (model === candidate.id ? 'is-selected' : '')} aria-pressed={model === candidate.id} disabled={!candidate.enabled} onClick={() => selectModel(candidate.id)}>
+                        <span><b>{definition.label}</b><small>{definition.provider === 'minimax' ? 'MiniMax' : definition.provider === 'seedance' ? 'Seedance' : definition.provider === 'kling' ? 'Kling' : definition.provider === 'veo' ? 'Veo' : definition.provider}</small></span>
+                        <span className="canvas-model-browser-tags">{definition.capabilities.startFrame && definition.capabilities.endFrame && <em>{zh ? '首尾帧' : 'Start / end'}</em>}{definition.capabilities.omniReference && <em>{zh ? '多图参考' : 'Multi-image'}</em>}{definition.capabilities.textToVideo && <em>{zh ? '纯文本' : 'Text only'}</em>}</span>
+                        <strong className={candidate.enabled ? 'is-ready' : ''}>{candidate.enabled ? (zh ? '已就绪' : 'Ready') : (zh ? '未就绪' : 'Not ready')}</strong>
+                      </button>)}</div>
+                      {visibleModelCatalog.length === 0 && <p className="canvas-model-browser-empty">{zh ? '当前筛选没有匹配的模型。' : 'No model matches these filters.'}</p>}
+                      <small className="canvas-model-browser-note">{zh ? '可用状态来自当前账号的视频服务；选择后会按现有逻辑锁定模型并校正规格。' : 'Availability comes from your account’s video service. Selecting a model uses the existing lock and setting rules.'}</small>
+                    </div>
+                  </details>
                   <div className="canvas-preferences-grid">
                     <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '路由模式' : 'Routing mode'}</span><select value={modelMode} onChange={event => changeCanvasModelMode(event.target.value as CanvasModelMode)}><option value="AUTO">AUTO · {zh ? '智能推荐' : 'Smart routing'}</option><option value="FAST">FAST · {zh ? '快速优先' : 'Fast first'}</option><option value="QUALITY">QUALITY · {zh ? '质量优先' : 'Quality first'}</option><option value="CHEAPEST">CHEAPEST · {zh ? '成本优先' : 'Lowest cost'}</option><option value="CUSTOM">CUSTOM · {zh ? '手动锁定' : 'Manual lock'}</option></select></label>
-                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型模式' : 'Model mode'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto">Auto · {zh ? '智能推荐' : 'Smart routing'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
+                    <label className="canvas-preference-field canvas-preference-field-wide"><span>{zh ? '模型模式' : 'Model mode'}</span><select value={model} onChange={event => selectModel(event.target.value as VideoModelId)}><option value="auto">Auto · {zh ? '智能推荐' : 'Smart routing'}</option>{models.filter(item => item.id !== 'auto').map(item => <option key={item.id} value={item.id} disabled={!item.enabled}>{modelName(item.id)}{item.enabled ? '' : ' · ' + (zh ? '未就绪' : 'Not ready')}</option>)}</select></label>
                     <fieldset className="canvas-preference-field canvas-preference-compare-field"><legend>{zh ? 'Compare Models · 最多 3 个' : 'Compare models · up to 3'}</legend><div className="canvas-compare-model-options">{models.filter(item => item.id !== 'auto').map(item => {
                       const candidate = item.id as Exclude<VideoModelId, 'auto'>;
                       const eligible = compareModelIsEligible(candidate);

@@ -3,6 +3,42 @@ import assert from 'node:assert/strict';
 import { normalizeImageGenerationJob, normalizeVideoGenerationJob, resolveCanvasModelMode } from '../src/lib/canvas-generation.ts';
 import { canvasHistoryRestoreTarget, canvasVersionForGeneration, createCanvasSemantics, normalizeCanvasSemantics, recordCanvasGeneration, selectCanvasBestTake } from '../src/lib/canvas-domain.ts';
 import { failedImageGenerationFromRefresh, isTerminalImageGenerationRefreshError } from '../src/lib/image-generation-state.ts';
+import { CANVAS_TEMPLATES, resolveCanvasTemplateSettings } from '../src/lib/canvas-templates.ts';
+import { VIDEO_MODEL_REGISTRY } from '../src/lib/video-model-router.ts';
+
+const template = id => CANVAS_TEMPLATES.find(item => item.id === id);
+const definition = id => VIDEO_MODEL_REGISTRY.find(item => item.id === id);
+
+test('commercial templates preserve a compatible locked model and correct its settings', () => {
+  const product = template('product-reveal');
+  assert.deepEqual(resolveCanvasTemplateSettings(product, definition('seedance-2-5'), true), {
+    ok: true, reason: null, resolution: '1080p', aspectRatio: '16:9', duration: '6s', adjusted: false,
+  });
+  const h3 = resolveCanvasTemplateSettings(product, definition('minimax-h3'), true);
+  assert.equal(h3.ok, true);
+  assert.equal(h3.resolution, '768P');
+  assert.equal(h3.adjusted, true);
+  assert.equal(h3.duration, '6s');
+});
+
+test('commercial templates reject unsupported references or unavailable models', () => {
+  assert.equal(resolveCanvasTemplateSettings(template('product-reveal'), definition('kling-3'), true).reason, 'reference-mode');
+  assert.equal(resolveCanvasTemplateSettings(template('character-continuity'), definition('veo-3.1-lite'), true).reason, 'reference-mode');
+  assert.equal(resolveCanvasTemplateSettings(template('product-reveal'), definition('seedance-2-5'), false).reason, 'not-ready');
+  assert.equal(resolveCanvasTemplateSettings(template('product-reveal'), null, false).reason, 'no-model');
+  const kling = resolveCanvasTemplateSettings(template('character-continuity'), definition('kling-3'), true);
+  assert.equal(kling.ok, true);
+  assert.equal(kling.resolution, '720p');
+});
+
+test('text templates normalize video model duration and aspect ratio', () => {
+  const textTemplate = { ...template('vertical-hook'), referenceMode: 'text', duration: '14s', aspectRatio: '1:1' };
+  const veo = resolveCanvasTemplateSettings(textTemplate, definition('veo-3.1-lite'), true);
+  assert.equal(veo.ok, true);
+  assert.equal(veo.duration, '8s');
+  assert.equal(veo.aspectRatio, '16:9');
+  assert.equal(resolveCanvasTemplateSettings(textTemplate, definition('minimax-h3'), true).reason, 'reference-mode');
+});
 
 test('canvas normalizes video lifecycle and preserves lineage fields', () => {
   const job = normalizeVideoGenerationJob({
