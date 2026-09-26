@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createImageGeneration,
   loadImageModels,
+  IMAGE_MODEL_OPTIONS,
+  type ImageModelId,
+  type ImageModel,
   readImageGenerationHistory,
   refreshImageGeneration,
   type ImageGeneration,
@@ -15,6 +18,8 @@ import {
 } from '@/src/lib/image-generation';
 import { failedImageGenerationFromRefresh, isTerminalImageGenerationRefreshError } from '@/src/lib/image-generation-state';
 import { VideoGenerationClientError } from '@/src/lib/video-generation';
+import { getSession } from '@/src/lib/auth';
+import { accountStorageScope } from '@/src/lib/account-storage';
 
 const SIZE_OPTIONS: Array<{ value: ImageGenerationSize; label: string }> = [
   { value: '1:1', label: '1:1 · 方形' },
@@ -67,6 +72,8 @@ export default function ImageGenerationPanel({
   notify: (message: string) => void;
 }) {
   const [prompt, setPrompt] = useState('');
+  const [selectedModel, setSelectedModel] = useState<ImageModelId>('gpt-image-2');
+  const [availableModels, setAvailableModels] = useState<ImageModel[]>([]);
   const [size, setSize] = useState<ImageGenerationSize>('16:9');
   const [resolution, setResolution] = useState<ImageGenerationResolution>('2k');
   const [task, setTask] = useState<ImageGeneration | null>(null);
@@ -78,6 +85,9 @@ export default function ImageGenerationPanel({
   const [modelCheckVersion, setModelCheckVersion] = useState(0);
   const completionNotified = useRef<string | null>(null);
   const pollingHandle = useRef<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const scopeActive = () => mounted.current && accountStorageScope(getSession()) === storageScope;
 
   useEffect(() => {
     if (!open) return;
@@ -87,21 +97,23 @@ export default function ImageGenerationPanel({
       setModelReason('');
       void loadImageModels().then(models => {
         if (cancelled) return;
-        const model = models.find(item => item.id === 'gpt-image-2');
+        setAvailableModels(models);
+        const model = models.find(item => item.id === selectedModel);
         if (!model?.enabled) {
           setModelState('blocked');
-          setModelReason(model?.reason || (zh ? 'GPT-Image-2 尚未配置完成。' : 'GPT-Image-2 is not configured yet.'));
+          setModelReason(model?.reason || (zh ? '所选图片模型尚未配置完成。' : 'The selected image model is not configured yet.'));
           return;
         }
         setModelState('ready');
       }).catch(cause => {
         if (cancelled) return;
         setModelState('blocked');
+        setAvailableModels([]);
         setModelReason(clientMessage(cause, zh));
       });
     }, 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [modelCheckVersion, open, zh]);
+  }, [modelCheckVersion, open, selectedModel, storageScope, zh]);
 
   useEffect(() => {
     if (!open || task) return;
@@ -178,7 +190,7 @@ export default function ImageGenerationPanel({
     if (!task || task.status !== 'completed' || !task.imageAssetId || !task.imageUrl) return;
     if (completionNotified.current === task.taskId) return;
     completionNotified.current = task.taskId;
-    notify(zh ? 'GPT-Image-2 图片已生成并保存到私有工作区。' : 'GPT-Image-2 image generated and saved to your private workspace.');
+    notify(zh ? '图片已生成并保存到私有工作区。' : 'Image generated and saved to your private workspace.');
   }, [notify, task, zh]);
 
   if (!open) return null;
@@ -186,6 +198,7 @@ export default function ImageGenerationPanel({
   const busy = submitting || task?.status === 'queued' || task?.status === 'processing';
   const restore = async (item: ImageGeneration) => {
     if (busy) return;
+    setSelectedModel(item.model);
     if (item.prompt) setPrompt(item.prompt);
     if (item.size) setSize(item.size);
     if (item.resolution) setResolution(item.resolution);
@@ -215,34 +228,38 @@ export default function ImageGenerationPanel({
     }
   };
   const generate = async () => {
-    if (!prompt.trim() || busy) return;
+    if (!scopeActive() || !prompt.trim() || busy || modelState !== 'ready' || !availableModels.find(item => item.id === selectedModel)?.enabled) return;
+    if (!window.confirm(zh ? `使用 ${selectedModel} 生成图片？本次会提交服务方任务，可能产生费用。` : `Generate an image with ${selectedModel}? This submits a provider task and charges may apply.`)) return;
+    if (!scopeActive()) return;
     setSubmitting(true);
     setError('');
     setTask(null);
     pollingHandle.current = null;
     completionNotified.current = null;
     try {
-      const next = await createImageGeneration({ prompt: prompt.trim(), size, resolution });
+      const next = await createImageGeneration({ model: selectedModel, prompt: prompt.trim(), size, resolution });
+      if (!scopeActive()) return;
       if (next.taskId.startsWith('i1.')) pollingHandle.current = next.taskId;
       setTask(next);
     } catch (cause) {
-      setError(clientMessage(cause, zh));
+      if (scopeActive()) setError(clientMessage(cause, zh));
     } finally {
-      setSubmitting(false);
+      if (scopeActive()) setSubmitting(false);
     }
   };
 
   return <div className="image-generation-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <aside className="image-generation-panel" role="dialog" aria-modal="true" aria-labelledby="image-generation-title">
       <header className="image-generation-panel-head">
-        <div><span>{zh ? 'AI 创作工具' : 'AI CREATION TOOL'}</span><h2 id="image-generation-title">{zh ? 'AI 生图' : 'AI image generation'}</h2><small>GPT-Image-2 · {zh ? '异步生成' : 'Async generation'}</small></div>
+        <div><span>{zh ? 'AI 创作工具' : 'AI CREATION TOOL'}</span><h2 id="image-generation-title">{zh ? 'AI 生图' : 'AI image generation'}</h2><small>GPT Image · {zh ? '异步生成' : 'Async generation'}</small></div>
         <button type="button" className="image-generation-close" onClick={onClose} aria-label={zh ? '关闭 AI 生图' : 'Close AI image generation'}>×</button>
       </header>
       <div className={'image-generation-readiness is-' + modelState} role={modelState === 'blocked' ? 'status' : undefined}>
         <span aria-hidden="true">{modelState === 'ready' ? '✓' : modelState === 'checking' ? '…' : '!'}</span>
-        <p>{modelState === 'ready' ? (zh ? 'GPT-Image-2 已就绪，可以生成并自动保存到当前账号。' : 'GPT-Image-2 is ready. Results will be saved to the current account.') : modelState === 'checking' ? (zh ? '正在检查图片模型与账号权限…' : 'Checking image model and account access…') : modelReason}</p>
+        <p>{modelState === 'ready' ? (zh ? '所选图片模型已就绪，结果会保存到当前账号。' : 'Selected image model is ready. Results will be saved to the current account.') : modelState === 'checking' ? (zh ? '正在检查图片模型与账号权限…' : 'Checking image model and account access…') : modelReason}</p>
         {modelState === 'blocked' && <button type="button" onClick={() => setModelCheckVersion(value => value + 1)}>{zh ? '重新检查' : 'Check again'}</button>}
       </div>
+      <label className="image-generation-field"><span>{zh ? '生图模型' : 'Image model'}</span><select value={selectedModel} disabled={busy} onChange={event => { setSelectedModel(event.target.value as ImageModelId); setModelState('checking'); }}>{IMAGE_MODEL_OPTIONS.map(item => <option key={item.id} value={item.id} disabled={!availableModels.find(model => model.id === item.id)?.enabled}>{item.label}{!availableModels.find(model => model.id === item.id)?.enabled ? (zh ? ' · 未就绪' : ' · Unavailable') : ''}</option>)}</select></label>
       <label className="image-generation-field"><span>{zh ? '描述你要生成的画面' : 'Describe the image'}</span><textarea value={prompt} maxLength={2000} rows={5} onChange={event => setPrompt(event.target.value)} placeholder={zh ? '例如：暖色胶片质感的东京街角，雨后反光，人物站在霓虹灯下…' : 'For example: a warm filmic Tokyo street after rain, a person under neon lights…'} /></label>
       <div className="image-generation-options">
         <label className="image-generation-field"><span>{zh ? '画面比例' : 'Aspect ratio'}</span><select value={size} onChange={event => setSize(event.target.value as ImageGenerationSize)}>{SIZE_OPTIONS.map(option => <option value={option.value} key={option.value}>{zh ? option.label : option.value}</option>)}</select></label>

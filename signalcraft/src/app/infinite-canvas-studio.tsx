@@ -6,6 +6,7 @@ import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardE
 import dynamic from 'next/dynamic';
 import type { AccountSession } from '@/src/lib/auth';
 import { getSession } from '@/src/lib/auth';
+import { CANVAS_TEXT_MODEL_OPTIONS, loadCanvasTextModels, generateCanvasText, type CanvasTextModel, type CanvasTextModelId } from '@/src/lib/canvas-text-generation';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
 import { CANVAS_TEMPLATES, resolveCanvasTemplateSettings, type CanvasTemplate } from '@/src/lib/canvas-templates';
@@ -54,6 +55,8 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
   const [ready, setReady] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [models, setModels] = useState<VideoModel[]>([]);
+  const [textModels, setTextModels] = useState<CanvasTextModel[]>([]);
+  const [textModelError, setTextModelError] = useState('');
   const [accessError, setAccessError] = useState('');
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -117,6 +120,14 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     let cancelled = false;
     loadVideoModels().then(next => { if (!cancelled) { setModels(next); setAccessError(''); } })
       .catch(cause => { if (!cancelled) { setModels([]); setAccessError(message(cause)); } });
+    return () => { cancelled = true; };
+  }, [account, retry]);
+
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    loadCanvasTextModels().then(next => { if (!cancelled) { setTextModels(next); setTextModelError(''); } })
+      .catch(cause => { if (!cancelled) { setTextModels([]); setTextModelError(message(cause)); } });
     return () => { cancelled = true; };
   }, [account, retry]);
 
@@ -194,6 +205,19 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     patchProject(activeId, current => ({ ...current, view: { ...current.view, scale }, nodes: [...current.nodes, node] }));
     setSelected(node.id); setPalette(false); return node;
   };
+  const generateText = async (node: InfiniteCanvasNode) => {
+    if (!account || !node.text.trim() || !node.textModel || !textModels.find(item => item.id === node.textModel)?.enabled || busyRef.current.has(node.id)) return;
+    if (!window.confirm(copy(`使用 ${node.textModel} 生成文本？本次可能产生服务方费用，原文会保留，结果供你确认。`, `Generate text with ${node.textModel}? Provider charges may apply. Your original text will be kept for review.`))) return;
+    const projectId = activeId; const guard = attemptGuard();
+    changeBusy(node.id, true);
+    try {
+      const result = await guard.run(() => generateCanvasText(node.textModel!, node.text.trim()));
+      patchNode(projectId, node.id, { textResult: result.text });
+      setStatus(copy('文本已生成，点击“采用结果”后才会用于连线。', 'Text generated. Choose Use result to apply it to connections.'));
+    } catch (cause) { if (mounted.current) setStatus(message(cause)); }
+    finally { if (mounted.current) changeBusy(node.id, false); }
+  };
+
   const deleteNode = (id: string) => {
     const node = project.nodes.find(item => item.id === id);
     if (busyRef.current.has(id) || node?.runs.some(run => !terminal(run.state))) {
@@ -432,7 +456,15 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
             <small>{node.assetName || copy(node.kind === 'image' ? 'JPG / PNG / WEBP · 20MB 以内' : 'MP3 / WAV · 15MB 以内', node.kind === 'image' ? 'JPG / PNG / WEBP · Up to 20MB' : 'MP3 / WAV · Up to 15MB')}</small>
             <label className="infinite-upload">{busy.includes(node.id) ? copy('上传中…', 'Uploading…') : copy('选择文件', 'Choose file')}<input type="file" disabled={busy.includes(node.id)} accept={node.kind === 'image' ? 'image/jpeg,image/png,image/webp' : 'audio/mpeg,audio/wav,audio/x-wav'} onChange={event => { const file = event.target.files?.[0]; if (file) void upload(node, file); event.target.value = ''; }} /></label>
             {node.assetId && <button type="button" onClick={() => setRetry(value => value + 1)}>{copy('刷新预览', 'Refresh preview')}</button>}
-          </div> : <div className="infinite-text-body"><textarea aria-label={copy(`${node.title}内容`, `${node.title} content`)} placeholder={copy(node.kind === 'storyboard' ? '写下场景、镜头和动作…' : '双击这里开始创作…', 'Write your ideas here…')} value={node.text} maxLength={12000} onChange={event => patchNode(activeId, node.id, { text: event.target.value })} /></div>}
+          </div> : <div className="infinite-text-body">
+            {node.kind === 'text' && <label className="infinite-text-model">{copy('文本模型', 'Text model')}<select value={node.textModel || ''} disabled={busy.includes(node.id)} onChange={event => patchNode(activeId, node.id, { textModel: event.target.value as CanvasTextModelId || null })}><option value="">{copy('选择模型', 'Choose model')}</option>{CANVAS_TEXT_MODEL_OPTIONS.map(item => <option value={item.id} key={item.id} disabled={!textModels.find(model => model.id === item.id)?.enabled}>{item.label}{!textModels.find(model => model.id === item.id)?.enabled ? copy(' · 未就绪', ' · Unavailable') : ''}</option>)}</select></label>}
+            <textarea aria-label={copy(`${node.title}内容`, `${node.title} content`)} placeholder={copy(node.kind === 'storyboard' ? '写下场景、镜头和动作…' : '写下内容，也可以描述希望模型生成什么…', 'Write text or describe what you want the model to write…')} value={node.text} maxLength={12000} onChange={event => patchNode(activeId, node.id, { text: event.target.value })} />
+            {node.kind === 'text' && <>
+              {textModelError && <small role="status">{textModelError}</small>}
+              <div className="infinite-text-actions"><button type="button" onClick={() => setRetry(value => value + 1)}>{copy('检查模型', 'Check models')}</button><button type="button" className="infinite-primary" disabled={!node.text.trim() || !textModels.find(item => item.id === node.textModel)?.enabled || busy.includes(node.id)} onClick={() => void generateText(node)}>{busy.includes(node.id) ? copy('生成中…', 'Generating…') : copy('生成文本', 'Generate text')}</button></div>
+              {node.textResult && <div className="infinite-text-result"><small>{copy('生成结果 · 原文仍保留', 'Generated result · Original kept')}</small><textarea readOnly aria-label={copy('文本生成结果', 'Generated text result')} value={node.textResult} /><button type="button" disabled={busy.includes(node.id)} onClick={() => patchNode(activeId, node.id, { text: node.textResult, textResult: '' })}>{copy('采用结果', 'Use result')}</button></div>}
+            </>}
+          </div>}
           {project.edges.filter(edge => edge.target === node.id).length > 0 && <details className="infinite-connections"><summary>{copy('已连接素材', 'Connected inputs')}</summary>{project.edges.filter(edge => edge.target === node.id).map(edge => <div key={edge.id}>
             <span>{portLabels[edge.port][zh ? 0 : 1]} · {project.nodes.find(item => item.id === edge.source)?.title}</span><button type="button" onClick={() => patchProject(activeId, current => ({ ...current, edges: current.edges.filter(item => item.id !== edge.id) }))}>{copy('断开', 'Disconnect')}</button>
           </div>)}</details>}
@@ -470,11 +502,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
         {drawer === 'help' && <><p>{copy('拖动空白处平移；滚轮平移；Ctrl / ⌘ + 滚轮缩放。拖动节点标题移动节点。', 'Drag the background or scroll to pan. Ctrl / ⌘ + scroll zooms. Drag a node heading to move it.')}</p><p>{copy('从素材右侧圆点拖到视频输入圆点，或依次点击两个圆点连接。展开「已连接素材」可断开。', 'Drag from a media output to a video input, or click the two ports in order. Expand Connected inputs to disconnect.')}</p><p>{copy('Tab 选择控件；节点标题获得焦点后用方向键移动，Delete 删除；Esc 关闭面板或取消连线。生成需手动点击并确认费用。', 'Tab selects controls. With a heading focused, use arrows to move and Delete to remove. Esc closes panels or cancels a connection. Generation requires a click and cost confirmation.')}</p></>}
       </aside>
     </div>}
-    {imageOpen && <div onClickCapture={event => {
-      if ((event.target as HTMLElement).closest('.image-generation-submit') && !window.confirm(copy('确认提交 AI 生图任务？积分由现有生图服务核算。', 'Submit an AI image task? Credits are calculated by the existing image service.'))) {
-        event.preventDefault(); event.stopPropagation();
-      }
-    }}><ImageGenerationPanel open zh={zh} storageScope={accountStorageScope(account)} onClose={() => setImageOpen(false)} notify={notify}
+    {imageOpen && <div><ImageGenerationPanel key={accountStorageScope(account)} open zh={zh} storageScope={accountStorageScope(account)} onClose={() => setImageOpen(false)} notify={notify}
       onUseAsReference={(assetId, imageUrl) => { const projectId = activeId, node = addNode('image'); setImageOpen(false);
         void dimensions(imageUrl).then(size => { patchNode(projectId, node.id, { assetId, assetName: copy('AI 生成图片', 'AI generated image'), ...size }); setPreviews(current => ({ ...current, [assetId]: imageUrl })); })
           .catch(() => { patchNode(projectId, node.id, { assetId, assetName: 'AI image' }); setStatus(copy('图片尺寸未读取，请刷新预览后再生成视频。', 'Image dimensions unavailable. Refresh the preview before generating video.')); }); }} /></div>}

@@ -18,6 +18,19 @@ test('new projects are blank and have no paid jobs or selected model', () => {
   assert.equal(createInfiniteNode('v', 'video', 0, 0).video.model, null);
 });
 
+test('text model choice and review result survive draft restore without replacing the original', () => {
+  const project = createInfiniteProject('text-project');
+  const node = createInfiniteNode('text', 'text', 0, 0);
+  Object.assign(node, { text: 'Original', textModel: 'claude-opus-5-5', textResult: 'Generated' });
+  project.nodes.push(node);
+  const saved = normalizeInfiniteWorkspace({ version: 1, activeProjectId: project.id, projects: [project] });
+  assert.equal(saved.projects[0].nodes[0].text, 'Original');
+  assert.equal(saved.projects[0].nodes[0].textModel, 'claude-opus-5-5');
+  assert.equal(saved.projects[0].nodes[0].textResult, 'Generated');
+  node.textModel = 'untrusted-model';
+  assert.equal(normalizeInfiniteWorkspace({ version: 1, projects: [project] }).projects[0].nodes[0].textModel, null);
+});
+
 test('account switch during delayed asset or model checks cancels before any submission', async () => {
   for (const stage of ['asset', 'model']) {
     let scope = 'account-a'; let submissions = 0; let release;

@@ -8,13 +8,19 @@ import { scopedStorageKey } from './account-storage';
 export type ImageGenerationSize = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 export type ImageGenerationResolution = '1k' | '2k' | '4k';
 export type ImageGenerationStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export const IMAGE_MODEL_OPTIONS = [
+  { id: 'gpt-image-2', label: 'GPT Image 2' },
+  { id: 'gpt-image-2.5-flare', label: 'GPT Image 2.5 · Flare' },
+  { id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 · Sunburst' },
+] as const;
+export type ImageModelId = typeof IMAGE_MODEL_OPTIONS[number]['id'];
 
 const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const satisfies readonly ImageGenerationSize[];
 const IMAGE_RESOLUTIONS = ['1k', '2k', '4k'] as const satisfies readonly ImageGenerationResolution[];
 
 export type ImageGeneration = {
   provider: string;
-  model: 'gpt-image-2';
+  model: ImageModelId;
   taskId: string;
   prompt: string | null;
   size: ImageGenerationSize | null;
@@ -32,7 +38,7 @@ export type ImageGeneration = {
 };
 
 export type ImageModel = {
-  id: 'gpt-image-2';
+  id: ImageModelId;
   provider: string;
   enabled: boolean;
   async: boolean;
@@ -62,7 +68,7 @@ function historyItem(value: unknown): ImageGeneration | null {
   const resolution = IMAGE_RESOLUTIONS.includes(candidate.resolution as ImageGenerationResolution) ? candidate.resolution! : null;
   return {
     provider: typeof candidate.provider === 'string' ? candidate.provider : 'apimart',
-    model: 'gpt-image-2',
+    model: IMAGE_MODEL_OPTIONS.some(item => item.id === candidate.model) ? candidate.model! : 'gpt-image-2',
     taskId,
     prompt,
     size,
@@ -148,6 +154,7 @@ export async function loadImageModels() {
 }
 
 export async function createImageGeneration(input: {
+  model?: ImageModelId;
   prompt: string;
   size: ImageGenerationSize;
   resolution: ImageGenerationResolution;

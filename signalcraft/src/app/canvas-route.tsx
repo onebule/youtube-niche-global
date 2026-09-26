@@ -45,8 +45,8 @@ export default function CanvasRoute(props: Props) {
       <button className="infinite-return-button" type="button" onClick={() => switchMode('infinite')}>
         ← {props.locale === 'zh' ? '返回无限画布' : 'Back to infinite canvas'}
       </button>
-      <VideoCanvasStudio {...props} />
+      <VideoCanvasStudio key={preferenceKey} {...props} />
     </div>;
   }
-  return <InfiniteCanvasStudio {...props} onLegacy={() => switchMode('legacy')} />;
+  return <InfiniteCanvasStudio key={preferenceKey} {...props} onLegacy={() => switchMode('legacy')} />;
 }
