@@ -99,8 +99,10 @@ export type ShortformRadarResponse = {
       market: string;
       retrievedRows?: number | null;
       sampledRows: number;
+      excludedFromShortformRows?: number | null;
       currentRows: number;
       latestCapturedAt: string | null;
+      latestSourceCapturedAt?: string | null;
       failed: boolean;
       failureReason?: 'STORE_UNCONFIGURED' | 'REQUEST_FAILED' | 'INVALID_STORE_RESPONSE' | null;
     }>;
@@ -109,8 +111,11 @@ export type ShortformRadarResponse = {
     language?: string;
     historyDays: number;
     currentWindowDays: number;
+    captureFreshnessHours?: number;
+    capturedAfter?: string;
     currentRows: number;
     historicalRows: number;
+    excludedFromShortformRows?: number;
     undatedRows?: number;
     latestCapturedAt: string | null;
     marketSampleLimit?: number;

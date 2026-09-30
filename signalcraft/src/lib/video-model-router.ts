@@ -147,7 +147,7 @@ const IMAGE_TO_VIDEO_CAPABILITIES: VideoModelCapability = {
 export const VIDEO_MODEL_REGISTRY: VideoModelDefinition[] = [
   {
     id: 'minimax-h3', label: 'MiniMax H3', provider: 'minimax', adapterStatus: 'ready',
-    capabilities: { ...IMAGE_TO_VIDEO_CAPABILITIES, referenceVideo: true, audio: true },
+    capabilities: { ...IMAGE_TO_VIDEO_CAPABILITIES, textToVideo: true, referenceVideo: true, audio: true },
     strengths: { character: 86, characterConsistency: 88, motion: 74, expression: 84, camera: 72, physics: 68, realism: 82, reference: 88, audio: 70 },
     limitations: ['输入图片尺寸和画幅受 Provider 规则约束'], duration: { minSeconds: 4, maxSeconds: 15 }, resolutions: ['768P', '2K'], aspectRatios: ['9:16', '16:9', '1:1'],
     pricing: { perSecond: null, resolutionMultipliers: RESOLUTION_MULTIPLIERS, note: '由服务端积分配置提供' }, speed: 72, reliability: 78, qualityFloor: 68,
@@ -239,7 +239,7 @@ function qualityScore(model: VideoModelDefinition, analysis: ShotAnalysis) {
 
 function rejectionReason(model: VideoModelDefinition, analysis: ShotAnalysis) {
   if (model.adapterStatus !== 'ready') return model.adapterStatus === 'planned' ? 'Provider adapter 待接入' : '服务端模型未就绪';
-  if (analysis.referenceMode === 'text' && model.id !== 'veo-3.1-lite') return '当前镜头是纯文本生视频，模型不支持该模式';
+  if (analysis.referenceMode === 'text' && !model.capabilities.textToVideo) return '当前镜头是纯文本生视频，模型不支持该模式';
   if (analysis.referenceMode !== 'text' && model.id === 'veo-3.1-lite') return 'Veo 3.1 Lite 不支持参考图片';
   if (analysis.referenceMode === 'omni' && !model.capabilities.omniReference) return '不支持 Omni 多图参考';
   if (analysis.startFrame && !model.capabilities.imageToVideo) return '不支持图生视频';
