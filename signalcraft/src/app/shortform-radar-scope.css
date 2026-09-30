@@ -6,6 +6,7 @@
 .shortform-radar-coverage-metrics small{color:var(--muted);font-size:10px;font-weight:750;letter-spacing:.02em}
 .shortform-radar-coverage-metrics strong{overflow-wrap:anywhere;color:var(--ink);font-size:15px;line-height:1.35}
 .shortform-radar-coverage p{margin:0;color:var(--muted);font-size:11px;line-height:1.65}
+.shortform-radar-capture-health{margin:0 0 15px;padding:9px 11px;border-left:2px solid var(--cyan);background:var(--soft);color:var(--ink);font-size:12px;line-height:1.65}
 .shortform-radar-coverage details{padding-top:9px;border-top:1px solid var(--line)}
 .shortform-radar-coverage summary{width:max-content;max-width:100%;color:var(--cyan);font-size:12px;font-weight:750;cursor:pointer}
 .shortform-radar-market-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}

@@ -37,7 +37,10 @@ test('text templates normalize video model duration and aspect ratio', () => {
   assert.equal(veo.ok, true);
   assert.equal(veo.duration, '8s');
   assert.equal(veo.aspectRatio, '16:9');
-  assert.equal(resolveCanvasTemplateSettings(textTemplate, definition('minimax-h3'), true).reason, 'reference-mode');
+  const h3 = resolveCanvasTemplateSettings(textTemplate, definition('minimax-h3'), true);
+  assert.equal(h3.ok, true);
+  assert.equal(h3.duration, '14s');
+  assert.equal(h3.aspectRatio, '1:1');
 });
 
 test('canvas normalizes video lifecycle and preserves lineage fields', () => {

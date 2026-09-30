@@ -67,4 +67,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
   };
 }
 
-export default function Page(){ return <SignalCraftApp />; }
+export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
+  const segments = (await params).slug ?? [];
+  return <SignalCraftApp initialPath={`/${segments.join('/')}`} />;
+}
