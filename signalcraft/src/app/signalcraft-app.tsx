@@ -443,8 +443,8 @@ function Ideas({state,setState,locale}:{state:Persisted;setState:React.Dispatch<
 function Prompts({toast}:{toast:(t:string)=>void}){return <main className="app-page"><PageIntro label="提示词库" title="把研究方法沉淀成可复用模板。" body="提示词会在真实 AI 接入后带入选题上下文。"/>{promptTemplates.length?<div className="prompt-list">{promptTemplates.map(p=><article key={p.id}><div><span className="tag">{p.category}</span><h2>{p.title}</h2><p>{p.body}</p><small>{p.version} · {p.enabled?'已启用':'已停用'}</small></div><button className="primary" onClick={()=>navigator.clipboard?.writeText(p.body).then(()=>toast('提示词模板已复制'))}>复制模板</button></article>)}</div>:<Empty title="暂无自定义提示词" body="创建与保存提示词需要账户数据库接入，当前不展示预置内容。"/>}</main>}
 function Settings(){return <main className="app-page"><PageIntro label="配置" title="为真实服务保留安全边界。" body="敏感密钥仅配置在服务器环境变量中，不会显示在浏览器或保存到当前设备。"/><div className="settings-grid"><section><h2>数据源</h2><p><b>YouTube Data API</b> · 服务端已连接</p><p>公开发现、排行榜、趋势雷达与频道诊断均读取当前公开数据。</p></section><section><h2>刷新计划</h2><p>公开榜单可在页面打开时按需读取；后台采集任务每天 02:00 UTC（北京时间约 10:00）由 Vercel Cron 执行。</p><p>采集结果写入数据库后，管理台会显示最近运行、完成时间和候选视频数量；未配置服务器密钥时任务不会运行。</p></section><section><h2>团队成员</h2><p>登录、成员角色与跨设备数据同步需要接入认证和数据库。</p></section><section><h2>通知渠道</h2><p>规则暂存当前设备；邮件、Slack、Webhook 尚未启用。</p></section></div></main>}
 
-export default function SignalCraftApp({ initialPath = '/' }: { initialPath?: string } = {}) {
-  const path = useBrowserPath(initialPath);
+export default function SignalCraftApp() {
+  const path = useBrowserPath();
   const [theme, setTheme] = useState('light');
   const { account, clearAccount, locale, setLocale } = useBrowserSession();
   const [state, setState] = usePersisted(account);

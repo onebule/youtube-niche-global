@@ -2,27 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { fetchOpportunityRadar } from '@/src/lib/opportunity-radar';
-import { fetchShortformOpportunityRadar, type ShortformRadarResponse } from '@/src/lib/shortform-opportunity-radar';
+import { fetchShortformOpportunityRadar } from '@/src/lib/shortform-opportunity-radar';
 import { fromRadar, type ContentFormat, type OpportunityUnit } from '@/src/lib/product-convergence';
 import { buildNicheEvaluationHref, readNicheAnalysisContext, saveNicheAnalysisContext, type NicheAnalysisContext } from '@/src/lib/niche-analysis-context';
 import { clientErrorMessage } from '@/src/lib/client-error';
 import type { DataAvailability } from '@/src/lib/evidence-contract';
 import { CreatorProfileFilters, DiscoveryCards, GoldenPath, useCreatorProfile } from './discovery-workbench';
 import type { UiLocale } from '@/src/lib/ui-language';
-import './shortform-radar-scope.css';
 
 export function discoveryNavigate(path: string) {
   window.history.pushState({}, '', path); window.dispatchEvent(new Event('signalcraft:navigate')); window.scrollTo({ top: 0 });
 }
-type Feed = { loading: boolean; units: OpportunityUnit[]; error: string | null; gaps: string[]; scope?: string; availability?: DataAvailability; shortformScope?: ShortformRadarResponse['dataScope']; requestScope?: string };
+type Feed = { loading: boolean; units: OpportunityUnit[]; error: string | null; gaps: string[]; scope?: string; availability?: DataAvailability };
 const empty: Feed = { loading: true, units: [], error: null, gaps: [] };
 export default function ConvergedRadar({ locale, format }: { locale: UiLocale; format: ContentFormat | 'ALL' }) {
   const zh = locale === 'zh'; const { profile } = useCreatorProfile();
   const [market, setMarket] = useState('all'); const [timeWindow, setWindow] = useState<'7d' | '14d' | '30d'>('14d');
   const [ready, setReady] = useState(false); const [refresh, setRefresh] = useState(0);
-  const [storedFeeds, setFeeds] = useState<Record<ContentFormat, Feed>>({ SHORTS: empty, LONG_FORM: empty });
-  // Hide the previous Shorts scope in the same render as a market switch.
-  const feeds = { ...storedFeeds, SHORTS: storedFeeds.SHORTS.requestScope === `${market}:${timeWindow}` ? storedFeeds.SHORTS : empty };
+  const [feeds, setFeeds] = useState<Record<ContentFormat, Feed>>({ SHORTS: empty, LONG_FORM: empty });
   useEffect(() => {
     const params = new URLSearchParams(window.location.search); const previous = params.get('restore') === '1' ? readNicheAnalysisContext() : null;
     const rawMarket = previous?.returnState?.filters?.market || params.get('market');
@@ -45,8 +42,8 @@ export default function ConvergedRadar({ locale, format }: { locale: UiLocale; f
           // recommendation gate. Keep them visible only as a review queue.
           const observations = data.available ? (data.observations || []).map(event => fromRadar(event, scope)) : [];
           const units = [...new Map([...qualified, ...observations].map(unit => [unit.id, unit])).values()];
-          setFeeds(previous => ({ ...previous, [scope]: { loading: false, units, requestScope: `${market}:${timeWindow}`, error: !data.available ? (zh ? '当前数据服务没有可用结果。' : 'The data service has no available result.') : null, gaps: data.gaps, availability: data.dataAvailability, shortformScope: scope === 'SHORTS' ? data.dataScope as ShortformRadarResponse['dataScope'] : undefined, scope: zh ? `本期 ${data.dataScope.currentRows} 条样本 · 历史 ${data.dataScope.historicalRows} 条 · 最近采集 ${data.dataScope.latestCapturedAt || '未提供'}` : `Current rows: ${data.dataScope.currentRows} · Historical rows: ${data.dataScope.historicalRows} · Captured: ${data.dataScope.latestCapturedAt || 'unavailable'}` } }));
-        }).catch(error => { if (!controller.signal.aborted) setFeeds(previous => ({ ...previous, [scope]: { ...empty, loading: false, requestScope: `${market}:${timeWindow}`, error: clientErrorMessage(error, zh ? '暂时无法读取市场数据。' : 'Market data is unavailable.') } })); });
+          setFeeds(previous => ({ ...previous, [scope]: { loading: false, units, error: !data.available ? (zh ? '当前数据服务没有可用结果。' : 'The data service has no available result.') : null, gaps: data.gaps, availability: data.dataAvailability, scope: zh ? `本期 ${data.dataScope.currentRows} 条样本 · 历史 ${data.dataScope.historicalRows} 条 · 最近采集 ${data.dataScope.latestCapturedAt || '未提供'}` : `Current rows: ${data.dataScope.currentRows} · Historical rows: ${data.dataScope.historicalRows} · Captured: ${data.dataScope.latestCapturedAt || 'unavailable'}` } }));
+        }).catch(error => { if (!controller.signal.aborted) setFeeds(previous => ({ ...previous, [scope]: { ...empty, loading: false, error: clientErrorMessage(error, zh ? '暂时无法读取市场数据。' : 'Market data is unavailable.') } })); });
       }
     }, 0);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -62,22 +59,8 @@ export default function ConvergedRadar({ locale, format }: { locale: UiLocale; f
   const visible: ContentFormat[] = format === 'ALL' ? ['SHORTS', 'LONG_FORM'] : [format];
   return <main className="discovery-workbench"><GoldenPath step={0} locale={locale}/><header className="discovery-header"><span className="discovery-eyebrow">DISCOVERY · {zh ? '从第一条有效信号开始' : 'START WITH A GROUNDED SIGNAL'}</span><h1>{zh ? '找到值得你验证的方向。' : 'Find a direction worth testing.'}</h1><p>{zh ? '先看市场证据，再判断对你是否适合。推荐只是起点，不是收益或成功承诺。' : 'Start with market evidence, then assess your fit. Recommendations are starting points, not promises.'}</p></header>
     <nav className="discovery-format" aria-label={zh ? '内容形态' : 'Content format'}>{[['ALL', '全部', 'All'], ['SHORTS', 'Shorts', 'Shorts'], ['LONG_FORM', '长视频', 'Long-form']].map(([key, cn, en]) => <button key={key} type="button" aria-pressed={format === key} onClick={() => discoveryNavigate(`${key === 'ALL' ? '/radar/all' : key === 'SHORTS' ? '/short-radar' : '/radar'}?market=${encodeURIComponent(market)}&window=${timeWindow}`)}>{zh ? cn : en}</button>)}</nav>
-    <CreatorProfileFilters locale={locale}/><div className="discovery-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={e => setMarket(e.target.value)}><option value="all">{zh ? '全部采集市场' : 'All collected markets'}</option>{(format === 'SHORTS' ? ['US', 'GB', 'JP', 'BR', 'MX', 'IN', 'ID'] : ['US', 'GB', 'IN', 'JP', 'BR']).map(value => <option key={value}>{value}</option>)}</select></label><label>{zh ? '观察窗口' : 'Window'}<select value={timeWindow} onChange={e => setWindow(e.target.value as typeof timeWindow)}><option value="7d">7 {zh ? '天' : 'days'}</option><option value="14d">14 {zh ? '天' : 'days'}</option><option value="30d">30 {zh ? '天' : 'days'}</option></select></label><button type="button" onClick={() => setRefresh(value => value + 1)} disabled={!ready || visible.some(scope => feeds[scope].loading)}>{zh ? '更新证据' : 'Refresh evidence'}</button></div>
+    <CreatorProfileFilters locale={locale}/><div className="discovery-toolbar"><label>{zh ? '市场' : 'Market'}<select value={market} onChange={e => setMarket(e.target.value)}><option value="all">{zh ? '全部采集市场' : 'All collected markets'}</option>{['US', 'GB', 'IN', 'JP', 'BR'].map(value => <option key={value}>{value}</option>)}</select></label><label>{zh ? '观察窗口' : 'Window'}<select value={timeWindow} onChange={e => setWindow(e.target.value as typeof timeWindow)}><option value="7d">7 {zh ? '天' : 'days'}</option><option value="14d">14 {zh ? '天' : 'days'}</option><option value="30d">30 {zh ? '天' : 'days'}</option></select></label><button type="button" onClick={() => setRefresh(value => value + 1)} disabled={!ready || visible.some(scope => feeds[scope].loading)}>{zh ? '更新证据' : 'Refresh evidence'}</button></div>
     {format === 'ALL' && <p className="discovery-caption">{zh ? '全部仅汇总浏览：Shorts 与长视频独立取数、独立筛选，不混排原始评分。选择形态后查看个性化推荐。' : 'All is an aggregate browser: independent feeds and thresholds, no cross-format score ranking. Choose a format for recommendations.'}</p>}
-    {visible.map(scope => <section key={scope} className="discovery-format-feed"><h2>{scope === 'SHORTS' ? 'Shorts' : (zh ? '长视频' : 'Long-form')}</h2>{feeds[scope].scope && !feeds[scope].loading && <p className="discovery-caption">{feeds[scope].scope}</p>}
-      {scope === 'SHORTS' && feeds[scope].shortformScope && !feeds[scope].loading && <section className="shortform-radar-coverage" aria-label={zh ? 'Shorts 数据质量' : 'Shorts data quality'}>
-        <span className="shortform-radar-coverage-kicker">SHORTS · {zh ? '采集范围与可信度' : 'COLLECTION SCOPE AND QUALITY'}</span>
-        <div className="shortform-radar-coverage-metrics">
-          <div><small>{zh ? '抓取新鲜度' : 'CAPTURE FRESHNESS'}</small><strong>{feeds[scope].shortformScope.captureFreshnessHours ? (zh ? `最近 ${feeds[scope].shortformScope.captureFreshnessHours} 小时` : `Last ${feeds[scope].shortformScope.captureFreshnessHours} hours`) : (zh ? '接口未提供' : 'Not supplied')}</strong></div>
-          <div><small>{zh ? '本期有效样本（去重）' : 'CURRENT DEDUPED SAMPLES'}</small><strong>{feeds[scope].shortformScope.currentRows}</strong></div>
-          <div><small>{zh ? '短视频筛选未通过（分市场合计）' : 'EXCLUDED BEFORE DEDUP'}</small><strong>{feeds[scope].shortformScope.excludedFromShortformRows ?? '—'}</strong></div>
-          <div><small>{zh ? '有合格样本的地区' : 'REGIONS WITH SAMPLES'}</small><strong>{feeds[scope].shortformScope.coveredMarkets?.join(' · ') || (zh ? '暂无' : 'None')}</strong></div>
-        </div>
-        <p>{zh ? '地区表示搜索及采集范围，不是观众所在地；筛选未通过的记录可能是长视频或缺少格式证据，不代表这些地区没有 Shorts。' : 'Region is the search and collection scope, not audience location. Excluded records may be long videos or lack format evidence; this does not establish that a region has no Shorts.'}</p>
-        {feeds[scope].shortformScope.failedMarkets?.length ? <p className="shortform-radar-coverage-warning" role="status">{zh ? `读取失败：${feeds[scope].shortformScope.failedMarkets.join('、')}。不会借用其他地区的数据。` : `Read failed: ${feeds[scope].shortformScope.failedMarkets.join(', ')}. No other region is substituted.`}</p> : null}
-        {feeds[scope].shortformScope.sourceConfigured === false ? <p className="shortform-radar-coverage-warning" role="status">{zh ? '数据存储未配置，无法判断市场是否有样本。' : 'The data store is not configured; market coverage cannot be assessed.'}</p> : null}
-        {feeds[scope].shortformScope.marketCoverage?.length ? <details><summary>{zh ? '查看各地区样本与抓取时间' : 'Region-level coverage and capture times'}</summary><div className="shortform-radar-market-list">{feeds[scope].shortformScope.marketCoverage.map(item => <span key={item.market}>{item.market} · {item.failed ? (zh ? '读取失败' : 'Read failed') : `${item.currentRows} ${zh ? '条本期样本' : 'current'}`} · {zh ? '读取' : 'retrieved'} {item.retrievedRows ?? '—'} · {zh ? '筛除' : 'excluded'} {item.excludedFromShortformRows ?? '—'} · {item.latestSourceCapturedAt || item.latestCapturedAt || (zh ? '无抓取时间' : 'No capture time')}</span>)}</div><p>{zh ? '地区数量在跨地区去重前计算；全部市场统计按视频 ID 去重。' : 'Region counts precede cross-region deduplication; combined counts deduplicate video IDs.'}</p></details> : null}
-      </section>}
-      {feeds[scope].loading ? <p role="status">{zh ? '正在读取真实市场证据…' : 'Loading market evidence…'}</p> : feeds[scope].error ? <p role="alert" className="discovery-error">{feeds[scope].error}</p> : <DiscoveryCards units={feeds[scope].units} format={scope} locale={locale} onEvaluate={evaluate} marketOnly={format === 'ALL'}/>}<details className="decision-evidence"><summary>{zh ? '数据范围、来源与缺口' : 'Data scope, sources and gaps'}</summary>{feeds[scope].availability?.calibration?.status === 'CALIBRATION_REQUIRED' && <p>{zh ? '阈值状态：待校准。分数只用于当前样本排序，不构成收益承诺。' : 'Threshold status: calibration required. Scores sort this sample only.'}</p>}{feeds[scope].availability?.sources.map(source => <p key={source.id}><b>{source.id}</b> · {source.state} · {source.dataClass}：{source.note}</p>)}{feeds[scope].gaps.map(gap => <p key={gap}>{gap}</p>)}<p>{zh ? '只读公开数据。没有每卡 AI 请求，也不会自动启动制作。' : 'Public data only. No per-card AI calls or automatic production.'}</p></details></section>)}
+    {visible.map(scope => <section key={scope} className="discovery-format-feed"><h2>{scope === 'SHORTS' ? 'Shorts' : (zh ? '长视频' : 'Long-form')}</h2>{feeds[scope].scope && !feeds[scope].loading && <p className="discovery-caption">{feeds[scope].scope}</p>}{feeds[scope].loading ? <p role="status">{zh ? '正在读取真实市场证据…' : 'Loading market evidence…'}</p> : feeds[scope].error ? <p role="alert" className="discovery-error">{feeds[scope].error}</p> : <DiscoveryCards units={feeds[scope].units} format={scope} locale={locale} onEvaluate={evaluate} marketOnly={format === 'ALL'}/>}<details className="decision-evidence"><summary>{zh ? '数据范围、来源与缺口' : 'Data scope, sources and gaps'}</summary>{feeds[scope].availability?.calibration?.status === 'CALIBRATION_REQUIRED' && <p>{zh ? '阈值状态：待校准。分数只用于当前样本排序，不构成收益承诺。' : 'Threshold status: calibration required. Scores sort this sample only.'}</p>}{feeds[scope].availability?.sources.map(source => <p key={source.id}><b>{source.id}</b> · {source.state} · {source.dataClass}：{source.note}</p>)}{feeds[scope].gaps.map(gap => <p key={gap}>{gap}</p>)}<p>{zh ? '只读公开数据。没有每卡 AI 请求，也不会自动启动制作。' : 'Public data only. No per-card AI calls or automatic production.'}</p></details></section>)}
   </main>;
 }

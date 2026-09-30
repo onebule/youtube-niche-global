@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInfiniteProject, createInfiniteNode, normalizeInfiniteWorkspace, connectInfiniteNodes,
-  connectionIssue, collectInfiniteGenerationInputs, upsertInfiniteVideoResult, usableInfiniteModel, infiniteAssetIssue,
+  connectionIssue, collectInfiniteGenerationInputs, usableInfiniteModel, infiniteAssetIssue,
   createInfiniteAttemptGuard, infiniteAssetKey } from '../src/lib/infinite-canvas-graph.ts';
 
 function graph() {
@@ -81,7 +81,6 @@ test('invalid port, media types, self loops and nonexistent nodes are rejected',
 test('text mode ignores stale image and audio inputs while merging connected prompt', () => {
   let p = graph();
   p.nodes[4].video.mode = 'text';
-  p.nodes[4].video.modeSelection = 'manual';
   p = connectInfiniteNodes(p, 'a', 'n1', 'n4', 'reference');
   p = connectInfiniteNodes(p, 'b', 'n3', 'n4', 'reference');
   p = connectInfiniteNodes(p, 'c', 'n2', 'n4', 'prompt');
@@ -94,61 +93,11 @@ test('text mode ignores stale image and audio inputs while merging connected pro
 });
 test('start/end needs a real uploaded start and rejects an unuploaded end', () => {
   let p = graph();
-  p.nodes[4].video.modeSelection = 'manual';
   assert.ok(collectInfiniteGenerationInputs(p, 'n4').errors.length);
   p = connectInfiniteNodes(p, 'a', 'n0', 'n4', 'start');
   assert.deepEqual(collectInfiniteGenerationInputs(p, 'n4').errors, []);
   p = connectInfiniteNodes(p, 'b', 'n1', 'n4', 'end');
   assert.ok(collectInfiniteGenerationInputs(p, 'n4').errors.some(e => e.includes('尾帧')));
-});
-test('explicit end port never silently becomes the start frame', () => {
-  let p = graph();
-  p.nodes[1].assetId = 'end';
-  p = connectInfiniteNodes(p, 'tail', 'n1', 'n4', 'end');
-  const input = collectInfiniteGenerationInputs(p, 'n4');
-  assert.equal(input.mode, 'start-end');
-  assert.equal(input.startFrame, null);
-  assert.equal(input.endFrame.assetId, 'end');
-  assert.ok(input.errors.some(error => error.includes('首帧')));
-});
-test('automatic mode resolves zero, one, two and three images from incoming edges', () => {
-  let p = graph();
-  p.nodes[1].assetId = 'end';
-  p.nodes.push({ ...createInfiniteNode('n5', 'image', 0, 0), assetId: 'third' });
-  assert.equal(collectInfiniteGenerationInputs(p, 'n4').mode, 'text');
-  assert.equal(usableInfiniteModel({ id: 'minimax-h3', enabled: true }, 'text'), true);
-  p = connectInfiniteNodes(p, 'a', 'n0', 'n4', 'reference');
-  assert.equal(collectInfiniteGenerationInputs(p, 'n4').startFrame.assetId, 'start');
-  assert.equal(collectInfiniteGenerationInputs(p, 'n4').mode, 'start-end');
-  p = connectInfiniteNodes(p, 'b', 'n1', 'n4', 'reference');
-  assert.equal(collectInfiniteGenerationInputs(p, 'n4').endFrame.assetId, 'end');
-  p = connectInfiniteNodes(p, 'c', 'n5', 'n4', 'reference');
-  assert.equal(collectInfiniteGenerationInputs(p, 'n4').mode, 'omni');
-  assert.deepEqual(collectInfiniteGenerationInputs(p, 'n4').referenceFrames.map(node => node.assetId), ['start', 'end', 'third']);
-});
-test('successful generation creates one reusable result and preserves chain after restore', () => {
-  let p = graph();
-  p.nodes[4].video.model = 'minimax-h3';
-  p.nodes.push(createInfiniteNode('next', 'video', 1100, 0));
-  p.nodes.find(node => node.id === 'next').video.model = 'minimax-h3';
-  const run = { jobId: 'job-1', generationId: 'gen-1', model: 'minimax-h3', prompt: 'Camera moves forward',
-    state: 'SUCCEEDED', videoAssetId: 'asset-1', error: null, submittedAt: new Date().toISOString() };
-  p.nodes[4].video.prompt = 'Later edit should not rewrite result';
-  p = upsertInfiniteVideoResult(p, 'n4', run);
-  p = upsertInfiniteVideoResult(p, 'n4', run);
-  const result = p.nodes.find(node => node.kind === 'video-result');
-  assert.equal(p.nodes.filter(node => node.kind === 'video-result').length, 1);
-  assert.deepEqual(result.output, { type: 'video', assetId: 'asset-1', generationId: 'gen-1', model: 'minimax-h3', prompt: 'Camera moves forward' });
-  assert.ok(p.edges.some(edge => edge.source === 'n4' && edge.target === result.id));
-  p = connectInfiniteNodes(p, 'chain', result.id, 'next', 'reference');
-  assert.equal(collectInfiniteGenerationInputs(p, 'next').mode, 'omni');
-  assert.deepEqual(collectInfiniteGenerationInputs(p, 'next').referenceVideos.map(node => node.assetId), ['asset-1']);
-  assert.ok(connectionIssue(p, result.id, 'n4', 'reference'));
-  const restored = normalizeInfiniteWorkspace({ version: 1, activeProjectId: p.id, projects: [p] }).projects[0];
-  assert.equal(restored.nodes.find(node => node.id === result.id).output.assetId, 'asset-1');
-  assert.equal(restored.nodes.find(node => node.id === result.id).output.prompt, 'Camera moves forward');
-  assert.equal(restored.edges.length, 2);
-  assert.deepEqual(collectInfiniteGenerationInputs(restored, 'next').referenceVideos.map(node => node.assetId), ['asset-1']);
 });
 test('reference audio is rejected for adapters without reference audio support', () => {
   let p = graph(); p.nodes[4].video.mode = 'omni'; p.nodes[4].video.model = 'seedance-2'; p.nodes[3].assetId = 'audio';

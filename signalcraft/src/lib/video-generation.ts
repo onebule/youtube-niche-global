@@ -37,11 +37,6 @@ export type GenerationSpecV2 = {
   rawPrompt: string;
   normalizedPrompt: string;
   references: GenerationSpecReference[];
-  startImageAssetId?: string | null;
-  endImageAssetId?: string | null;
-  referenceImageAssetIds?: string[];
-  referenceVideoAssetIds?: string[];
-  referenceAudioAssetIds?: string[];
   generationGroupId: string | null;
   shotId: string | null;
   shotOrder: number | null;
@@ -253,8 +248,8 @@ export function preflightVideoGeneration(input: {
   if (input.model === 'veo-3.1-lite' && input.referenceMode !== 'text') {
     add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('Veo 3.1 Lite 只支持纯文本生视频，请切换参考模式。', 'Veo 3.1 Lite only supports text-to-video. Switch the reference mode.'));
   }
-  if (!['veo-3.1-lite', 'minimax-h3'].includes(input.model) && input.referenceMode === 'text') {
-    add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('当前模型不支持纯文本生视频。', 'This model does not support text-to-video.'));
+  if (input.model !== 'veo-3.1-lite' && input.referenceMode === 'text') {
+    add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('纯文本生视频当前仅支持 Veo 3.1 Lite。', 'Text-to-video is currently supported only by Veo 3.1 Lite.'));
   }
   if (input.referenceMode === 'omni' && !['minimax-h3', 'seedance-2', 'seedance-2-5'].includes(input.model)) {
     add('error', 'REFERENCE_MODE_UNSUPPORTED', copy('当前模型不支持所选参考模式。', 'This model does not support the selected reference mode.'));
@@ -471,14 +466,6 @@ export async function loadVideoModels() {
   return payload.models;
 }
 
-/** Sanitized server-side execution gate; no provider credentials are returned. */
-export async function loadVideoExecutionStates(): Promise<Record<string, string>> {
-  const payload = await request<{ contract?: { models?: { modelId?: string; executionReadiness?: { executionState?: string } }[] } }>('capabilities');
-  return Object.fromEntries((payload.contract?.models || [])
-    .filter(model => model.modelId)
-    .map(model => [model.modelId!, model.executionReadiness?.executionState || 'BLOCKED']));
-}
-
 export function buildGenerationSpecV2(input: {
   model: VideoModelId;
   prompt: string;
@@ -536,11 +523,6 @@ export function buildGenerationSpecV2(input: {
     rawPrompt: input.prompt.trim(),
     normalizedPrompt: input.prompt.trim(),
     references,
-    startImageAssetId: input.referenceMode === 'start-end' ? input.startImageAssetId || null : null,
-    endImageAssetId: input.referenceMode === 'start-end' ? input.endImageAssetId || null : null,
-    referenceImageAssetIds: input.referenceMode === 'omni' ? [...new Set(input.referenceImageAssetIds || [])] : [],
-    referenceVideoAssetIds: input.referenceMode === 'omni' ? [...new Set(input.referenceVideoAssetIds || [])] : [],
-    referenceAudioAssetIds: input.referenceMode === 'omni' ? [...new Set(input.referenceAudioAssetIds || [])] : [],
     generationGroupId,
     shotId,
     shotOrder,

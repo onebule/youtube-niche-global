@@ -8,6 +8,7 @@ const INITIAL_PATH = '/';
 const LOCALE_STORAGE_KEY = 'signalcraft-interface-locale';
 
 const getBrowserPath = () => (typeof window === 'undefined' ? INITIAL_PATH : window.location.pathname);
+const getServerPath = () => INITIAL_PATH;
 
 function subscribeToPathChange(onStoreChange: () => void) {
   window.addEventListener('popstate', onStoreChange);
@@ -20,8 +21,7 @@ function subscribeToPathChange(onStoreChange: () => void) {
 }
 
 /** Keeps client-only browser state behind one stable seam for the app shell. */
-export function useBrowserPath(initialPath = INITIAL_PATH) {
-  const getServerPath = useCallback(() => initialPath, [initialPath]);
+export function useBrowserPath() {
   return useSyncExternalStore(subscribeToPathChange, getBrowserPath, getServerPath);
 }
 

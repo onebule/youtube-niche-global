@@ -12,10 +12,10 @@ import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storag
 import { CANVAS_TEMPLATES, resolveCanvasTemplateSettings, type CanvasTemplate } from '@/src/lib/canvas-templates';
 import { VIDEO_MODEL_REGISTRY } from '@/src/lib/video-model-router';
 import { buildGenerationSpecV2, createManualGenerationJob, estimateVideoCredits, loadVideoAsset, loadVideoAssetUrl,
-  loadVideoModels, loadVideoExecutionStates, preflightVideoGeneration, refreshGenerationJob, uploadVideoInput, videoDurationOptions,
+  loadVideoModels, preflightVideoGeneration, refreshGenerationJob, uploadVideoInput, videoDurationOptions,
   VideoGenerationClientError, type VideoModel, type VideoModelId } from '@/src/lib/video-generation';
 import { collectInfiniteGenerationInputs, connectInfiniteNodes, createInfiniteNode, createInfiniteProject,
-  createInfiniteAttemptGuard, infiniteAssetKey, infiniteAssetIssue, infiniteModelSettings, normalizeInfiniteWorkspace, upsertInfiniteVideoResult, usableInfiniteModel,
+  createInfiniteAttemptGuard, infiniteAssetKey, infiniteAssetIssue, infiniteModelSettings, normalizeInfiniteWorkspace, usableInfiniteModel,
   type InfiniteCanvasNode, type InfiniteCanvasProject, type InfiniteCanvasWorkspace,
   type InfiniteInputPort, type InfiniteNodeKind, type InfiniteRun, type InfiniteVideoSettings } from '@/src/lib/infinite-canvas-graph';
 
@@ -23,7 +23,7 @@ const ImageGenerationPanel = dynamic(() => import('./image-generation-panel'));
 const uid = () => crypto.randomUUID();
 const nodeWidth = (node: InfiniteCanvasNode) => node.kind === 'video' ? 440 : 280;
 const terminal = (state: string) => ['SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT', 'UNKNOWN'].includes(state);
-const labels = { text: ['文本', 'Text'], image: ['图片', 'Image'], video: ['视频生成', 'Video'], 'video-result': ['视频结果', 'Video result'],
+const labels = { text: ['文本', 'Text'], image: ['图片', 'Image'], video: ['视频生成', 'Video'],
   audio: ['音频', 'Audio'], storyboard: ['分镜', 'Storyboard'], note: ['便签', 'Note'] };
 const portLabels = { prompt: ['提示词', 'Prompt'], start: ['首帧', 'Start'], end: ['尾帧', 'End'], reference: ['参考素材', 'Reference'] };
 const modeLabels = { text: ['文生视频', 'Text to video'], 'start-end': ['首尾帧', 'Start / end'], omni: ['全能参考', 'Omni reference'] };
@@ -40,17 +40,6 @@ async function dimensions(url: string) {
 }
 function frame(node: InfiniteCanvasNode | null) {
   return node ? { assetId: node.assetId, width: node.width || undefined, height: node.height || undefined } : null;
-}
-function verifiedCanvasModels(models: VideoModel[], states: Record<string, string>): VideoModel[] {
-  return models.map(model => model.id !== 'minimax-h3' ? model : {
-    ...model, enabled: Boolean(model.enabled && states[model.id] === 'EXECUTION_READY'),
-    reason: model.enabled && states[model.id] !== 'EXECUTION_READY'
-      ? states[model.id] === 'PROVIDER_AUTH_NOT_CONFIGURED' ? '服务端 APIMART_API_KEY 未配置。'
-        : states[model.id] === 'ACCESS_REQUIRED' ? '当前账号无视频生成权限。'
-          : states[model.id] === 'MODEL_DISABLED' ? '模型在服务端未启用。'
-            : '服务端尚未确认模型可执行，请稍后重试。'
-      : model.reason,
-  });
 }
 
 export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify, onLegacy }: Props) {
@@ -129,12 +118,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
-    Promise.allSettled([loadVideoModels(), loadVideoExecutionStates()]).then(([modelResult, gateResult]) => {
-      if (cancelled) return;
-      if (modelResult.status === 'rejected') throw modelResult.reason;
-      setModels(verifiedCanvasModels(modelResult.value, gateResult.status === 'fulfilled' ? gateResult.value : {}));
-      setAccessError('');
-    })
+    loadVideoModels().then(next => { if (!cancelled) { setModels(next); setAccessError(''); } })
       .catch(cause => { if (!cancelled) { setModels([]); setAccessError(message(cause)); } });
     return () => { cancelled = true; };
   }, [account, retry]);
@@ -182,8 +166,8 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     const next: InfiniteRun = { ...run, state: result.job.state, generationId: result.generation?.id || run.generationId,
       videoAssetId: result.generation?.videoAssetId || result.output?.internalAssetId || run.videoAssetId,
       error: result.job.error?.message || result.generation?.errorMessage || null };
-    patchProject(projectId, current => upsertInfiniteVideoResult({ ...current, nodes: current.nodes.map(node => node.id === nodeId
-      ? { ...node, runs: node.runs.map(item => item.jobId === run.jobId ? next : item) } : node) }, nodeId, next));
+    patchProject(projectId, current => ({ ...current, nodes: current.nodes.map(node => node.id === nodeId
+      ? { ...node, runs: node.runs.map(item => item.jobId === run.jobId ? next : item) } : node) }));
   }, [patchProject]);
   useEffect(() => {
     if (!account || !ready) return;
@@ -346,8 +330,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     try {
       const size = node.kind === 'image' ? await guard.run(() => dimensions(url)) : undefined;
       const assetId = await guard.run(() => uploadVideoInput(file, size, node.kind === 'audio' ? 'audio' : 'image'));
-      patchNode(projectId, node.id, { assetId, output: node.kind === 'image' ? { type: 'image', assetId } : null,
-        assetName: file.name, width: size?.width || null, height: size?.height || null });
+      patchNode(projectId, node.id, { assetId, assetName: file.name, width: size?.width || null, height: size?.height || null });
       const preview = await guard.run(() => loadVideoAssetUrl(assetId)); setPreviews(current => ({ ...current, [assetId]: preview }));
     } catch (cause) { setStatus(message(cause)); } finally { URL.revokeObjectURL(url); changeBusy(node.id, false); }
   };
@@ -357,46 +340,43 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     const current = workspaceRef.current.projects.find(item => item.id === activeId)!;
     const input = collectInfiniteGenerationInputs(current, node.id);
     const settings = node.video, model = models.find(item => item.id === settings.model);
-    const preflight = preflightVideoGeneration({ language: locale, model: settings.model!, modelReady: usableInfiniteModel(model, input.mode),
-      prompt: input.prompt, referenceMode: input.mode, startFrame: frame(input.startFrame), endFrame: frame(input.endFrame),
-      referenceFrames: input.referenceFrames.map(item => frame(item)!), referenceVideoCount: input.referenceVideos.length,
-      referenceAudioCount: input.referenceAudios.length,
+    const preflight = preflightVideoGeneration({ language: locale, model: settings.model!, modelReady: usableInfiniteModel(model, settings.mode),
+      prompt: input.prompt, referenceMode: settings.mode, startFrame: frame(input.startFrame), endFrame: frame(input.endFrame),
+      referenceFrames: input.referenceFrames.map(item => frame(item)!), referenceAudioCount: input.referenceAudios.length,
       duration: settings.duration, aspectRatio: settings.aspectRatio, resolution: settings.resolution });
     const errors = [...input.errors, ...preflight.errors.map(item => item.message)];
     if (errors.length) { setStatus(errors[0]); return; }
     changeBusy(node.id, true); const actionId = uid(), projectId = current.id;
     const guard = attemptGuard();
     try {
-      const media = [input.startFrame, input.endFrame, ...input.referenceFrames, ...input.referenceVideos, ...input.referenceAudios].filter((item): item is InfiniteCanvasNode => Boolean(item));
+      const media = [input.startFrame, input.endFrame, ...input.referenceFrames, ...input.referenceAudios].filter((item): item is InfiniteCanvasNode => Boolean(item));
       const checked = await guard.run(() => Promise.all(media.map(async item => ({ node: item, asset: await loadVideoAsset(item.assetId!) }))));
       for (const { node: source, asset } of checked) {
         const issue = infiniteAssetIssue(source, asset); if (issue) throw new VideoGenerationClientError(issue, 422);
         if (source.kind === 'image') {
           const validated = preflightVideoGeneration({ language: locale, model: settings.model!, modelReady: true, prompt: input.prompt,
-            referenceMode: input.mode, startFrame: { assetId: source.assetId, width: asset.width!, height: asset.height! },
+            referenceMode: settings.mode, startFrame: { assetId: source.assetId, width: asset.width!, height: asset.height! },
             referenceFrames: [{ assetId: source.assetId, width: asset.width!, height: asset.height! }], duration: settings.duration,
             aspectRatio: settings.aspectRatio, resolution: settings.resolution });
           if (!validated.ok) throw new VideoGenerationClientError(validated.errors[0].message, 422);
         }
       }
-      const [latestModels, executionStates] = await guard.run(() => Promise.all([loadVideoModels(), loadVideoExecutionStates()]));
-      const latestModel = verifiedCanvasModels(latestModels, executionStates).find(item => item.id === settings.model);
-      if (!usableInfiniteModel(latestModel, input.mode)) throw new VideoGenerationClientError(copy('所选模型当前模式不可用，请检查服务端配置或选择其他模型。', 'The selected model is unavailable for this mode. Check server configuration or choose another model.'), 422);
+      const latestModel = (await guard.run(() => loadVideoModels())).find(item => item.id === settings.model);
+      if (!usableInfiniteModel(latestModel, settings.mode)) throw new VideoGenerationClientError(copy('锁定模型当前不可用，请重新选择。', 'The locked model is unavailable. Choose a model again.'), 422);
       const cost = estimateVideoCredits(latestModel, settings.duration);
       if (!window.confirm(copy(`提交 ${settings.model} 视频任务？${latestModel?.ownerUnlimited ? '当前账号免积分。' : cost === null ? '费用以服务端核算为准。' : `预计消耗 ${cost} 积分。`}`, `Submit a ${settings.model} video task? ${latestModel?.ownerUnlimited ? 'No credits for this account.' : cost === null ? 'The server will calculate the cost.' : `Estimated cost: ${cost} credits.`}`))) return;
-      const generationSpec = buildGenerationSpecV2({ model: settings.model!, prompt: input.prompt, referenceMode: input.mode,
+      const generationSpec = buildGenerationSpecV2({ model: settings.model!, prompt: input.prompt, referenceMode: settings.mode,
         startImageAssetId: input.startFrame?.assetId, endImageAssetId: input.endFrame?.assetId,
-        referenceImageAssetIds: input.referenceFrames.map(item => item.assetId!), referenceVideoAssetIds: input.referenceVideos.map(item => item.assetId!),
-        referenceAudioAssetIds: input.referenceAudios.map(item => item.assetId!),
+        referenceImageAssetIds: input.referenceFrames.map(item => item.assetId!), referenceAudioAssetIds: input.referenceAudios.map(item => item.assetId!),
         duration: settings.duration, aspectRatio: settings.aspectRatio, resolution: settings.resolution },
       { requestId: actionId, idempotencyKey: actionId, generationGroupId: projectId, shotId: node.id, userConfirmed: true });
       guard.assert();
       const result = await guard.run(() => createManualGenerationJob({ specificationId: `canvas:${projectId}:shot:${node.id}:spec-v1`,
         generationUnitId: `canvas:${projectId}:shot:${node.id}:unit:${actionId}`, routingDecisionId: `canvas:${projectId}:shot:${node.id}:model:${settings.model}`,
         selectedModelId: settings.model!, executionMode: 'MANUAL_SINGLE_JOB', clientActionId: `canvas:${projectId}:${node.id}:${actionId}`, generationSpec }));
-      const run: InfiniteRun = { jobId: result.job.id, generationId: result.generation?.id || null, model: settings.model!, prompt: input.prompt, state: result.job.state,
+      const run: InfiniteRun = { jobId: result.job.id, generationId: result.generation?.id || null, state: result.job.state,
         videoAssetId: result.generation?.videoAssetId || null, error: result.job.error?.message || null, submittedAt: new Date().toISOString() };
-      patchProject(projectId, value => upsertInfiniteVideoResult({ ...value, nodes: value.nodes.map(item => item.id === node.id ? { ...item, runs: [...item.runs, run] } : item) }, node.id, run));
+      patchProject(projectId, value => ({ ...value, nodes: value.nodes.map(item => item.id === node.id ? { ...item, runs: [...item.runs, run] } : item) }));
       notify(copy('视频任务已提交，可在节点中查看进度。', 'Video task submitted. Track it in this node.'));
     } catch (cause) { setStatus(message(cause)); } finally { changeBusy(node.id, false); }
   };
@@ -407,7 +387,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
       Boolean(models.find(item => item.id === target.video!.model)?.enabled)) : null;
     if (resolved && !resolved.ok) { setStatus(copy('模板与锁定模型不兼容，请手动选择其他模型或模板。', 'This preset is incompatible with the locked model. Choose another model or preset.')); return; }
     const node = target || addNode('video');
-    patchNode(activeId, node.id, { video: { ...node.video!, mode: template.referenceMode, modeSelection: 'manual', prompt: zh ? template.promptZh : template.promptEn,
+    patchNode(activeId, node.id, { video: { ...node.video!, mode: template.referenceMode, prompt: zh ? template.promptZh : template.promptEn,
       duration: resolved?.ok ? resolved.duration : template.duration, aspectRatio: resolved?.ok ? resolved.aspectRatio : template.aspectRatio,
       resolution: resolved?.ok ? resolved.resolution : template.resolution } });
     setDrawer(null); setSelected(node.id);
@@ -470,11 +450,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
               {run.videoAssetId && previews[run.videoAssetId] && <video src={previews[run.videoAssetId]} controls preload="metadata" />}
               {run.error && <p role="alert">{run.error}</p>}
             </div>)}</div>}
-          </> : node.kind === 'video-result' ? <div className="infinite-media-body">
-            {node.assetId && previews[node.assetId] ? <video src={previews[node.assetId]} controls preload="metadata" />
-              : <div className="infinite-media-empty">{copy('正在读取私有视频结果…', 'Loading private video result…')}</div>}
-            <small>{node.assetName} · {node.output?.model}</small>
-          </div> : node.kind === 'image' || node.kind === 'audio' ? <div className="infinite-media-body">
+          </> : node.kind === 'image' || node.kind === 'audio' ? <div className="infinite-media-body">
             {node.assetId && previews[node.assetId] ? node.kind === 'image' ? <img src={previews[node.assetId]} alt={node.assetName || node.title} /> : <audio controls src={previews[node.assetId]} />
               : <div className="infinite-media-empty">{node.assetId ? copy('预览尚未加载，点击刷新重新读取', 'Preview unavailable. Refresh to reload') : copy('上传素材后连接到视频节点', 'Upload media, then connect to a video node')}</div>}
             <small>{node.assetName || copy(node.kind === 'image' ? 'JPG / PNG / WEBP · 20MB 以内' : 'MP3 / WAV · 15MB 以内', node.kind === 'image' ? 'JPG / PNG / WEBP · Up to 20MB' : 'MP3 / WAV · Up to 15MB')}</small>
@@ -505,7 +481,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
       <button type="button" title={copy('生成记录', 'Generation history')} aria-label={copy('生成记录', 'Generation history')} onClick={() => setDrawer('history')}>◷</button>
       <button type="button" title={copy('AI 生图', 'AI image generation')} aria-label={copy('AI 生图', 'AI image generation')} onClick={() => account ? setImageOpen(true) : onSignIn()}>✧</button>
     </nav>
-    {palette && <section className="infinite-palette" aria-label={copy('添加节点', 'Add node')}><b>{copy('添加节点', 'Add node')}</b>{(Object.keys(labels) as InfiniteNodeKind[]).filter(kind => kind !== 'video-result').map(kind => <button key={kind} type="button" onClick={() => addNode(kind)}>{labels[kind][zh ? 0 : 1]}<span>＋</span></button>)}<small>{copy('3D、视频重绘和视频编辑暂未接入。', '3D, video repaint and video editing are not connected yet.')}</small></section>}
+    {palette && <section className="infinite-palette" aria-label={copy('添加节点', 'Add node')}><b>{copy('添加节点', 'Add node')}</b>{(Object.keys(labels) as InfiniteNodeKind[]).map(kind => <button key={kind} type="button" onClick={() => addNode(kind)}>{labels[kind][zh ? 0 : 1]}<span>＋</span></button>)}<small>{copy('3D、视频重绘和视频编辑暂未接入。', '3D, video repaint and video editing are not connected yet.')}</small></section>}
     <footer className="infinite-viewbar"><button type="button" onClick={fit}>{copy('适应画布', 'Fit view')}</button><button type="button" aria-label={copy('缩小', 'Zoom out')} onClick={() => zoom(1 / 1.2)}>−</button><span>{Math.round(project.view.scale * 100)}%</span><button type="button" aria-label={copy('放大', 'Zoom in')} onClick={() => zoom(1.2)}>＋</button><button type="button" onClick={() => setDrawer('help')}>?</button></footer>
     {connection && <div className="infinite-hint" role="status">{copy('点击视频节点的输入圆点完成连接 · Esc 取消', 'Click a video input port to connect · Esc to cancel')}</div>}
     {(!account || accessError || status || saveError) && <div className="infinite-status" role="status">
@@ -529,8 +505,8 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     </div>}
     {imageOpen && <div><ImageGenerationPanel key={accountStorageScope(account)} open zh={zh} storageScope={accountStorageScope(account)} onClose={() => setImageOpen(false)} notify={notify}
       onUseAsReference={(assetId, imageUrl) => { const projectId = activeId, node = addNode('image'); setImageOpen(false);
-        void dimensions(imageUrl).then(size => { patchNode(projectId, node.id, { assetId, output: { type: 'image', assetId }, assetName: copy('AI 生成图片', 'AI generated image'), ...size }); setPreviews(current => ({ ...current, [assetId]: imageUrl })); })
-          .catch(() => { patchNode(projectId, node.id, { assetId, output: { type: 'image', assetId }, assetName: 'AI image' }); setStatus(copy('图片尺寸未读取，请刷新预览后再生成视频。', 'Image dimensions unavailable. Refresh the preview before generating video.')); }); }} /></div>}
+        void dimensions(imageUrl).then(size => { patchNode(projectId, node.id, { assetId, assetName: copy('AI 生成图片', 'AI generated image'), ...size }); setPreviews(current => ({ ...current, [assetId]: imageUrl })); })
+          .catch(() => { patchNode(projectId, node.id, { assetId, assetName: 'AI image' }); setStatus(copy('图片尺寸未读取，请刷新预览后再生成视频。', 'Image dimensions unavailable. Refresh the preview before generating video.')); }); }} /></div>}
   </main>;
 }
 
@@ -547,13 +523,12 @@ function VideoEditor({ node, project, models, zh, busy, onChange, onGenerate, pr
   const model = models.find(item => item.id === settings.model);
   const definition = VIDEO_MODEL_REGISTRY.find(item => item.id === settings.model);
   const inputs = collectInfiniteGenerationInputs(project, node.id);
-  const preflight = preflightVideoGeneration({ language: zh ? 'zh' : 'en', model: settings.model || 'auto', modelReady: usableInfiniteModel(model, inputs.mode),
-    prompt: inputs.prompt, referenceMode: inputs.mode, startFrame: frame(inputs.startFrame), endFrame: frame(inputs.endFrame),
-    referenceFrames: inputs.referenceFrames.map(item => frame(item)!), referenceVideoCount: inputs.referenceVideos.length,
-    referenceAudioCount: inputs.referenceAudios.length,
+  const preflight = preflightVideoGeneration({ language: zh ? 'zh' : 'en', model: settings.model || 'auto', modelReady: usableInfiniteModel(model, settings.mode),
+    prompt: inputs.prompt, referenceMode: settings.mode, startFrame: frame(inputs.startFrame), endFrame: frame(inputs.endFrame),
+    referenceFrames: inputs.referenceFrames.map(item => frame(item)!), referenceAudioCount: inputs.referenceAudios.length,
     duration: settings.duration, aspectRatio: settings.aspectRatio, resolution: settings.resolution });
   const issues = [...inputs.errors, ...preflight.errors.map(item => item.message)];
-  const media = [inputs.startFrame, inputs.endFrame, ...inputs.referenceFrames, ...inputs.referenceVideos, ...inputs.referenceAudios].filter((item): item is InfiniteCanvasNode => Boolean(item));
+  const media = [inputs.startFrame, inputs.endFrame, ...inputs.referenceFrames, ...inputs.referenceAudios].filter((item): item is InfiniteCanvasNode => Boolean(item));
   for (const source of media) if (source.assetId && assetIssues[infiniteAssetKey(project.id, source.id)] !== null) issues.push(assetIssues[infiniteAssetKey(project.id, source.id)] || copy('正在核对素材可用性…', 'Checking media availability…'));
   if (definition && !definition.aspectRatios.includes(settings.aspectRatio)) issues.push(copy('当前模型不支持所选画幅。', 'This model does not support the selected aspect ratio.'));
   const credits = estimateVideoCredits(model, settings.duration);
@@ -564,19 +539,14 @@ function VideoEditor({ node, project, models, zh, busy, onChange, onGenerate, pr
   return <div className="infinite-video-editor">
     <div className="infinite-video-preview">{inputs.startFrame?.assetId && previews[inputs.startFrame.assetId]
       ? <img src={previews[inputs.startFrame.assetId]} alt={copy('首帧预览', 'Start frame preview')} /> : <><span>▷</span><small>{copy('连接素材，描述动作，生成视频', 'Connect media, describe motion, generate a video')}</small></>}</div>
-    <div className="infinite-mode-tabs"><button type="button" aria-pressed={settings.modeSelection === 'auto'} onClick={() => onChange({ modeSelection: 'auto' })}>{copy('自动识别', 'Auto')}</button>{(Object.keys(modeLabels) as InfiniteVideoSettings['mode'][]).map(mode => <button key={mode} type="button" aria-pressed={settings.modeSelection === 'manual' && settings.mode === mode} onClick={() => onChange({ mode, modeSelection: 'manual' })}>{modeLabels[mode][zh ? 0 : 1]}</button>)}</div>
-    <div className="infinite-input-summary" role="status"><b>{copy('已连接素材', 'Connected media')} · {modeLabels[inputs.mode][zh ? 0 : 1]}</b>
-      <small>{inputs.mode === 'text' ? copy('无媒体输入', 'No media input') : inputs.mode === 'start-end'
-        ? `${copy('首帧', 'Start')}: ${inputs.startFrame?.assetName || inputs.startFrame?.title || copy('未连接', 'None')}${inputs.endFrame ? ` · ${copy('尾帧', 'End')}: ${inputs.endFrame.assetName || inputs.endFrame.title}` : ''}`
-        : `${inputs.referenceFrames.length} ${copy('张参考图', 'reference images')} · ${inputs.referenceVideos.length} ${copy('个参考视频', 'reference videos')}`}</small></div>
-    <button type="button" className="infinite-model-button" aria-expanded={modelOpen} onClick={() => setModelOpen(value => !value)}><span>✧ {definition?.label || copy('选择模型', 'Choose model')}</span><small>{!settings.model ? copy('待选择', 'Not selected') : !model?.enabled ? copy('未配置或不可用', 'Not ready') : usableInfiniteModel(model, inputs.mode) ? copy('已就绪', 'Ready') : copy('不支持当前模式', 'Unsupported mode')} ▾</small></button>
-    {settings.model && !model?.enabled && <small role="status">{model?.reason || copy('无法读取服务端模型状态，请重试。', 'Cannot read server model status. Retry.')}</small>}
+    <div className="infinite-mode-tabs">{(Object.keys(modeLabels) as InfiniteVideoSettings['mode'][]).map(mode => <button key={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onChange({ mode })}>{modeLabels[mode][zh ? 0 : 1]}</button>)}</div>
+    <button type="button" className="infinite-model-button" aria-expanded={modelOpen} onClick={() => setModelOpen(value => !value)}><span>✧ {definition?.label || copy('选择模型', 'Choose model')}</span><small>{settings.model ? copy('已锁定', 'Locked') : copy('待选择', 'Not selected')} ▾</small></button>
     {modelOpen && <div className="infinite-model-picker" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setModelOpen(false); } }}><input aria-label={copy('搜索模型', 'Search models')} placeholder={copy('搜索模型…', 'Search models…')} value={query} onChange={event => setQuery(event.target.value)} />
       <div><select aria-label={copy('服务方', 'Provider')} value={provider} onChange={event => setProvider(event.target.value)}><option value="all">{copy('全部服务方', 'All providers')}</option>{[...new Set(VIDEO_MODEL_REGISTRY.map(item => item.provider))].map(name => <option key={name}>{name}</option>)}</select>
       <select aria-label={copy('任务能力', 'Task capability')} value={task} onChange={event => setTask(event.target.value)}><option value="all">{copy('全部任务', 'All tasks')}</option>{(Object.keys(modeLabels) as InfiniteVideoSettings['mode'][]).map(mode => <option value={mode} key={mode}>{modeLabels[mode][zh ? 0 : 1]}</option>)}</select></div>
       {filtered.map(item => {
         const api = models.find(model => model.id === item.id);
-        const available = item.adapterStatus !== 'planned' && usableInfiniteModel(api, inputs.mode);
+        const available = item.adapterStatus !== 'planned' && usableInfiniteModel(api, settings.mode);
         return <button type="button" key={item.id} disabled={!available} title={!available ? api?.reason || copy('未就绪或不支持当前任务', 'Not ready or incompatible with this task') : item.label}
           onClick={() => { const id = item.id as Exclude<VideoModelId, 'auto'>; const defaults = infiniteModelSettings(id);
             onChange({ model: id, duration: defaults.duration, resolution: defaults.resolution,
