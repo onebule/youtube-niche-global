@@ -6,6 +6,7 @@ import type { AccountSession } from '@/src/lib/auth';
 import { accountStorageKey } from '@/src/lib/account-storage';
 import type { UiLocale } from '@/src/lib/ui-language';
 import InfiniteCanvasStudio from './infinite-canvas-studio';
+import CanvasTextChat from './canvas-text-chat';
 
 const VideoCanvasStudio = dynamic(() => import('./video-canvas-studio'));
 
@@ -40,13 +41,13 @@ export default function CanvasRoute(props: Props) {
   };
 
   if (!ready) return <main className="page" aria-live="polite">正在打开创作画布…</main>;
-  if (mode === 'legacy') {
-    return <div className="infinite-legacy-wrap">
+  return <>
+    {mode === 'legacy' ? <div className="infinite-legacy-wrap">
       <button className="infinite-return-button" type="button" onClick={() => switchMode('infinite')}>
         ← {props.locale === 'zh' ? '返回无限画布' : 'Back to infinite canvas'}
       </button>
       <VideoCanvasStudio key={preferenceKey} {...props} />
-    </div>;
-  }
-  return <InfiniteCanvasStudio key={preferenceKey} {...props} onLegacy={() => switchMode('legacy')} />;
+    </div> : <InfiniteCanvasStudio key={preferenceKey} {...props} onLegacy={() => switchMode('legacy')} />}
+    <CanvasTextChat key={`chat:${preferenceKey}`} account={props.account} locale={props.locale} onSignIn={props.onSignIn} />
+  </>;
 }
