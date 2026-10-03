@@ -66,7 +66,8 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
     catch (cause) { setErrorCode(cause instanceof Error ? cause.message : 'CHAT_INPUT'); return; }
     busy.current = true; setPending(question.trim()); setErrorCode(''); setCopied(null);
     const abort = new AbortController(); controller.current = abort;
-    const timer = setTimeout(() => abort.abort(), 55000);
+    // The gateway allows 45s for chat plus discovery, inside its 60s function.
+    const timer = setTimeout(() => abort.abort(), 65000);
     try {
       const result = await sendCanvasChat(selected, turns, abort.signal);
       if (!mounted.current || !currentAccount()) return;

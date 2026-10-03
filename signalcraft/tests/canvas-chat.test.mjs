@@ -36,6 +36,10 @@ test('only ready Claude models are selectable; errors are localized without upst
   assert.match(canvasChatError('TEAM_ONLY', true), /Team/);
   assert.match(canvasChatError('AUTH_REQUIRED', false), /Sign in/);
   assert.equal(canvasChatError('upstream-secret', true).includes('upstream-secret'), false);
+  assert.match(canvasChatError('AGENT_TIMEOUT', true), /Claude.*等待时间/);
+  assert.match(canvasChatError('AGENT_UPSTREAM_ERROR', true), /服务方拒绝/);
+  assert.match(canvasChatError('TEXT_OUTPUT_TRUNCATED', true), /长度上限/);
+  assert.match(canvasChatError('FINAL_CONTENT_MISSING', false), /no final answer/);
 });
 
 function mockSession(t) {
