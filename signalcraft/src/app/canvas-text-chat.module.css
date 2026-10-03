@@ -3,7 +3,7 @@
   --chat-teal: #0b756f; --chat-soft: #e7f5f0; --chat-coral: #d94a3b;
   color: var(--chat-ink); font: 13px/1.5 Arial, 'Microsoft YaHei', sans-serif; color-scheme: light;
 }
-.launcher { position: fixed; right: 22px; bottom: 24px; z-index: 51; width: 108px; height: 120px; padding: 0; border: 0; border-radius: 18px; background: transparent; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+.launcher { position: fixed; right: 22px; bottom: 24px; z-index: 49; width: 108px; height: 120px; padding: 0; border: 0; border-radius: 18px; background: transparent; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
 .launcher[data-dragging="true"] { cursor: grabbing; }
 .cat { width: 94px; height: 83px; flex-shrink: 0; overflow: visible; filter: drop-shadow(0 3px 7px #25323918); }
 .catBody { transform-origin: 50px 78px; animation: cat-breathe 4.5s ease-in-out infinite; }
