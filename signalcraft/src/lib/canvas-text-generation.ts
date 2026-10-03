@@ -30,7 +30,40 @@ export async function generateCanvasText(model: CanvasTextModelId, prompt: strin
 }
 
 export async function sendCanvasChat(model: CanvasTextModelId, messages: CanvasChatMessage[], signal?: AbortSignal) {
-  const { result } = await request<{ result: { model: CanvasTextModelId; text: string } }>('canvas-text-chat', { model, messages, userConfirmed: true }, signal);
+  const response = await fetch(`${ENDPOINT}/canvas-text-chat-long`, { method: 'POST', cache: 'no-store', signal,
+    headers: { ...authHeaders(), accept: 'application/x-ndjson', 'content-type': 'application/json' },
+    body: JSON.stringify({ model, messages, userConfirmed: true }) });
+  let result: { model: CanvasTextModelId; text: string } | undefined;
+  if (!response.ok || !response.headers.get('content-type')?.includes('application/x-ndjson')) {
+    const payload = await response.json();
+    if (!response.ok) throw new CanvasTextClientError('文本调用未完成。', payload?.code, response.status);
+    result = payload?.result;
+  } else {
+    if (!response.body) throw new CanvasTextClientError('文本服务响应不完整。', 'RESPONSE_INVALID');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', bytes = 0;
+    const consume = (line: string) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line);
+      if (event.type === 'error') throw new CanvasTextClientError('文本调用未完成。', event.code, event.status);
+      if (event.type === 'result') {
+        if (result) throw new CanvasTextClientError('文本服务响应无效。', 'RESPONSE_INVALID');
+        result = event.result;
+      } else if (event.type !== 'waiting') throw new CanvasTextClientError('文本服务响应无效。', 'RESPONSE_INVALID');
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        bytes += value?.byteLength || 0;
+        if (bytes > 160000) throw new CanvasTextClientError('文本服务响应过长。', 'RESPONSE_INVALID');
+        buffer += decoder.decode(value, { stream: !done });
+        let newline;
+        while ((newline = buffer.indexOf('\n')) >= 0) { consume(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1); }
+        if (done) { consume(buffer); break; }
+      }
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  }
   if (result?.model !== model || typeof result.text !== 'string' || !result.text.trim() || result.text.length > 12000) {
     throw new CanvasTextClientError('文本服务未返回可用的回答。', 'RESPONSE_INVALID');
   }

@@ -58,7 +58,7 @@ test('chat uses only the authenticated flat text route with complete history and
   const messages = nextCanvasChatMessages(history, 'Which name?');
   const controller = new AbortController();
   globalThis.fetch.mock.mockImplementation(async (url, init) => {
-    assert.equal(new URL(url).pathname, '/api/video/canvas-text-chat');
+    assert.equal(new URL(url).pathname, '/api/video/canvas-text-chat-long');
     assert.equal(init.method, 'POST'); assert.equal(init.headers.authorization, 'Bearer unit-test-token');
     assert.equal(init.signal, controller.signal); assert.equal(init.cache, 'no-store');
     assert.deepEqual(JSON.parse(init.body), { model, messages, userConfirmed: true });
@@ -91,4 +91,34 @@ test('single-turn text generation contract remains unchanged', async t => {
     return new Response(JSON.stringify({ result: { model, text: 'Shot.' } }));
   });
   assert.equal((await client.generateCanvasText(model, 'Write a shot')).text, 'Shot.');
+});
+
+function progressResponse(events, incomplete = false) {
+  const encoded = new TextEncoder().encode(events.map(event => JSON.stringify(event)).join('\n') + (incomplete ? '' : '\n'));
+  return new Response(new ReadableStream({ start(controller) {
+    // Deliberately split Chinese UTF-8 and JSON lines across network chunks.
+    for (let i = 0; i < encoded.length; i += 2) controller.enqueue(encoded.slice(i, i + 2));
+    controller.close();
+  } }), { headers: { 'content-type': 'application/x-ndjson; charset=utf-8' } });
+}
+
+test('progress frames are not answers; split UTF-8 completion is accepted once', async t => {
+  mockSession(t);
+  globalThis.fetch.mock.mockImplementation(async () => progressResponse([{ type: 'waiting' }, { type: 'waiting' }, { type: 'result', result: { model, text: '完整回答。' } }], true));
+  assert.deepEqual(await client.sendCanvasChat(model, history), { model, text: '完整回答。' });
+  assert.equal(globalThis.fetch.mock.callCount(), 1);
+});
+
+test('stream errors, early EOF, duplicate result and unknown frames never imply success', async t => {
+  mockSession(t);
+  for (const [events, code] of [
+    [[{ type: 'waiting' }, { type: 'error', code: 'AGENT_TIMEOUT', status: 503 }], 'AGENT_TIMEOUT'],
+    [[{ type: 'waiting' }], 'RESPONSE_INVALID'],
+    [[{ type: 'result', result: { model, text: 'a' } }, { type: 'result', result: { model, text: 'b' } }], 'RESPONSE_INVALID'],
+    [[{ type: 'reasoning', text: 'private' }], 'RESPONSE_INVALID'],
+  ]) {
+    globalThis.fetch.mock.mockImplementation(async () => progressResponse(events));
+    await assert.rejects(client.sendCanvasChat(model, history), error => error.code === code);
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 4);
 });

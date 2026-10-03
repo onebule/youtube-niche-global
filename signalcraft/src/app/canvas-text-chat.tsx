@@ -66,8 +66,8 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
     catch (cause) { setErrorCode(cause instanceof Error ? cause.message : 'CHAT_INPUT'); return; }
     busy.current = true; setPending(question.trim()); setErrorCode(''); setCopied(null);
     const abort = new AbortController(); controller.current = abort;
-    // The gateway allows 45s for chat plus discovery, inside its 60s function.
-    const timer = setTimeout(() => abort.abort(), 65000);
+    // Independent text function: 180s provider deadline inside a 200s function.
+    const timer = setTimeout(() => abort.abort(), 210000);
     try {
       const result = await sendCanvasChat(selected, turns, abort.signal);
       if (!mounted.current || !currentAccount()) return;
@@ -107,7 +107,7 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
       <div className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text" aria-label={copy('对话消息', 'Conversation')}>
         {!messages.length && !pending && <div className={styles.empty}><b>{copy('把问题写下来。', 'Start with a question.')}</b><p>{copy('可以讨论选题、改写文案或整理镜头思路；回答后可继续追问。', 'Discuss ideas, rewrite copy, or plan shots, then ask follow-up questions.')}</p><small>{copy('仅发送你输入的文本；不会读取画布素材。对话只保留在当前页面，刷新后清空。', 'Only your text is sent, not canvas media. This chat stays in the current page and clears on refresh.')}</small></div>}
         {messages.map((message, index) => <article key={index} className={message.role === 'user' ? styles.user : styles.answer}><b>{message.role === 'user' ? copy('你', 'You') : 'Claude'}</b><div>{message.content}</div>{message.role === 'assistant' && <button type="button" onClick={() => void copyAnswer(message.content, index)}>{copied === index ? copy('已复制', 'Copied') : copy('复制回答', 'Copy answer')}</button>}</article>)}
-        {pending && <><article className={styles.user}><b>{copy('你', 'You')}</b><div>{pending}</div></article><p role="status">{copy('Claude 正在回答…', 'Claude is answering…')}</p></>}
+        {pending && <><article className={styles.user}><b>{copy('你', 'You')}</b><div>{pending}</div></article><p role="status">{copy('Claude 正在准备回答，详细问题可能需要 1–3 分钟。不会自动重试。', 'Claude is preparing an answer. Detailed questions may take 1–3 minutes. No automatic retries.')}</p></>}
         {errorCode && <p className={styles.error} role="alert">{canvasChatError(errorCode, zh)}</p>}
         {full && <p>{canvasChatError('CHAT_LIMIT', zh)}</p>}
         {copied === -1 && <p role="status">{copy('复制失败，可选中回答手动复制。', 'Copy failed. Select the answer to copy it manually.')}</p>}
