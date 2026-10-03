@@ -66,7 +66,7 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
     catch (cause) { setErrorCode(cause instanceof Error ? cause.message : 'CHAT_INPUT'); return; }
     busy.current = true; setPending(question.trim()); setErrorCode(''); setCopied(null);
     const abort = new AbortController(); controller.current = abort;
-    // Independent text function: 180s provider deadline inside a 200s function.
+    // Long chat only: 180s provider deadline inside a 200s function.
     const timer = setTimeout(() => abort.abort(), 210000);
     try {
       const result = await sendCanvasChat(selected, turns, abort.signal);
