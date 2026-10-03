@@ -677,7 +677,9 @@ export async function createManualGenerationJob(input: ManualGenerationJobInput)
 }
 
 export async function refreshGenerationJob(jobId: string) {
-  const payload = await request<{ job: GenerationJob; generation: VideoGeneration | null; output?: GeneratedOutput | null }>(`jobs/${encodeURIComponent(jobId)}`);
+  // Use the existing flat alias: Vercel can reject cross-origin OPTIONS for
+  // nested catch-all paths before the handler gets to set its CORS headers.
+  const payload = await request<{ job: GenerationJob; generation: VideoGeneration | null; output?: GeneratedOutput | null }>(`job-status?jobId=${encodeURIComponent(jobId)}`);
   return payload;
 }
 
