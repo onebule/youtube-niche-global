@@ -3,6 +3,105 @@ import assert from 'node:assert/strict';
 import { createInfiniteProject, createInfiniteNode, normalizeInfiniteWorkspace, connectInfiniteNodes,
   connectionIssue, collectInfiniteGenerationInputs, upsertInfiniteVideoResult, usableInfiniteModel, infiniteAssetIssue,
   createInfiniteAttemptGuard, infiniteAssetKey } from '../src/lib/infinite-canvas-graph.ts';
+import { readInfiniteScriptFile, resolveInfiniteScript, scriptAssetStillCurrent } from '../src/lib/infinite-canvas-scripts.ts';
+
+function scriptGraph() {
+  const project = createInfiniteProject('scripts');
+  const script = createInfiniteNode('script', 'script', 0, 0);
+  script.text = 'A traveller enters the forest.\nClose-up on the map.\nPull back to reveal the mountains.';
+  project.nodes = [script, createInfiniteNode('v', 'video', 300, 0), createInfiniteNode('v2', 'video', 800, 0)];
+  return connectInfiniteNodes(project, 'script-v', 'script', 'v', 'script');
+}
+
+test('script edges feed actual prompt text, but never select a video media mode', () => {
+  const project = scriptGraph();
+  project.nodes[0].assetId = 'private-script-screenshot';
+  const input = collectInfiniteGenerationInputs(project, 'v');
+  assert.equal(input.mode, 'text');
+  assert.match(input.prompt, /traveller enters/);
+  assert.equal(input.scriptReference.nodeId, 'script');
+  assert.deepEqual(input.referenceFrames, []);
+  assert.equal(input.startFrame, null);
+  assert.match(connectionIssue(project, 'script', 'v2', 'reference'), /脚本/);
+  project.nodes.push(createInfiniteNode('image', 'image', 0, 200));
+  assert.match(connectionIssue(project, 'image', 'v2', 'script'), /脚本/);
+});
+
+test('OCR proposal does not change connected text until explicitly adopted', () => {
+  const project = scriptGraph();
+  project.nodes[0].textResult = 'UNREVIEWED OCR';
+  assert.doesNotMatch(collectInfiniteGenerationInputs(project, 'v').prompt, /UNREVIEWED/);
+  project.nodes[0].text = project.nodes[0].textResult;
+  project.nodes[0].textResult = '';
+  assert.match(collectInfiniteGenerationInputs(project, 'v').prompt, /UNREVIEWED OCR/);
+  project.nodes[0].text = '';
+  project.nodes[0].textResult = 'Still pending review';
+  assert.match(collectInfiniteGenerationInputs(project, 'v').errors.join(), /已确认文字/);
+});
+
+test('each video independently selects script lines; full script and edges survive restore', () => {
+  let project = scriptGraph();
+  project = connectInfiniteNodes(project, 'script-v2', 'script', 'v2', 'script');
+  project.nodes[1].video.scriptRange = { startLine: 2, endLine: 2 };
+  project.nodes[2].video.scriptRange = { startLine: 3, endLine: 3 };
+  project.nodes[0].textResult = 'OCR draft';
+  const restored = normalizeInfiniteWorkspace(JSON.parse(JSON.stringify({ version: 1, activeProjectId: project.id, projects: [project] }))).projects[0];
+  assert.equal(restored.edges.length, 2);
+  assert.deepEqual(restored.nodes[1].video.scriptRange, { startLine: 2, endLine: 2 });
+  assert.equal(restored.nodes[0].text, project.nodes[0].text);
+  assert.equal(restored.nodes[0].textResult, 'OCR draft');
+  assert.match(collectInfiniteGenerationInputs(restored, 'v').prompt, /Close-up/);
+  assert.doesNotMatch(collectInfiniteGenerationInputs(restored, 'v').prompt, /traveller|mountains/);
+  assert.match(collectInfiniteGenerationInputs(restored, 'v2').prompt, /mountains/);
+  restored.nodes[0].text = restored.nodes[0].text.replace('map', 'compass');
+  assert.match(collectInfiniteGenerationInputs(restored, 'v').prompt, /compass/);
+});
+
+test('long scripts are retained but block oversized prompts; line selection fixes the request', () => {
+  const project = scriptGraph();
+  project.nodes[0].text = `${'x'.repeat(1500)}\nSelected scene`;
+  assert.match(collectInfiniteGenerationInputs(project, 'v').errors.join(), /1200/);
+  assert.ok(collectInfiniteGenerationInputs(project, 'v').prompt.length > 1500);
+  project.nodes[1].video.scriptRange = { startLine: 2, endLine: 2 };
+  assert.deepEqual(collectInfiniteGenerationInputs(project, 'v').errors, []);
+  assert.equal(collectInfiniteGenerationInputs(project, 'v').scriptReference.text, 'Selected scene');
+  for (const range of [{ startLine: 0, endLine: 1 }, { startLine: 2, endLine: 1 }, { startLine: 1, endLine: 20 }, { startLine: 1.2, endLine: 2 }]) {
+    assert.match(resolveInfiniteScript(project.nodes[0], range).error, /行号/);
+  }
+});
+
+test('replacing or disconnecting a script does not leak old script selections or content', () => {
+  let project = scriptGraph();
+  project.nodes[1].video.scriptRange = { startLine: 2, endLine: 2 };
+  const replacement = createInfiniteNode('s2', 'script', 0, 0); replacement.text = 'New scene';
+  project.nodes.push(replacement);
+  project = connectInfiniteNodes(project, 'new-edge', 's2', 'v', 'script');
+  assert.equal(project.nodes[1].video.scriptRange, undefined);
+  assert.match(collectInfiniteGenerationInputs(project, 'v').prompt, /New scene/);
+  assert.doesNotMatch(collectInfiniteGenerationInputs(project, 'v').prompt, /Close-up/);
+  project.edges = [];
+  assert.equal(collectInfiniteGenerationInputs(project, 'v').scriptReference, null);
+  assert.equal(collectInfiniteGenerationInputs(project, 'v').prompt, '');
+});
+
+test('UTF-8 text import rejects unsupported, binary, malformed or oversized files without truncation', async () => {
+  const file = (name, data) => ({ name, size: data.length, arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) });
+  const bytes = text => new TextEncoder().encode(text);
+  assert.equal(await readInfiniteScriptFile(file('story.md', bytes('镜头一\n镜头二'))), '镜头一\n镜头二');
+  await assert.rejects(readInfiniteScriptFile(file('story.pdf', bytes('text'))), /TXT/);
+  await assert.rejects(readInfiniteScriptFile(file('story.txt', new Uint8Array([255, 254]))), /UTF-8/);
+  await assert.rejects(readInfiniteScriptFile(file('story.txt', bytes('a\0b'))), /可用文字/);
+  await assert.rejects(readInfiniteScriptFile(file('story.txt', bytes('x'.repeat(12001)))), /12000/);
+  await assert.rejects(readInfiniteScriptFile({ name: 'story.txt', size: 96001, arrayBuffer: async () => assert.fail('must not read oversized file') }), /96000/);
+});
+
+test('deleted or replaced script image rejects stale OCR results and private image validation stays intact', () => {
+  const script = createInfiniteNode('script', 'script', 0, 0); script.assetId = 'current';
+  assert.equal(scriptAssetStillCurrent(script, 'current'), true);
+  assert.equal(scriptAssetStillCurrent(undefined, 'current'), false);
+  assert.equal(scriptAssetStillCurrent(script, 'old'), false);
+  assert.match(infiniteAssetIssue(script, { contentType: 'video/mp4' }), /不是图片/);
+});
 
 function graph() {
   const project = createInfiniteProject('project');

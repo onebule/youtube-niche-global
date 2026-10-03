@@ -165,3 +165,30 @@ body:has(.infinite-studio) { overflow: hidden; }
 .infinite-studio :is(.image-generation-error,.image-generation-result > p,.image-generation-history-item.is-failed em) { color: var(--ic-error); }
 .infinite-studio button.image-generation-submit { background: var(--ic-brand); color: var(--ic-on-brand); border-color: var(--ic-brand); }
 .infinite-studio .image-generation-result-actions button.is-primary { background: var(--ic-accent); color: var(--ic-panel); border-color: var(--ic-accent); }
+
+/* A small source ledger: thumbnails identify media; a teal paper tab identifies script text. */
+.infinite-script-editor { display: grid; gap: 12px; padding: 14px; max-height: min(660px, calc(100dvh - 235px)); overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+.infinite-script-intro, .infinite-script-source, .infinite-script-editor > label { display: grid; gap: 6px; }
+.infinite-script-editor small, .infinite-reference-board small { color: var(--ic-muted); font-size: 11px; }
+.infinite-script-editor textarea { width: 100%; min-height: 170px; }
+.infinite-script-imports { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; font-size: 11px; }
+.infinite-script-imports .infinite-upload { padding: 8px 4px; }
+.infinite-script-source { border: 1px dashed var(--ic-line); padding: 10px; border-radius: 8px; }
+.infinite-script-source img { width: 100%; max-height: 120px; object-fit: contain; }
+.infinite-reference-board { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--ic-line); border-radius: 8px; }
+.infinite-reference-board header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.infinite-reference-board > label { display: grid; gap: 6px; }
+.infinite-reference-board select { width: 100%; }
+.infinite-reference-strip { display: flex; gap: 7px; overflow-x: auto; padding: 3px; touch-action: pan-x; }
+.infinite-reference-strip:empty { display: none; }
+.infinite-studio button.infinite-reference-chip { display: grid; gap: 3px; flex: 0 0 76px; padding: 5px; border: 1px solid var(--ic-line); font-size: 10px; text-align: left; }
+.infinite-reference-chip :is(img,span) { width: 64px; height: 48px; border-radius: 4px; object-fit: cover; background: var(--ic-field); }
+.infinite-reference-chip span { display: grid; place-content: center; font: 24px/1 Georgia, serif; }
+.infinite-reference-chip small { white-space: nowrap; font-size: 9px; }
+.infinite-studio button.infinite-reference-chip.is-script { border-color: var(--ic-accent); color: var(--ic-accent); background: var(--ic-accent-soft); }
+.infinite-script-range { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }
+.infinite-script-range label { display: grid; gap: 5px; min-width: 0; font-size: 11px; }
+.infinite-script-range input { width: 100%; }
+.infinite-script-excerpt summary { cursor: pointer; font-size: 11px; color: var(--ic-accent); }
+.infinite-script-excerpt pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow-y: auto; margin: 8px 0 0; font: inherit; padding-left: 9px; border-left: 2px solid var(--ic-accent); touch-action: pan-y; }
+.infinite-video-editor > details p { white-space: pre-wrap; }

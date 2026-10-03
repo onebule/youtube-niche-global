@@ -1,5 +1,6 @@
 import type { VideoModel, VideoModelId } from './video-generation';
 import type { CanvasTextModelId } from './canvas-text-generation';
+import { resolveInfiniteScript, type InfiniteScriptRange, type InfiniteScriptReference } from './infinite-canvas-scripts.ts';
 
 export const infiniteAssetKey = (projectId: string, nodeId: string) => `${projectId}:${nodeId}`;
 
@@ -12,8 +13,8 @@ export function createInfiniteAttemptGuard(scope: string, currentScope: () => st
   } };
 }
 
-export type InfiniteNodeKind = 'text' | 'image' | 'video' | 'video-result' | 'audio' | 'storyboard' | 'note';
-export type InfiniteInputPort = 'prompt' | 'start' | 'end' | 'reference';
+export type InfiniteNodeKind = 'text' | 'script' | 'image' | 'video' | 'video-result' | 'audio' | 'storyboard' | 'note';
+export type InfiniteInputPort = 'prompt' | 'start' | 'end' | 'reference' | 'script';
 export type InfiniteVideoMode = 'text' | 'start-end' | 'omni';
 export type InfiniteVideoSettings = {
   model: Exclude<VideoModelId, 'auto'> | null;
@@ -23,6 +24,7 @@ export type InfiniteVideoSettings = {
   duration: string;
   aspectRatio: '9:16' | '16:9' | '1:1';
   resolution: string;
+  scriptRange?: InfiniteScriptRange;
 };
 export type InfiniteRun = {
   jobId: string;
@@ -43,6 +45,7 @@ export type InfiniteCanvasNode = {
   text: string;
   textModel?: CanvasTextModelId | null;
   textResult?: string;
+  scriptSource?: 'text' | 'file' | 'image';
   assetId: string | null;
   output?: { type: 'image' | 'video'; assetId: string; generationId?: string | null; model?: string | null; prompt?: string } | null;
   assetName: string | null;
@@ -79,11 +82,12 @@ export type InfiniteGenerationInputs = {
   referenceFrames: InfiniteCanvasNode[];
   referenceVideos: InfiniteCanvasNode[];
   referenceAudios: InfiniteCanvasNode[];
+  scriptReference: InfiniteScriptReference | null;
   errors: string[];
 };
 
-const nodeKinds: InfiniteNodeKind[] = ['text', 'image', 'video', 'video-result', 'audio', 'storyboard', 'note'];
-const ports: InfiniteInputPort[] = ['prompt', 'start', 'end', 'reference'];
+const nodeKinds: InfiniteNodeKind[] = ['text', 'script', 'image', 'video', 'video-result', 'audio', 'storyboard', 'note'];
+const ports: InfiniteInputPort[] = ['prompt', 'start', 'end', 'reference', 'script'];
 const videoModes: InfiniteVideoMode[] = ['text', 'start-end', 'omni'];
 const ratios = ['9:16', '16:9', '1:1'];
 const knownModels: Exclude<VideoModelId, 'auto'>[] = ['minimax-h3', 'seedance-2', 'seedance-2-5', 'kling-3', 'veo-3.1-lite'];
@@ -108,7 +112,7 @@ export function createInfiniteProject(id: string, title = 'Untitled'): InfiniteC
 
 export function createInfiniteNode(id: string, kind: InfiniteNodeKind, x: number, y: number): InfiniteCanvasNode {
   const labels: Record<InfiniteNodeKind, string> = {
-    text: '文本', image: '图片', video: '视频生成', 'video-result': '视频结果', audio: '音频', storyboard: '分镜', note: '便签',
+    text: '文本', script: '引用脚本', image: '图片', video: '视频生成', 'video-result': '视频结果', audio: '音频', storyboard: '分镜', note: '便签',
   };
   return {
     id, kind, x: finiteCoordinate(x), y: finiteCoordinate(y),
@@ -130,7 +134,8 @@ export function normalizeInfiniteNode(value: unknown): InfiniteCanvasNode | null
     title: shortText(item.title, 70) || created.title,
     text: shortText(item.text, 12000),
     textModel: kind === 'text' && (item.textModel === 'claude-fable-5-1' || item.textModel === 'claude-opus-5-5' || item.textModel === 'gpt-6-sol' || item.textModel === 'gpt-6-astra') ? item.textModel : null,
-    textResult: kind === 'text' ? shortText(item.textResult, 12000) : '',
+    textResult: kind === 'text' || kind === 'script' ? shortText(item.textResult, 12000) : '',
+    ...(kind === 'script' ? { scriptSource: item.scriptSource === 'file' || item.scriptSource === 'image' ? item.scriptSource : 'text' } : {}),
     assetId: typeof item.assetId === 'string' && item.assetId.length <= 240 ? item.assetId : null,
     output: (kind === 'image' || kind === 'video-result') && typeof item.assetId === 'string' && item.assetId.length <= 240
       ? { type: kind === 'image' ? 'image' : 'video', assetId: item.assetId,
@@ -147,6 +152,10 @@ export function normalizeInfiniteNode(value: unknown): InfiniteCanvasNode | null
       duration: typeof v?.duration === 'string' && /^\d{1,2}s$/.test(v.duration) ? v.duration : '5s',
       aspectRatio: ratios.includes(v?.aspectRatio as string) ? v!.aspectRatio : '9:16',
       resolution: shortText(v?.resolution, 16) || '720p',
+      ...(v?.scriptRange ? { scriptRange: {
+        startLine: Number.isInteger(v.scriptRange.startLine) ? v.scriptRange.startLine : 0,
+        endLine: Number.isInteger(v.scriptRange.endLine) ? v.scriptRange.endLine : 0,
+      } } : {}),
     } : null,
     runs: rawRuns.flatMap(run => {
       if (!run || typeof run !== 'object' || typeof run.jobId !== 'string' || !run.jobId) return [];
@@ -195,6 +204,8 @@ export function normalizeInfiniteWorkspace(raw: unknown, defaultProjectId = 'fir
         project.edges = connectInfiniteNodes(project, edge.id, edge.source, edge.target, edge.port).edges;
       }
     }
+    // Replaying a script connection must not reset its persisted per-video line selection.
+    project.nodes = nodes;
     return [project];
   });
   if (!projects.length) projects.push(initial);
@@ -221,6 +232,9 @@ export function connectionIssue(project: InfiniteCanvasProject, sourceId: string
     ? project.edges.some(edge => edge.target === targetId) ? '结果节点已有生成来源' : null
     : '结果节点只能接收生成器输出';
   if (target.kind !== 'video') return '目前仅支持将素材或文本连接到视频节点';
+  if (source.kind === 'script') {
+    if (port !== 'script') return '脚本只能接入脚本引用端口，不会作为参考图片';
+  } else if (port === 'script') return '脚本引用端口需要脚本节点';
   if (source.kind === 'image' && port === 'prompt') return '图片不能接入提示词端口';
   if (source.kind === 'image' && !['start', 'end', 'reference'].includes(port)) return '图片只能接入首帧、尾帧或参考图端口';
   if (source.kind === 'audio' && port !== 'reference') return '音频只能接入全能参考端口';
@@ -237,7 +251,9 @@ export function connectInfiniteNodes(project: InfiniteCanvasProject, id: string,
   const issue = connectionIssue(project, source, target, port);
   if (issue) throw new Error(issue);
   const edges = project.edges.filter(edge => !(edge.target === target && (edge.port === port && port !== 'reference')));
-  return { ...project, edges: [...edges, { id, source, target, port }] };
+  return { ...project, edges: [...edges, { id, source, target, port }],
+    nodes: port === 'script' ? project.nodes.map(node => node.id === target && node.video
+      ? { ...node, video: { ...node.video, scriptRange: undefined } } : node) : project.nodes };
 }
 
 /** A generated asset stays in private storage; result nodes only persist its owned asset ID. */
@@ -261,7 +277,7 @@ export function upsertInfiniteVideoResult(project: InfiniteCanvasProject, genera
 
 export function collectInfiniteGenerationInputs(project: InfiniteCanvasProject, videoId: string): InfiniteGenerationInputs {
   const video = project.nodes.find(node => node.id === videoId && node.kind === 'video');
-  if (!video?.video) return { mode: 'text', prompt: '', startFrame: null, endFrame: null, referenceFrames: [], referenceVideos: [], referenceAudios: [], errors: ['请选择视频节点'] };
+  if (!video?.video) return { mode: 'text', prompt: '', startFrame: null, endFrame: null, referenceFrames: [], referenceVideos: [], referenceAudios: [], scriptReference: null, errors: ['请选择视频节点'] };
   const incoming = project.edges.filter(edge => edge.target === videoId);
   const sourceFor = (edge: InfiniteCanvasEdge) => project.nodes.find(node => node.id === edge.source);
   const first = (port: InfiniteInputPort) => incoming.filter(edge => edge.port === port).map(sourceFor).find((node): node is InfiniteCanvasNode => Boolean(node)) || null;
@@ -290,10 +306,14 @@ export function collectInfiniteGenerationInputs(project: InfiniteCanvasProject, 
     for (const node of [...referenceFrames, ...referenceVideos, ...audios]) if (!node.assetId) errors.push(node.title + ' 尚未上传或生成');
     if ((audios.length || referenceVideos.length) && video.video.model !== 'minimax-h3') errors.push('参考视频和音频当前仅支持 MiniMax H3');
   }
-  const prompt = [video.video.prompt.trim(), connectedText].filter(Boolean).join('\n\n');
+  const script = first('script');
+  const scriptReference = script?.kind === 'script' ? resolveInfiniteScript(script, video.video.scriptRange) : null;
+  if (scriptReference?.error) errors.push(scriptReference.error);
+  const prompt = [video.video.prompt.trim(), connectedText,
+    scriptReference?.text ? `[引用脚本 / Script reference]\n${scriptReference.text}` : ''].filter(Boolean).join('\n\n');
   if (prompt.length > 1200) errors.push('组合后的提示词超过 1200 个字符');
   return { mode, prompt, startFrame, endFrame, referenceFrames,
-    referenceVideos, referenceAudios: mode === 'omni' ? audios : [], errors };
+    referenceVideos, referenceAudios: mode === 'omni' ? audios : [], scriptReference, errors };
 }
 
 export function usableInfiniteModel(model: VideoModel | undefined, mode: InfiniteVideoMode): boolean {
@@ -312,7 +332,7 @@ export function infiniteModelSettings(modelId: Exclude<VideoModelId, 'auto'>): P
 /** Verify private media returned by the current account, never trust imported ids or dimensions. */
 export function infiniteAssetIssue(node: InfiniteCanvasNode, asset: { contentType: string | null; width?: number | null; height?: number | null } | null): string | null {
   if (!asset) return `${node.title} 素材不可访问，请重新上传。`;
-  if (node.kind === 'image') {
+  if (node.kind === 'image' || node.kind === 'script') {
     if (!asset.contentType?.startsWith('image/')) return `${node.title} 不是图片素材。`;
     if (!Number.isFinite(asset.width) || !Number.isFinite(asset.height) || Number(asset.width) <= 0 || Number(asset.height) <= 0) return `${node.title} 图片尺寸不可用，请重新上传。`;
   } else if (node.kind === 'audio' && !asset.contentType?.startsWith('audio/')) return `${node.title} 不是音频素材。`;
