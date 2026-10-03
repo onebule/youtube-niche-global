@@ -425,6 +425,7 @@ const VIDEO_GATEWAY_ENDPOINT = process.env.NEXT_PUBLIC_VIDEO_GATEWAY_URL || 'htt
 
 export type ScriptOcrResult = {
   text: string;
+  format?: 'plain' | 'layout';
   provider: string | null;
   model: string | null;
   extractedAt: string;
@@ -588,10 +589,10 @@ export async function planVideoGeneration(input: {
  * sends only the private asset id; signed media URLs and provider credentials
  * never cross this client boundary.
  */
-export async function extractScriptText(assetId: string, language: 'zh' | 'en' = 'zh') {
+export async function extractScriptText(assetId: string, language: 'zh' | 'en' = 'zh', format: 'plain' | 'layout' = 'plain') {
   const payload = await request<{ ocr: ScriptOcrResult }>('ocr-script', {
     method: 'POST',
-    body: JSON.stringify({ assetId, language }),
+    body: JSON.stringify({ assetId, language, format }),
   });
   return payload.ocr;
 }

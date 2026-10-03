@@ -4,6 +4,20 @@ import { createInfiniteProject, createInfiniteNode, normalizeInfiniteWorkspace, 
   connectionIssue, collectInfiniteGenerationInputs, upsertInfiniteVideoResult, usableInfiniteModel, infiniteAssetIssue,
   createInfiniteAttemptGuard, infiniteAssetKey } from '../src/lib/infinite-canvas-graph.ts';
 import { readInfiniteScriptFile, resolveInfiniteScript, scriptAssetStillCurrent } from '../src/lib/infinite-canvas-scripts.ts';
+import { parseScriptLayout } from '../src/lib/script-layout.ts';
+
+test('layout preview keeps table columns, blank cells and surrounding text without executing markup', () => {
+  const original = '  标题\n\n| 镜号 | 时长 | 动作 | 对白 |\n| --- | --- | --- | --- |\n| 1 | 3.0s | 第一段<br>第二段 | |\n| 2 | 4s | 原文\\|竖线 | <script>alert(1)</script> |\n\n  结尾';
+  const blocks = parseScriptLayout(original);
+  assert.deepEqual(blocks[0], { type: 'text', text: '  标题\n' });
+  assert.deepEqual(blocks[1].header, ['镜号', '时长', '动作', '对白']);
+  assert.deepEqual(blocks[1].rows, [['1', '3.0s', '第一段<br>第二段', ''], ['2', '4s', '原文|竖线', '<script>alert(1)</script>']]);
+  assert.deepEqual(blocks[2], { type: 'text', text: '\n  结尾' });
+  const malformed = '| A | B |\n| --- | --- |\n| one |';
+  assert.deepEqual(parseScriptLayout(malformed), [{ type: 'text', text: malformed }]);
+  assert.deepEqual(parseScriptLayout('  A\tB\t\n\n\nend  '), [{ type: 'text', text: '  A\tB\t\n\n\nend  ' }]);
+  assert.deepEqual(parseScriptLayout('| A | B |\n| --- | --- |\n|   indented\t  | \t |')[0].rows, [['  indented\t ', '\t']]);
+});
 
 function scriptGraph() {
   const project = createInfiniteProject('scripts');
@@ -25,6 +39,20 @@ test('script edges feed actual prompt text, but never select a video media mode'
   assert.match(connectionIssue(project, 'script', 'v2', 'reference'), /脚本/);
   project.nodes.push(createInfiniteNode('image', 'image', 0, 200));
   assert.match(connectionIssue(project, 'image', 'v2', 'script'), /脚本/);
+});
+
+test('script references preserve original indentation, tabs and blank lines after restore', () => {
+  const project = scriptGraph();
+  const original = '  镜号\t时长\t对白\t\n1\t3.0s\t\t\n\n\n  动作原文  ';
+  project.nodes[0].text = original;
+  project.nodes[0].textResult = original;
+  const restored = normalizeInfiniteWorkspace(JSON.parse(JSON.stringify({ version: 1, projects: [project] }))).projects[0];
+  assert.equal(restored.nodes[0].textResult, original);
+  assert.equal(resolveInfiniteScript(restored.nodes[0]).text, original);
+  assert.equal(resolveInfiniteScript(restored.nodes[0], { startLine: 1, endLine: 1 }).text, '  镜号\t时长\t对白\t');
+  assert.ok(collectInfiniteGenerationInputs(restored, 'v').prompt.includes(original));
+  restored.nodes[0].text = ' \t\n';
+  assert.match(resolveInfiniteScript(restored.nodes[0]).error, /已确认文字/);
 });
 
 test('OCR proposal does not change connected text until explicitly adopted', () => {

@@ -170,7 +170,12 @@ body:has(.infinite-studio) { overflow: hidden; }
 .infinite-script-editor { display: grid; gap: 12px; padding: 14px; max-height: min(660px, calc(100dvh - 235px)); overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
 .infinite-script-intro, .infinite-script-source, .infinite-script-editor > label { display: grid; gap: 6px; }
 .infinite-script-editor small, .infinite-reference-board small { color: var(--ic-muted); font-size: 11px; }
-.infinite-script-editor textarea { width: 100%; min-height: 170px; }
+.infinite-script-editor textarea { width: 100%; min-height: 170px; white-space: pre; overflow: auto; font: 12px/1.65 ui-monospace, Consolas, monospace; tab-size: 4; }
+.infinite-script-layout { max-width: 100%; max-height: 220px; overflow: auto; margin-top: 8px; border: 1px solid var(--ic-line); border-radius: 6px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.infinite-script-layout table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+.infinite-script-layout :is(th,td) { min-width: 90px; max-width: 280px; padding: 8px; border: 1px solid var(--ic-line); text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+.infinite-script-layout th { background: var(--ic-accent-soft); color: var(--ic-accent); }
+.infinite-script-layout pre { white-space: pre; overflow-wrap: normal; margin: 0; padding: 8px; font: 12px/1.65 ui-monospace, Consolas, monospace; border: 0; max-height: none; overflow: visible; tab-size: 4; }
 .infinite-script-imports { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; font-size: 11px; }
 .infinite-script-imports .infinite-upload { padding: 8px 4px; }
 .infinite-script-source { border: 1px dashed var(--ic-line); padding: 10px; border-radius: 8px; }
@@ -190,5 +195,4 @@ body:has(.infinite-studio) { overflow: hidden; }
 .infinite-script-range label { display: grid; gap: 5px; min-width: 0; font-size: 11px; }
 .infinite-script-range input { width: 100%; }
 .infinite-script-excerpt summary { cursor: pointer; font-size: 11px; color: var(--ic-accent); }
-.infinite-script-excerpt pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow-y: auto; margin: 8px 0 0; font: inherit; padding-left: 9px; border-left: 2px solid var(--ic-accent); touch-action: pan-y; }
 .infinite-video-editor > details p { white-space: pre-wrap; }

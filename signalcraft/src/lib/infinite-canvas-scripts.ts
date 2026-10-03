@@ -12,10 +12,10 @@ export function resolveInfiniteScript(node: InfiniteCanvasNode, range?: Infinite
   const startLine = range?.startLine ?? 1, endLine = range?.endLine ?? lines.length;
   const valid = Number.isInteger(startLine) && Number.isInteger(endLine) && startLine >= 1 &&
     endLine >= startLine && endLine <= lines.length;
-  const text = valid ? lines.slice(startLine - 1, endLine).join('\n').trim() : '';
+  const text = valid ? lines.slice(startLine - 1, endLine).join('\n') : '';
   return { nodeId: node.id, title: node.title, text, totalLines: lines.length, startLine, endLine,
     error: !valid ? '脚本引用行号无效，请重新选择。 / Invalid script line range.'
-      : !text ? '脚本尚无已确认文字，请粘贴文字或采用识别结果。 / Paste text or accept the OCR result first.' : null };
+      : !text.trim() ? '脚本尚无已确认文字，请粘贴文字或采用识别结果。 / Paste text or accept the OCR result first.' : null };
 }
 
 export async function readInfiniteScriptFile(file: Pick<File, 'name' | 'size' | 'arrayBuffer'>): Promise<string> {

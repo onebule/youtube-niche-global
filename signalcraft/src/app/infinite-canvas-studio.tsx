@@ -375,7 +375,7 @@ export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify
     if (!window.confirm(copy('识别此脚本截图？将通过现有服务调用 GPT-5.6 Luna，可能产生服务方费用。文字先供你校对，不会自动生成视频。', 'Read this script screenshot with GPT-5.6 Luna? Provider charges may apply. Review the text first; no video is generated.'))) return;
     const projectId = activeId, assetId = node.assetId, guard = attemptGuard(); changeBusy(node.id, true);
     try {
-      const result = await guard.run(() => extractScriptText(assetId, zh ? 'zh' : 'en'));
+      const result = await guard.run(() => extractScriptText(assetId, zh ? 'zh' : 'en', 'layout'));
       const current = workspaceRef.current.projects.find(item => item.id === projectId)?.nodes.find(item => item.id === node.id);
       if (!scriptAssetStillCurrent(current, assetId)) return;
       patchNode(projectId, node.id, { textResult: result.text });
