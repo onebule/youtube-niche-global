@@ -3,7 +3,20 @@
   --chat-teal: #0b756f; --chat-soft: #e7f5f0; --chat-coral: #d94a3b;
   color: var(--chat-ink); font: 13px/1.5 Arial, 'Microsoft YaHei', sans-serif; color-scheme: light;
 }
-.launcher { position: fixed; right: 22px; bottom: 24px; z-index: 50; padding: 12px 18px; min-height: 44px; border: 1px solid var(--chat-teal); border-radius: 10px; background: var(--chat-paper); box-shadow: 0 6px 20px #25323920; }
+.launcher { position: fixed; right: 22px; bottom: 24px; z-index: 51; width: 108px; height: 120px; padding: 0; border: 0; border-radius: 18px; background: transparent; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+.launcher[data-dragging="true"] { cursor: grabbing; }
+.cat { width: 94px; height: 83px; flex-shrink: 0; overflow: visible; filter: drop-shadow(0 3px 7px #25323918); }
+.catBody { transform-origin: 50px 78px; animation: cat-breathe 4.5s ease-in-out infinite; }
+.catEyes { transform-box: fill-box; transform-origin: center; animation: cat-blink 6.4s linear infinite; }
+.catShadow { fill: #25323918; }
+.catLabel { font-size: 11px; font-weight: 600; line-height: 20px; padding: 0 8px; border: 1px solid #d8d0c5; border-radius: 10px; background: var(--chat-paper); white-space: nowrap; }
+.catLabel span { color: var(--chat-teal); font-weight: 400; }
+.catHint { font-size: 10px; line-height: 17px; color: var(--chat-teal); opacity: 0; transition: opacity .15s; white-space: nowrap; }
+.launcher:is(:hover, :focus-visible) .catHint { opacity: 1; }
+.launcher[data-dragging="true"] .catBody, .launcher[data-dragging="true"] .catEyes { animation-play-state: paused; }
+@keyframes cat-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.025, 1.035); } }
+@keyframes cat-blink { 0%, 43%, 47%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.08); } }
+@media (prefers-reduced-motion: reduce) { .catBody, .catEyes { animation: none; } .catHint { transition: none; } }
 .panel { position: fixed; right: 22px; bottom: 82px; z-index: 50; width: 430px; max-width: calc(100vw - 32px); height: 650px; max-height: calc(100dvh - 170px); display: flex; flex-direction: column; background: var(--chat-paper); border: 1px solid var(--chat-line); border-top: 3px solid var(--chat-teal); border-radius: 12px; box-shadow: 0 18px 60px #25323930; overflow: hidden; }
 .panel * { box-sizing: border-box; }
 .panel button, .panel select, .panel textarea { font: inherit; color: inherit; }

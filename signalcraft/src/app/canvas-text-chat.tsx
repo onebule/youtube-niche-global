@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import CanvasAssistantLauncher from './canvas-assistant-launcher';
 import type { AccountSession } from '@/src/lib/auth';
 import { getSession } from '@/src/lib/auth';
 import { accountStorageScope } from '@/src/lib/account-storage';
@@ -16,6 +17,7 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
   const copy = (cn: string, en: string) => zh ? cn : en;
   const scope = accountStorageScope(account);
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>();
   const [models, setModels] = useState<CanvasTextModel[]>([]);
   const [selected, setSelected] = useState<CanvasTextModelId | ''>('');
   const [checking, setChecking] = useState(false);
@@ -90,10 +92,10 @@ export default function CanvasTextChat({ account, locale, onSignIn }: Props) {
   };
 
   return <>
-    <button ref={launcher} className={styles.launcher} type="button" aria-expanded={open} aria-controls="canvas-claude-chat" onClick={() => {
+    <CanvasAssistantLauncher launcherRef={launcher} open={open} zh={zh} onPanelStyle={setPanelStyle} onToggle={() => {
       if (open) close(); else { setOpen(true); if (!models.length) void checkModels(); }
-    }}>{copy('Claude 文本助手', 'Claude text assistant')}</button>
-    {open && <aside id="canvas-claude-chat" className={styles.panel} role="dialog" aria-modal="false" aria-labelledby="canvas-claude-title" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }} onPointerDown={event => event.stopPropagation()}>
+    }} />
+    {open && <aside id="canvas-claude-chat" className={styles.panel} style={panelStyle} role="dialog" aria-modal="false" aria-labelledby="canvas-claude-title" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }} onPointerDown={event => event.stopPropagation()}>
       <header className={styles.header}><div><small>{copy('创作对话 · 不操作画布', 'Creator chat · Canvas unchanged')}</small><h2 id="canvas-claude-title">{copy('问 Claude', 'Ask Claude')}</h2></div><button type="button" onClick={close} aria-label={copy('关闭文本助手', 'Close text assistant')}>×</button></header>
       <div className={styles.models}>
         <label htmlFor="canvas-claude-model">{copy('模型', 'Model')}</label>
