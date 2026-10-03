@@ -9,6 +9,7 @@ import type { Alert, Collection, Idea, IdeaStatus, Task, Video, WatchRule } from
 import { searchYouTubeSignals, type PublicRankingScope } from '@/src/lib/youtube';
 import { signOut, startGoogleSignIn, type AccountSession } from '@/src/lib/auth';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
+import { CREATION_WORKSPACES } from '@/src/lib/canvas-workspace-boundaries';
 import { DiscoveryProfileProvider } from './discovery-workbench';
 import type { ProductionHandoff } from '@/src/lib/product-convergence';
 import { useBrowserPath, useBrowserSession } from '@/src/lib/browser-session';
@@ -148,7 +149,7 @@ function Header({path,onTheme,account,onSignIn,onSignOut,locale,onLocaleChange,i
 function StudioNav({path,locale}:{path:string;locale:UiLocale}){const copy=languageCopy[locale];const primary=copy.primaryNav;const groups=[
   {label:locale==='zh'?'研究':'RESEARCH',items:[['/app',locale==='zh'?'概览':'Overview'],['/app/research',copy.studioNav[1]],['/app/library/channels',locale==='zh'?'竞品频道':'Competitor channels'],['/app/library/videos',locale==='zh'?'研究资料':'Research library'],['/app/thumbnails',locale==='zh'?'缩略图研究':'Thumbnail research'],['/app/benchmarks',locale==='zh'?'竞品对标':'Benchmarking']]},
   {label:locale==='zh'?'诊断与监控':'DIAGNOSE & MONITOR',items:[['/app/doctor',primary.doctor],['/app/watchlists',primary.monitor]]},
-  {label:locale==='zh'?'创作':'CREATE',items:[['/app/cases',locale==='zh'?'视频拆解':'Video breakdown'],['/app/ideas',locale==='zh'?'选题':'Ideas'],['/app/canvas',locale==='zh'?'画布':'Canvas'],['/app/image-to-video',locale==='zh'?'图生视频':'Image-to-video'],['/app/prompts',locale==='zh'?'提示词与版本':'Prompts & versions']]},
+  {label:locale==='zh'?'创作':'CREATE',items:[['/app/cases',locale==='zh'?'视频拆解':'Video breakdown'],['/app/ideas',locale==='zh'?'选题':'Ideas'],[CREATION_WORKSPACES.infinite.path,locale==='zh'?'无限画布':'Infinite canvas'],[CREATION_WORKSPACES.shots.path,locale==='zh'?'镜头工作区':'Shot workspace'],['/app/image-to-video',locale==='zh'?'图生视频':'Image-to-video'],['/app/prompts',locale==='zh'?'提示词与版本':'Prompts & versions']]},
   {label:locale==='zh'?'系统':'SYSTEM',items:[['/app/settings',locale==='zh'?'配置':'Settings']]},
 ];return <aside className="studio-nav" aria-label={locale==='zh'?'工作室导航':'Studio navigation'}>{groups.map(group=><section className="studio-nav-group" key={group.label}><p>{group.label}</p>{group.items.map(([href,label])=><a href={href} key={href} className={cn(path===href&&'active')} aria-current={path===href?'page':undefined} onClick={event=>handleInternalNavigation(event,href)}>{label}</a>)}</section>)}</aside>}
 
@@ -631,8 +632,8 @@ export default function SignalCraftApp({ initialPath = '/' }: { initialPath?: st
                     ? <AppHome state={state} setState={setState} openDetail={setDrawer} locale={locale} />
                     : path === '/app/image-to-video'
                       ? <ImageToVideoStudio account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
-                    : path === '/app/canvas'
-                      ? <VideoCanvasStudio key={accountScope} account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
+                    : path === CREATION_WORKSPACES.infinite.path || path === CREATION_WORKSPACES.shots.path
+                      ? <VideoCanvasStudio key={`${accountScope}:${path}`} workspace={path === CREATION_WORKSPACES.shots.path ? 'shots' : 'infinite'} onNavigate={navigate} account={account} locale={locale} onSignIn={beginLogin} notify={notify} />
                     : path === '/app/library/channels'
                       ? <Library kind="channels" state={state} setState={setState} openDetail={setDrawer} locale={locale} />
                       : path === '/app/library/videos'
@@ -647,7 +648,7 @@ export default function SignalCraftApp({ initialPath = '/' }: { initialPath?: st
                               onOpenVideo={setDrawer}
                               onOpenLibrary={() => navigate('/app/library/videos')}
                               onDiscover={() => navigate('/discover')}
-                              onOpenCanvas={() => navigate('/app/canvas')}
+                              onOpenCanvas={() => navigate(CREATION_WORKSPACES.shots.path)}
                               onImportVideo={video => {
                                 setState(current => current.saved.some(item => item.id === video.id) ? current : { ...current, saved: [video, ...current.saved] });
                               }}

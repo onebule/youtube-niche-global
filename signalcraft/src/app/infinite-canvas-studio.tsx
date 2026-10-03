@@ -9,6 +9,7 @@ import { getSession } from '@/src/lib/auth';
 import { CANVAS_TEXT_MODEL_OPTIONS, loadCanvasTextModels, generateCanvasText, type CanvasTextModel, type CanvasTextModelId } from '@/src/lib/canvas-text-generation';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
+import { CREATION_WORKSPACES } from '@/src/lib/canvas-workspace-boundaries';
 import { CANVAS_TEMPLATES, resolveCanvasTemplateSettings, type CanvasTemplate } from '@/src/lib/canvas-templates';
 import { VIDEO_MODEL_REGISTRY } from '@/src/lib/video-model-router';
 import { buildGenerationSpecV2, createManualGenerationJob, estimateVideoCredits, loadVideoAsset, loadVideoAssetUrl,
@@ -56,7 +57,7 @@ function verifiedCanvasModels(models: VideoModel[], states: Record<string, strin
 export default function InfiniteCanvasStudio({ account, locale, onSignIn, notify, onLegacy }: Props) {
   const zh = locale === 'zh';
   const copy = (cn: string, en: string) => zh ? cn : en;
-  const storageKey = accountStorageKey('signalcraft-infinite-canvas-v5', account);
+  const storageKey = accountStorageKey(CREATION_WORKSPACES.infinite.storageKey, account);
   const [workspace, setWorkspace] = useState<InfiniteCanvasWorkspace>(() => normalizeInfiniteWorkspace(null));
   const workspaceRef = useRef(workspace);
   const mounted = useRef(true);

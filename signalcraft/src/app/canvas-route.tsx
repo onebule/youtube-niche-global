@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { AccountSession } from '@/src/lib/auth';
 import { accountStorageKey } from '@/src/lib/account-storage';
+import { CREATION_WORKSPACES } from '@/src/lib/canvas-workspace-boundaries';
 import type { UiLocale } from '@/src/lib/ui-language';
 import InfiniteCanvasStudio from './infinite-canvas-studio';
 import CanvasTextChat from './canvas-text-chat';
@@ -15,39 +15,20 @@ type Props = {
   locale: UiLocale;
   onSignIn: () => void;
   notify: (message: string) => void;
+  workspace: 'infinite' | 'shots';
+  onNavigate: (path: string) => void;
 };
 
-// Keep the existing creator workspace, its storage and paid-job path intact.
-// New accounts see an empty freeform workspace; legacy projects are accessible
-// through the explicit "镜头工作区" switch without a lossy migration.
-export default function CanvasRoute(props: Props) {
-  const preferenceKey = accountStorageKey('signalcraft-canvas-home-v5', props.account);
-  const [mode, setMode] = useState<'infinite' | 'legacy'>('infinite');
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMode(localStorage.getItem(preferenceKey) === 'legacy' ? 'legacy' : 'infinite');
-    } catch {
-      setMode('infinite');
-    }
-    setReady(true);
-  }, [preferenceKey]);
-
-  const switchMode = (next: 'infinite' | 'legacy') => {
-    setMode(next);
-    try { localStorage.setItem(preferenceKey, next); } catch { /* storage disabled */ }
-  };
-
-  if (!ready) return <main className="page" aria-live="polite">正在打开创作画布…</main>;
+// URL selects the workspace. Existing project namespaces and paid-job services stay intact.
+export default function CanvasRoute({ workspace, onNavigate, ...props }: Props) {
+  const workspaceKey = accountStorageKey(CREATION_WORKSPACES[workspace].storageKey, props.account);
   return <>
-    {mode === 'legacy' ? <div className="infinite-legacy-wrap">
-      <button className="infinite-return-button" type="button" onClick={() => switchMode('infinite')}>
-        ← {props.locale === 'zh' ? '返回无限画布' : 'Back to infinite canvas'}
+    {workspace === 'shots' ? <div className="infinite-legacy-wrap" data-creation-workspace="shots">
+      <button className="infinite-return-button" type="button" onClick={() => onNavigate(CREATION_WORKSPACES.infinite.path)}>
+        ← {props.locale === 'zh' ? '打开无限画布（独立项目）' : 'Open infinite canvas (separate projects)'}
       </button>
-      <VideoCanvasStudio key={preferenceKey} {...props} />
-    </div> : <InfiniteCanvasStudio key={preferenceKey} {...props} onLegacy={() => switchMode('legacy')} />}
-    <CanvasTextChat key={`chat:${preferenceKey}`} account={props.account} locale={props.locale} onSignIn={props.onSignIn} />
+      <VideoCanvasStudio key={workspaceKey} {...props} />
+    </div> : <div data-creation-workspace="infinite"><InfiniteCanvasStudio key={workspaceKey} {...props} onLegacy={() => onNavigate(CREATION_WORKSPACES.shots.path)} /></div>}
+    <CanvasTextChat key={`chat:${workspace}:${workspaceKey}`} account={props.account} locale={props.locale} onSignIn={props.onSignIn} />
   </>;
 }

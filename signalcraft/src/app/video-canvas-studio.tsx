@@ -7,6 +7,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import type { AccountSession } from '@/src/lib/auth';
 import type { UiLocale } from '@/src/lib/ui-language';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
+import { CREATION_WORKSPACES, belongsToShotProject, scopedShotHistoryPage } from '@/src/lib/canvas-workspace-boundaries';
 import { CanvasCommandService, type CanvasNodePositions } from '@/src/lib/canvas-commands';
 import {
   cloneFrame,
@@ -175,7 +176,7 @@ function scriptOcrDraftFromState(state: ScriptOcrState): ScriptOcrDraft | null {
   };
 }
 
-const STORAGE_KEY = 'signalcraft-video-canvas-v1';
+const STORAGE_KEY = CREATION_WORKSPACES.shots.storageKey;
 // Deterministic first-render identities avoid SSR/client hydration drift. They
 // are replaced with persisted or freshly generated UUIDs before autosave starts.
 const INITIAL_PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -606,6 +607,8 @@ export default function VideoCanvasStudio({
   const generationContextRef = useRef<VideoGeneration | null>(null);
   const manualModelRef = useRef<Exclude<VideoModelId, 'auto'>>('seedance-2');
   const historyRestoreRequestRef = useRef(0);
+  const historyPageRequestRef = useRef(0);
+  const historyOffsetRef = useRef(0);
   const fullscreenFallbackRef = useRef(false);
 
   useEffect(() => {
@@ -1032,6 +1035,7 @@ export default function VideoCanvasStudio({
   };
 
   const rememberGeneration = useCallback((next: VideoGeneration) => {
+    if (!belongsToShotProject(next, project.id)) return;
     setHistory(previous => {
       const merged = [next, ...previous.filter(item => item.id !== next.id)];
       return merged.toSorted((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
@@ -1059,6 +1063,20 @@ export default function VideoCanvasStudio({
       restoredGenerationId: next.id,
       semantics: recordForTarget(snapshot.semantics),
     } : snapshot));
+  }, [project.id]);
+
+  useEffect(() => {
+    // Invalidate late history reads when the project or mounted workspace changes.
+    historyPageRequestRef.current += 1;
+    historyOffsetRef.current = 0;
+    const timer = window.setTimeout(() => {
+      setHistory([]);
+      setHistoryHasMore(false);
+      setHistoryLoading(false);
+      setHistoryLoadingMore(false);
+      setHistoryError('');
+    }, 0);
+    return () => { window.clearTimeout(timer); historyPageRequestRef.current += 1; };
   }, [project.id]);
 
   const patchSemanticNode = useCallback((nodeId: NodeId, patch: Parameters<typeof patchCanvasNode>[2]) => {
@@ -1090,19 +1108,26 @@ export default function VideoCanvasStudio({
 
   const loadHistoryPage = async (append = false) => {
     if (effectiveAccess !== 'ready' || (append ? historyLoadingMore : historyLoading)) return;
+    const requestId = ++historyPageRequestRef.current;
+    const offset = append ? historyOffsetRef.current : 0;
     if (append) setHistoryLoadingMore(true); else setHistoryLoading(true);
     setHistoryError('');
     try {
-      const next = await loadVideoHistory(20, append ? history.length : 0);
+      const next = await loadVideoHistory(20, offset);
+      if (requestId !== historyPageRequestRef.current) return;
+      const page = scopedShotHistoryPage(next, project.id, offset);
+      historyOffsetRef.current = page.nextOffset;
       setHistory(previous => append
-        ? [...previous, ...next.filter(item => !previous.some(existing => existing.id === item.id))]
-        : next,
+        ? [...previous, ...page.items.filter(item => !previous.some(existing => existing.id === item.id))]
+        : page.items,
       );
-      setHistoryHasMore(next.length === 20);
+      setHistoryHasMore(page.hasMore);
     } catch (cause) {
-      setHistoryError(clientMessage(cause));
+      if (requestId === historyPageRequestRef.current) setHistoryError(clientMessage(cause));
     } finally {
-      if (append) setHistoryLoadingMore(false); else setHistoryLoading(false);
+      if (requestId === historyPageRequestRef.current) {
+        if (append) setHistoryLoadingMore(false); else setHistoryLoading(false);
+      }
     }
   };
 
@@ -1186,7 +1211,7 @@ export default function VideoCanvasStudio({
       : shotSnapshots.find(snapshot => snapshot.semantics.shot.id === targetShotId) || null;
     if (!targetShotId || !targetSnapshot) {
       // Never copy a legacy, deleted, or foreign history job into the active
-      // Shot state. It remains available in the history list only.
+      // Shot state. The underlying account history is preserved separately.
       notify(zh ? '该历史结果没有当前项目中可确认的镜头归属，未载入当前镜头。' : 'This history item has no confirmed Shot in the current project and was not loaded.');
       return;
     }
@@ -3669,8 +3694,8 @@ export default function VideoCanvasStudio({
           <button type="button" className="canvas-history-close" aria-label={zh ? '关闭生成历史' : 'Close generation history'} onClick={() => setHistoryOpen(false)}>×</button>
         </div>
         {historyLoading ? <p className="canvas-history-state">{zh ? '正在读取历史任务…' : 'Loading generation history…'}</p> : historyError ? <div className="canvas-history-error"><p>{historyError}</p><button type="button" onClick={() => void loadHistoryPage(false)}>{zh ? '重试' : 'Retry'}</button></div> : history.length ? <div className="canvas-history-list">{history.map(item => <button type="button" className={'canvas-history-row ' + (generation?.id === item.id ? 'is-current' : '')} key={item.id} onClick={() => void restoreHistoryItem(item)}><span className="canvas-history-status" data-status={item.status} aria-hidden="true" /><span className="canvas-history-row-copy"><b>{item.prompt || (zh ? '未命名镜头' : 'Untitled shot')}</b><small>{[historyShotLabel(item, zh), modelName(item.model), item.duration, formatHistoryTime(item.createdAt, zh)].filter(Boolean).join(' · ')}</small></span><span className="canvas-history-row-meta"><strong>{statusLabel(item.status, zh, item.errorCode)}</strong><small>{item.creditsCost ? item.creditsCost + ' cr' : (zh ? '主人无限' : 'Owner')}</small></span></button>)}</div> : <div className="canvas-history-empty"><span aria-hidden="true">✦</span><p>{zh ? '还没有生成任务。' : 'No generation tasks yet.'}</p><small>{zh ? '提交第一条镜头后，它会自动出现在这里。' : 'Your first submitted shot will appear here.'}</small></div>}
-        {history.length > 0 && historyHasMore && <button type="button" className="canvas-history-more" disabled={historyLoadingMore} onClick={() => void loadHistoryPage(true)}>{historyLoadingMore ? (zh ? '正在加载…' : 'Loading…') : (zh ? '加载更多' : 'Load more')}</button>}
-        <p className="canvas-history-footnote">{zh ? '点击任务可载入当前画布；不会重新提交模型。' : 'Select a task to load it here; no model request is submitted.'}</p>
+        {historyHasMore && <button type="button" className="canvas-history-more" disabled={historyLoading || historyLoadingMore} onClick={() => void loadHistoryPage(true)}>{historyLoadingMore ? (zh ? '正在加载…' : 'Loading…') : (zh ? '继续查找本项目任务' : 'Find more project tasks')}</button>}
+        <p className="canvas-history-footnote">{zh ? '仅显示当前镜头项目的任务；无限画布、快速生成及归属未知的历史不会混入。原始历史未删除，点击本项目任务不会重新提交模型。' : 'Only this shot project is shown. Infinite canvas, quick generation and unassigned history stay separate and are not deleted. Selecting a task never submits a new request.'}</p>
       </aside>}
 
       {compareOpen && <aside id="canvas-compare-panel" className="canvas-compare-panel" role="region" aria-labelledby="canvas-compare-title" onKeyDown={event => { if (event.key === 'Escape') setCompareOpen(false); }}>

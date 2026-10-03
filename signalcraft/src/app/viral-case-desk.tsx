@@ -265,7 +265,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
     try {
       localStorage.setItem(handoffStorageKey, JSON.stringify(createViralCaseCanvasHandoff(selectedVideo, notes, h3Prompt)));
       onOpenCanvas();
-      notify('原创 Prompt 已带入无限画布；请先确认模型、素材、时长和成本。');
+      notify('原创 Prompt 已带入镜头工作区；请先确认模型、素材、时长和成本。');
     } catch {
       notify('当前账号无法准备画布草稿，请先复制 Prompt。');
     }
@@ -543,7 +543,7 @@ export default function ViralCaseDesk({ account, videos, locale, onCreateIdea, o
       {h3Prompt && <section className="viral-case-h3-output" aria-label="原创 H3 Prompt">
         <div className="viral-case-section-heading"><div><span className="eyebrow">H3 T2VA · ORIGINAL ADAPTATION</span><h2>原创生成草稿</h2></div><small>这是从研究机制生成的编辑底稿，不是原视频复刻指令。</small></div>
         <textarea value={h3Prompt} readOnly rows={12} aria-label="原创 H3 Prompt 文本" />
-        <div className="viral-case-report-actions"><button type="button" className="primary" onClick={copyH3Prompt}>复制 H3 Prompt</button><button type="button" onClick={openCanvasWithPrompt}>带入无限画布</button><small>当前按 H3 的 4–15 秒约束编译；中文研究笔记仍建议在生成前编辑成英文。</small></div>
+        <div className="viral-case-report-actions"><button type="button" className="primary" onClick={copyH3Prompt}>复制 H3 Prompt</button><button type="button" onClick={openCanvasWithPrompt}>带入镜头工作区</button><small>当前按 H3 的 4–15 秒约束编译；中文研究笔记仍建议在生成前编辑成英文。</small></div>
       </section>}
     </>}
   </main>;
