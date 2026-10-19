@@ -62,3 +62,21 @@ jobs:
           trap 'kill "$OFF_PID" "$ON_PID" 2>/dev/null || true' EXIT
           STUDIO_SMOKE_BASE_URL=http://127.0.0.1:3107 STUDIO_SMOKE_EXPECT_STATUS=404 node scripts/studio-preview-http-smoke.mjs
           STUDIO_SMOKE_BASE_URL=http://127.0.0.1:3108 STUDIO_SMOKE_EXPECT_STATUS=200 node scripts/studio-preview-http-smoke.mjs
+          BROWSER_BIN="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [[ -z "$BROWSER_BIN" ]]; then echo "Headless Chrome unavailable"; exit 1; fi
+          mkdir -p /tmp/studio-browser-artifacts
+          "$BROWSER_BIN" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --remote-allow-origins='*' --remote-debugging-port=9223 \
+            --user-data-dir=/tmp/studio-parity-cdp \
+            http://127.0.0.1:3108/studio-parity/canvas >/tmp/studio-browser.log 2>&1 &
+          CHROME_PID=$!
+          trap 'kill "$OFF_PID" "$ON_PID" "$CHROME_PID" 2>/dev/null || true' EXIT
+          STUDIO_BROWSER_ARTIFACT_DIR=/tmp/studio-browser-artifacts node scripts/studio-browser-e2e.mjs
+      - name: Upload non-sensitive studio browser screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-browser-e2e
+          path: /tmp/studio-browser-artifacts/studio-browser-validated.png
+          if-no-files-found: ignore
+          retention-days: 7
