@@ -71,10 +71,11 @@ export default function CanvasClient() {
     const current = historyRef.current;
     const before = current.past.at(-1);
     if (!before) return;
+    const after = projectRef.current;
     projectRef.current = before;
     setProject(before);
-    writeHistory({ past: current.past.slice(0, -1), future: [projectRef.current === before ? project : projectRef.current, ...current.future].slice(0, 50) });
-  }, [project, writeHistory]);
+    writeHistory({ past: current.past.slice(0, -1), future: [after, ...current.future].slice(0, 50) });
+  }, [writeHistory]);
 
   const redo = useCallback(() => {
     const current = historyRef.current;
@@ -246,7 +247,7 @@ export default function CanvasClient() {
     drag.current = null;
   };
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget || event.button !== 0) return;
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-canvas-node]')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pan.current = { startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
     setSelected(null);
@@ -346,7 +347,7 @@ export default function CanvasClient() {
               })}
             </svg>
             {project.nodes.map(node => <article key={node.id} className={selected === node.id ? styles.nodeSelected : styles.node}
-              data-kind={node.kind} style={{ left: node.x, top: node.y }}>
+              data-canvas-node data-kind={node.kind} style={{ left: node.x, top: node.y }}>
               <div className={styles.nodeHead} onPointerDown={e => beginDrag(node.id, e)}
                 onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
                 role="button" tabIndex={0} aria-label={`选择并拖动 ${node.title}`}
@@ -387,7 +388,7 @@ export default function CanvasClient() {
                 if (activeNode.kind !== 'video' && e.target.value !== activeNode.text) patchNode(activeNode.id, { text: e.target.value });
               }} /></label>
           {activeNode.kind === 'video' && activeNode.video && <>
-            <label>参考模式<select value={activeNode.video.mode} onChange={e => patchNode(activeNode.id, { video: { ...activeNode.video!, mode: e.target.value, modeSelection: 'manual' } })}>
+            <label>参考模式<select value={activeNode.video.mode} onChange={e => patchNode(activeNode.id, { video: { ...activeNode.video!, mode: e.target.value as 'text' | 'start-end' | 'omni', modeSelection: 'manual' } })}>
               <option value="text">文生视频</option><option value="start-end">首尾帧</option><option value="omni">全能参考</option>
             </select></label>
             <p className={styles.note}>本实验台只编辑工作流数据。真实视频生成请进入原工作室并单独审批。</p>
