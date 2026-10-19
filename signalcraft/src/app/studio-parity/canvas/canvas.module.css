@@ -168,3 +168,28 @@
 .agentReview li { font-size: 11px; line-height: 1.7; color: #67617e; }
 .agentReview p { margin: 6px 0; font-size: 10px; line-height: 1.5; color: #9b6c70; }
 @media (max-width: 560px) { .agentPanel { padding: 12px; max-height: 360px; } .agentActions button { width: 100%; } }
+
+
+/* Local-only workflow state machine: visible execution audit, never media output. */
+.mockPanel { flex: 0 0 auto; max-height: 360px; overflow: auto; padding: 17px 22px; background: #f6fbff; border-bottom: 1px solid #d5e2ef; }
+.mockTop { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.mockTop strong { font-size: 13px; color: #2e485e; }
+.mockTop span { font-size: 10px; color: #547586; font-weight: 700; }
+.mockPanel > p { font-size: 11px; color: #667a8d; line-height: 1.5; }
+.mockActions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.mockActions label { display: flex; flex-direction: column; gap: 5px; font-size: 10px; color: #617388; }
+.mockActions select, .mockActions button { max-width: 230px; min-height: 34px; padding: 8px 10px; border: 1px solid #c9d8e7; background: #fff; border-radius: 7px; color: #416080; font-size: 11px; }
+.mockActions button:disabled { opacity: .45; cursor: not-allowed; }
+.mockActions button:not(:disabled):hover { border-color: #5f87b9; background: #f0f7ff; }
+.mockWarning { color: #ac5c48 !important; font-weight: 700; }
+.mockStatus { margin-top: 12px; padding: 13px; border: 1px solid #d6e3f1; background: #fff; border-radius: 9px; }
+.mockStatus > strong { color: #36556e; font-size: 12px; }
+.mockTasks { padding: 0; margin: 10px 0; display: flex; gap: 9px; list-style: none; flex-wrap: wrap; }
+.mockTasks li { min-width: 140px; flex: 1 1 180px; display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid #e2ebf4; border-radius: 8px; }
+.mockTasks b { font-size: 11px; overflow-wrap: anywhere; }
+.mockTasks span { font-size: 10px; color: #487694; }
+.mockTasks small { color: #ae5f5f; line-height: 1.4; }
+.mockStatus summary { cursor: pointer; font-size: 11px; color: #486883; }
+.mockEvents { padding-left: 20px; }
+.mockEvents li { font-size: 10px; color: #6b7c8d; line-height: 1.8; }
+@media (max-width: 560px) { .mockPanel { padding: 12px; max-height: 390px; } .mockActions select, .mockActions button { max-width: none; } }
