@@ -1,4 +1,5 @@
 import type { InfiniteCanvasProject } from './infinite-canvas-graph.ts';
+import { normalizeInfiniteWorkspace } from './infinite-canvas-graph.ts';
 import { previewStudioWorkflow } from './studio-workflow-plan.ts';
 
 /**
@@ -51,13 +52,26 @@ const clocklessEvent = (
   return [...events, { sequence: events.length + 1, type, nodeId, message }];
 };
 
-/** Graph camera/view does not change the workflow; node and edge edits do. */
+/**
+ * Hash only the canonical Graph v1 semantics. The browser draft loader
+ * normalizes optional fields and reconstructs edges on reload, so hashing raw
+ * in-memory objects gives a different token for the *same* saved workflow.
+ * This uses the exact same normalization contract as the canvas draft loader.
+ * Camera, project title, updatedAt and display-only metadata are excluded.
+ */
 export function mockGraphFingerprint(project: InfiniteCanvasProject): string {
+  const workspace = normalizeInfiniteWorkspace({
+    version: 1, activeProjectId: project.id, projects: [project],
+  });
+  const canonical = workspace.projects[0];
+  if (!canonical || canonical.id !== project.id) {
+    throw new Error('Mock 无法规范化当前画布图。');
+  }
   return JSON.stringify({
-    version: project.version,
-    id: project.id,
-    nodes: project.nodes,
-    edges: project.edges,
+    version: canonical.version,
+    id: canonical.id,
+    nodes: canonical.nodes,
+    edges: canonical.edges,
   });
 }
 
