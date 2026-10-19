@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react';
 import Link from 'next/link';
 import { accountStorageKey, accountStorageScope } from '@/src/lib/account-storage';
@@ -10,6 +10,7 @@ import {
   connectionIssue, connectInfiniteNodes,
   type InfiniteCanvasProject, type InfiniteNodeKind, type InfiniteInputPort,
 } from '@/src/lib/infinite-canvas-graph';
+import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-workflow-plan';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
@@ -27,6 +28,10 @@ const PORTS: { id: InfiniteInputPort; name: string }[] = [
   { id: 'end', name: '尾帧' },
   { id: 'reference', name: '参考素材' },
 ];
+const STEP_LABELS: Record<WorkflowStepState, string> = {
+  READY_FOR_MANUAL_PREFLIGHT: '待人工预检', NEEDS_MODEL: '未选模型',
+  NEEDS_PROMPT: '缺少提示词', NEEDS_ASSETS: '素材未就绪', INVALID_INPUT: '输入不兼容',
+};
 const NODE_WIDTH = 264;
 const NODE_HEIGHT = 204;
 const BOARD_WIDTH = 5000;
@@ -51,6 +56,8 @@ export default function CanvasClient() {
   const [history, setHistory] = useState<History>({ past: [], future: [] });
   const historyRef = useRef(history);
   const [scope, setScope] = useState('');
+  const [showPlan, setShowPlan] = useState(false);
+  const workflow = useMemo(() => previewStudioWorkflow(project), [project]);
   const drag = useRef<DragState | null>(null);
   const pan = useRef<PanState | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -330,6 +337,7 @@ export default function CanvasClient() {
         <span className={styles.safePill}>LOCAL · NO GENERATION</span>
         <button type="button" disabled={!history.past.length} onClick={undo}>↶ 撤销</button>
         <button type="button" disabled={!history.future.length} onClick={redo}>↷ 重做</button>
+        <button type="button" onClick={() => setShowPlan(value => !value)} aria-expanded={showPlan} aria-controls="studio-workflow-preview">{showPlan ? '收起检查' : '检查工作流'}</button>
         <button type="button" onClick={exportProject}>导出 JSON</button>
         <label className={styles.importButton}>导入 JSON <input type="file" accept=".json,application/json" onChange={event => { void importProject(event); }} /></label>
       </div>
@@ -357,6 +365,18 @@ export default function CanvasClient() {
             <button type="button" onClick={resetView}>复位</button>
           </div>
         </div>
+        {showPlan && <section id="studio-workflow-preview" className={styles.planPanel} aria-label="工作流模拟执行计划">
+          <div className={styles.planTop}><strong>工作流 Dry Run · 仅依赖检查</strong><span>{workflow.videos.length} 个视频节点 · {workflow.issues.length} 条待处理项</span></div>
+          <p>不执行生成、不访问模型、没有预算报价。所有节点仍需通过人工预检、服务端权限和费用确认。</p>
+          {workflow.videos.length > 0 && <ol className={styles.planList}>{workflow.videos.map((step, index) =>
+            <li key={step.nodeId} className={styles.planStep}><b>{index + 1}. {step.title}</b>
+              <span>{STEP_LABELS[step.state]} · {step.mode} · {step.model || '未选模型'}</span>
+              {step.dependsOn.length > 0 && <small>依赖：{step.dependsOn.map(id => workflow.videos.find(item => item.nodeId === id)?.title || id).join('、')}</small>}
+              {step.issues.length > 0 && <small>{step.issues.join('；')}</small>}
+            </li>)}</ol>}
+          {workflow.issues.length > 0 && <div className={styles.planIssues} role="status">{workflow.issues.map((issue, i) => <p key={i}>· {issue}</p>)}</div>}
+          {workflow.videos.length > 0 && workflow.issues.length === 0 && <p>所有节点的静态检查已通过；不代表模型可用或实际生成成功。</p>}
+        </section>}
         <div className={styles.viewport} ref={canvasRef}
           onPointerDown={startPan}
           onPointerMove={movePan}
