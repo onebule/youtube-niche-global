@@ -16,7 +16,6 @@ concurrency:
 
 jobs:
   validate:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -52,3 +51,14 @@ jobs:
         run: pnpm typecheck
       - name: Production build validation (no deployment)
         run: pnpm build
+      - name: Verify disabled and enabled preview HTTP routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          STUDIO_PARITY_PREVIEW=disabled pnpm exec next start -p 3107 >/tmp/studio-off.log 2>&1 &
+          OFF_PID=$!
+          STUDIO_PARITY_PREVIEW=enabled pnpm exec next start -p 3108 >/tmp/studio-on.log 2>&1 &
+          ON_PID=$!
+          trap 'kill "$OFF_PID" "$ON_PID" 2>/dev/null || true' EXIT
+          STUDIO_SMOKE_BASE_URL=http://127.0.0.1:3107 STUDIO_SMOKE_EXPECT_STATUS=404 node scripts/studio-preview-http-smoke.mjs
+          STUDIO_SMOKE_BASE_URL=http://127.0.0.1:3108 STUDIO_SMOKE_EXPECT_STATUS=200 node scripts/studio-preview-http-smoke.mjs
