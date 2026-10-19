@@ -193,3 +193,6 @@
 .mockEvents { padding-left: 20px; }
 .mockEvents li { font-size: 10px; color: #6b7c8d; line-height: 1.8; }
 @media (max-width: 560px) { .mockPanel { padding: 12px; max-height: 390px; } .mockActions select, .mockActions button { max-width: none; } }
+
+/* Display browser-only mock journal metadata without implying cloud durability. */
+.mockCheckpointLabel { font-size: 10px; line-height: 1.5; color: #53728e; font-weight: 600; margin: 8px 0; }
