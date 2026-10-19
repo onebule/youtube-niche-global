@@ -220,8 +220,22 @@ await click('打开');
 await until('document.querySelectorAll("[data-canvas-node]").length',17,'original graph durable after duplicate/delete');
 await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("CANCELLED")',true,'original cancelled Mock journal still isolated after project changes');
 
+// Full-workspace export + safe multi-project JSON import, without replacing existing projects.
+await evaluate('window.confirm=()=>true');
+await click('导出全部项目');
+await until('document.querySelector("footer[role=status]")?.textContent.includes("完整本地项目工作区")',true,'full workspace export action');
+const savedWorkspaceJson=await evaluate('(()=>{const key=Object.keys(sessionStorage).find(k=>k.startsWith("signalcraft-studio-parity-canvas-sandbox-v1:anonymous"));return sessionStorage.getItem(key);})()');
+assert.equal(JSON.parse(savedWorkspaceJson).projects.length,2,'export source project library intact');
+const uploadWorkspace='(()=>{const input=document.querySelector("input[type=file]");const data=new DataTransfer();data.items.add(new File(['+JSON.stringify(savedWorkspaceJson)+'],"studio-full-workspace.json",{type:"application/json"}));input.files=data.files;input.dispatchEvent(new Event("change",{bubbles:true}));return true;})()';
+assert.equal(await evaluate(uploadWorkspace),true,'bulk import file input event fired');
+await until(projectCount,4,'bulk import adds two safe templates without overwriting projects');
+await until('document.querySelectorAll("[data-canvas-node]").length',17,'imported video/text nodes preserved');
+assert.equal(await evaluate('(()=>{const key=Object.keys(sessionStorage).find(k=>k.startsWith("signalcraft-studio-parity-canvas-sandbox-v1:anonymous"));const projects=JSON.parse(sessionStorage.getItem(key)).projects;return projects.length===4&&projects.slice(-2).every(p=>p.nodes.every(n=>n.assetId===null&&n.output===null&&n.runs.length===0&&n.kind!=="video-result"));})()'),true,'bulk imported templates never inherit paid tasks or private assets');
+await cdp('Page.reload',{ignoreCache:true});
+await until(projectCount,4,'bulk imported project library survives reload');
+await until('document.querySelectorAll("[data-canvas-node]").length',17,'imported active graph survives reload');
 const dir=process.env.STUDIO_BROWSER_ARTIFACT_DIR||'/tmp';await fs.mkdir(dir,{recursive:true});
 const screenshot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
 await fs.writeFile(dir+'/studio-browser-validated.png',Buffer.from(screenshot.data,'base64'));
-console.log('PASS: pointer drag, Agent bridge, Mock replay, local project create/switch/duplicate/rename/delete, project isolation, reload persistence');
+console.log('PASS: pointer drag, Agent bridge, Mock replay, project CRUD, sanitized duplication, full JSON export and bulk import, reload persistence');
 ws.close();
