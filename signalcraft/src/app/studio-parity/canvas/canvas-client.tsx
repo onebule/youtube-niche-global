@@ -11,6 +11,7 @@ import {
   type InfiniteCanvasProject, type InfiniteNodeKind, type InfiniteInputPort,
 } from '@/src/lib/infinite-canvas-graph';
 import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-workflow-plan';
+import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
@@ -65,6 +66,9 @@ export default function CanvasClient() {
   const historyRef = useRef(history);
   const [scope, setScope] = useState('');
   const [showPlan, setShowPlan] = useState(false);
+  const [showAgent, setShowAgent] = useState(false);
+  const [idea, setIdea] = useState('');
+  const [agentDraft, setAgentDraft] = useState<StudioRuleDraft | null>(null);
   const workflow = useMemo(() => previewStudioWorkflow(project), [project]);
   const drag = useRef<DragState | null>(null);
   const pan = useRef<PanState | null>(null);
@@ -131,6 +135,8 @@ export default function CanvasClient() {
         const intent = JSON.parse(pending) as { prompt?: unknown; mode?: unknown };
         sessionStorage.removeItem('signalcraft-studio-parity-intent-v1');
         if (typeof intent.prompt === 'string' && intent.prompt.trim()) {
+          setIdea(intent.prompt.slice(0, 2000));
+          setShowAgent(true);
           const text = createInfiniteNode(newId(), 'text',
             130 + (projectRef.current.nodes.length % 4) * 320,
             120 + Math.floor(projectRef.current.nodes.length / 4) * 260);
@@ -335,6 +341,36 @@ export default function CanvasClient() {
     } catch { setMessage('导入失败：JSON 无效或不是可识别的 SignalCraft v1 项目。'); }
   };
 
+  const planFromIdea = () => {
+    try {
+      const next = planStudioRequest(idea);
+      setAgentDraft(next);
+      setMessage('已生成离线规则草稿：' + next.shotCount + ' 个镜头。请审核后手动加入画布。');
+    } catch (error) {
+      setAgentDraft(null);
+      setMessage(error instanceof Error ? error.message : '规划未完成。');
+    }
+  };
+  const confirmAgentDraft = () => {
+    if (!agentDraft) return;
+    if (!window.confirm('确认将 ' + agentDraft.shotCount + ' 个镜头的结构草稿添加到当前隔离画布？不会生成视频、扣积分或覆盖旧节点。')) return;
+    try {
+      const previous = projectRef.current;
+      const next = appendStudioRuleDraft(previous, agentDraft, newId);
+      apply(next);
+      setSelected(next.nodes.at(-1)?.id || null);
+      setSource(null);
+      const first = next.nodes[previous.nodes.length];
+      if (first) setCamera({ x: 120 - first.x * 0.65, y: 25, scale: 0.65 });
+      setAgentDraft(null);
+      setShowAgent(false);
+      setShowPlan(true);
+      setMessage('已新增规则草稿和节点连线。请在「检查工作流」中逐项修正，再单独审批任何实际生成。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '无法添加草稿。');
+    }
+  };
+
   const activeNode = project.nodes.find(item => item.id === selected) || null;
   const resetView = () => setCamera(defaultCamera);
 
@@ -343,6 +379,7 @@ export default function CanvasClient() {
       <div className={styles.brand}><Link href="/studio-parity">← 工作室入口</Link><strong>SignalCraft <span>／ 无限画布实验台</span></strong></div>
       <div className={styles.barActions}>
         <span className={styles.safePill}>LOCAL · NO GENERATION</span>
+        <button type="button" onClick={() => setShowAgent(value => !value)} aria-expanded={showAgent} aria-controls="studio-agent-draft">{showAgent ? '收起规则草稿' : '生成节点草稿'}</button>
         <button type="button" disabled={!history.past.length} onClick={undo}>↶ 撤销</button>
         <button type="button" disabled={!history.future.length} onClick={redo}>↷ 重做</button>
         <button type="button" onClick={() => setShowPlan(value => !value)} aria-expanded={showPlan} aria-controls="studio-workflow-preview">{showPlan ? '收起检查' : '检查工作流'}</button>
@@ -373,6 +410,23 @@ export default function CanvasClient() {
             <button type="button" onClick={resetView}>复位</button>
           </div>
         </div>
+        {showAgent && <section id="studio-agent-draft" className={styles.agentPanel} aria-label="离线创作需求规划">
+          <div className={styles.agentTitle}><strong>从创作需求搭建节点图</strong><span>LOCAL_RULES_ONLY · 非大模型 Agent</span></div>
+          <p>自动建立分镜、文本和视频占位节点。此阶段只生成结构，不会产出视频、执行工作流或发生费用。</p>
+          <label className={styles.agentPromptLabel} htmlFor="studio-agent-idea">创作需求（最多 2000 字）</label>
+          <textarea id="studio-agent-idea" className={styles.agentInput} rows={3} maxLength={2000} value={idea}
+            placeholder="例：制作一条30秒英文 Shorts，分成6个镜头，9:16，角色 Nilo 保持一致。"
+            onChange={event => { setIdea(event.target.value); setAgentDraft(null); }} />
+          <div className={styles.agentActions}>
+            <button type="button" onClick={planFromIdea} disabled={!idea.trim()}>预览节点规划</button>
+            {agentDraft && <button type="button" className={styles.agentApprove} onClick={confirmAgentDraft}>确认添加到画布（不执行生成）</button>}
+          </div>
+          {agentDraft && <div className={styles.agentReview} aria-live="polite">
+            <strong>{agentDraft.shotCount} 个镜头 · {agentDraft.durationSeconds ? agentDraft.durationSeconds + ' 秒' : '时长未设'} · {agentDraft.aspectRatio}</strong>
+            <ol>{agentDraft.shots.map(shot => <li key={shot.index}>{shot.title}：{shot.storyboard.split('\n')[0]}</li>)}</ol>
+            {agentDraft.caveats.map((warning, index) => <p key={index}>· {warning}</p>)}
+          </div>}
+        </section>}
         {showPlan && <section id="studio-workflow-preview" className={styles.planPanel} aria-label="工作流模拟执行计划">
           <div className={styles.planTop}><strong>工作流 Dry Run · 仅依赖检查</strong><span>{workflow.videos.length} 个视频节点 · {workflow.issues.length} 条待处理项</span></div>
           <p>不执行生成、不访问模型、没有预算报价。所有节点仍需通过人工预检、服务端权限和费用确认。</p>
