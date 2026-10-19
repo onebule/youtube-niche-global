@@ -73,3 +73,17 @@ test('every video remains manually gated and no synthetic result is introduced',
   assert.equal(result.nodes.some(node => node.runs.length !== 0), false);
   assert.equal(result.nodes.filter(node => node.kind === 'video').every(node => node.video.model === null), true);
 });
+
+
+test('planned shot durations preserve total seconds without silent clamping', () => {
+  const draft = planStudioRequest('制作29秒短片，分成5个镜头，16:9');
+  const graph = appendStudioRuleDraft(createInfiniteProject('project'), draft, ids());
+  const videos = graph.nodes.filter(node => node.kind === 'video');
+  assert.deepEqual(videos.map(node => Number.parseInt(node.video.duration, 10)), [6, 6, 6, 6, 5]);
+  assert.equal(videos.reduce((sum, node) => sum + Number.parseInt(node.video.duration, 10), 0), 29);
+});
+
+test('incompatible per-shot duration rejects instead of changing user constraints', () => {
+  assert.throws(() => planStudioRequest('100秒，分成2个镜头'), /时长与镜头数/);
+  assert.throws(() => planStudioRequest('8秒，分成8个镜头'), /时长与镜头数/);
+});
