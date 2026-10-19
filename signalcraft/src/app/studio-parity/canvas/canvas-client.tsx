@@ -108,6 +108,29 @@ export default function CanvasClient() {
     } catch {
       setMessage('历史草稿无法读取，已保留空白画布。不会覆盖原有工作室内容。');
     }
+    // One-shot handoff from the explicit "添加到实验画布" action.
+    // Always append to the isolated project; never overwrite old drafts.
+    try {
+      const pending = sessionStorage.getItem('signalcraft-studio-parity-intent-v1');
+      if (pending) {
+        const intent = JSON.parse(pending) as { prompt?: unknown; mode?: unknown };
+        sessionStorage.removeItem('signalcraft-studio-parity-intent-v1');
+        if (typeof intent.prompt === 'string' && intent.prompt.trim()) {
+          const text = createInfiniteNode(newId(), 'text',
+            130 + (projectRef.current.nodes.length % 4) * 320,
+            120 + Math.floor(projectRef.current.nodes.length / 4) * 260);
+          text.title = '创作需求 · 待规划';
+          text.text = intent.prompt.slice(0, 4000);
+          const next = { ...projectRef.current, nodes: [...projectRef.current.nodes, text] };
+          projectRef.current = next;
+          setProject(next);
+          setSelected(text.id);
+          setMessage('已从创作入口导入需求。尚未调用 Agent；请继续建立分镜和视频节点。');
+        }
+      }
+    } catch {
+      setMessage('临时创作需求读取失败，已保留现有项目。');
+    }
     setReady(true);
   }, []);
 
@@ -276,7 +299,10 @@ export default function CanvasClient() {
     if (file.size > 1024 * 1024) { setMessage('JSON 不能超过 1 MB。'); return; }
     try {
       const data: unknown = JSON.parse(await file.text());
-      if (!data || typeof data !== 'object' || (data as { version?: unknown }).version !== 1 || !Array.isArray((data as { projects?: unknown }).projects)) {
+      if (!data || typeof data !== 'object' || (data as { version?: unknown }).version !== 1 || !Array.isArray((data as { projects?: unknown }).projects)
+        || !(data as { projects: unknown[] }).projects.some(p => p && typeof p === 'object'
+          && typeof (p as { id?: unknown }).id === 'string' && Array.isArray((p as { nodes?: unknown }).nodes)
+          && Array.isArray((p as { edges?: unknown }).edges))) {
         throw new Error('版本不兼容');
       }
       const workspace = normalizeInfiniteWorkspace(data);
