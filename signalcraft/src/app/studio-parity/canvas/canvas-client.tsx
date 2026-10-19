@@ -464,16 +464,30 @@ export default function CanvasClient() {
   };
 
   const mockStale = Boolean(mockRun && mockRun.graphFingerprint !== mockGraphFingerprint(project));
-  const commitMockCheckpoint = (state: StudioMockJournalState) => {
+  const commitMockCheckpoint = (
+    state: StudioMockJournalState, previous: StudioMockJournal | null = null,
+  ) => {
     const identity = getSession();
     if (!ready || !storageScope || accountStorageScope(identity) !== storageScope) {
       throw new Error('账号状态发生变化，已拒绝写入 Mock 检查点。');
     }
+    // Browser storage is not transactional. Detect ordinary cross-tab
+    // conflicts before writing; true atomicity requires a future server CAS.
+    // A deliberate "create new Mock run" may overwrite the previous journal.
+    const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+    const key = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+    if (previous) {
+      const raw = storage.getItem(key);
+      if (!raw) throw new Error('Mock 检查点已在其他标签删除，请重新加载。');
+      const persisted = restoreStudioMockJournal(raw, projectRef.current, storageScope).journal;
+      if (JSON.stringify(persisted) !== JSON.stringify(previous)) {
+        throw new Error('Mock 检查点已被其他标签更新，请重新加载后继续。');
+      }
+    }
     // Synchronous persistence happens before updating React state. A failed
     // browser write does not advance the visible Mock execution state.
     const payload = serializeStudioMockJournal(state.journal, projectRef.current, storageScope);
-    const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
-    storage.setItem(accountStorageKey(MOCK_JOURNAL_PREFIX, identity), payload);
+    storage.setItem(key, payload);
     mockJournalRef.current = state.journal;
     setMockJournal(state.journal);
     setMockRun(state.run);
@@ -501,7 +515,7 @@ export default function CanvasClient() {
         action: commandType[action], requestId: newId(),
         expectedRevision: current.revision,
       });
-      commitMockCheckpoint(next);
+      commitMockCheckpoint(next, current);
       setMessage('Mock Runtime：' + next.run.status + '。已持久保存第 ' +
         next.journal.revision + ' 条命令，真实生成 0 次。');
     } catch (error) {
