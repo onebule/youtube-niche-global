@@ -423,6 +423,31 @@ export default function CanvasClient() {
 
   const activeNode = project.nodes.find(item => item.id === selected) || null;
   const resetView = () => setCamera(defaultCamera);
+  const fitView = () => {
+    const items = projectRef.current.nodes;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width < 120 || rect.height < 120 || items.length === 0) {
+      resetView();
+      return;
+    }
+    const left = Math.min(...items.map(node => node.x));
+    const top = Math.min(...items.map(node => node.y));
+    const right = Math.max(...items.map(node => node.x + NODE_WIDTH));
+    const bottom = Math.max(...items.map(node => node.y + NODE_HEIGHT));
+    const margin = 48;
+    const visibleW = Math.max(rect.width - 2 * margin, 100);
+    const visibleH = Math.max(rect.height - 2 * margin, 100);
+    // Graph v1 normalizer persists zoom in [0.2, 2.5]. Respect this range.
+    const scale = clamp(Math.min(visibleW / Math.max(1, right - left), visibleH / Math.max(1, bottom - top)), 0.2, 2.2);
+    const centerX = (left + right) / 2;
+    const centerY = (top + bottom) / 2;
+    setCamera({
+      scale,
+      x: rect.width / 2 - centerX * scale,
+      y: rect.height / 2 - centerY * scale,
+    });
+    setMessage('已将画布视角调整到节点范围；多镜头流程可继续通过滚轮缩放。');
+  };
 
   return <main className={styles.shell}>
     <header className={styles.bar}>
@@ -458,6 +483,7 @@ export default function CanvasClient() {
             <output>{Math.round(camera.scale * 100)}%</output>
             <button type="button" onClick={() => setCamera(v => ({ ...v, scale: clamp(v.scale + .1, .35, 2.2) }))}>＋</button>
             <button type="button" onClick={resetView}>复位</button>
+            <button type="button" onClick={fitView} title="按节点范围缩放和平移画布">适配全部节点</button>
           </div>
         </div>
         {showAgent && <section id="studio-agent-draft" className={styles.agentPanel} aria-label="离线创作需求规划">
