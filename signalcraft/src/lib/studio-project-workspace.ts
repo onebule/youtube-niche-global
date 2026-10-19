@@ -171,3 +171,49 @@ export function studioDuplicateProject(
     projects: [...workspace.projects, copy],
   };
 }
+
+
+/**
+ * Import external Graph v1 projects as new, sanitized structure-only templates.
+ * Existing projects are never replaced; all-or-nothing on validation errors.
+ * Even if an external file contains generated results, none become live assets.
+ */
+export function studioImportWorkspaceTemplates(
+  current: InfiniteCanvasWorkspace,
+  source: InfiniteCanvasWorkspace,
+  makeProjectId: () => string,
+  makeNodeId: () => string,
+): InfiniteCanvasWorkspace {
+  assertWorkspace(current);
+  assertWorkspace(source);
+  if (current.projects.length + source.projects.length > STUDIO_MAX_PROJECTS) {
+    throw new Error('导入后将超过 40 个项目上限。');
+  }
+  let next = current;
+  const existingIds = new Set(current.projects.flatMap(project =>
+    [project.id, ...project.nodes.map(node => node.id),
+      ...project.edges.map(edge => edge.id)]));
+  for (const imported of source.projects) {
+    const newProjectId = makeProjectId();
+    if (typeof newProjectId !== 'string' || existingIds.has(newProjectId)) {
+      throw new Error('导入新项目 ID 无效或重复。');
+    }
+    const staged = studioDuplicateProject(
+      studioWorkspaceFromProject(imported),
+      imported.id, newProjectId, makeNodeId,
+      imported.title + ' · 导入',
+    );
+    const copy = studioActiveProject(staged);
+    const addedIds = [copy.id, ...copy.nodes.map(node => node.id), ...copy.edges.map(edge => edge.id)];
+    if (addedIds.some(id => existingIds.has(id))) {
+      throw new Error('导入项目节点或连线 ID 与已有项目冲突。');
+    }
+    for (const id of addedIds) existingIds.add(id);
+    next = {
+      version: 1,
+      activeProjectId: copy.id,
+      projects: [...next.projects,copy],
+    };
+  }
+  return next;
+}
