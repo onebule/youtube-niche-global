@@ -13,6 +13,7 @@ import {
 import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-workflow-plan';
 import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
 import { suggestStudioAgentEdits, prepareStudioAgentPatch, confirmStudioAgentPatch, type StudioAgentPatch } from '@/src/lib/studio-agent-tools';
+import { bridgePreexistingVideoAgentPlan, type StudioPlanBridgeReview } from '@/src/lib/studio-agent-plan-bridge';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
@@ -71,6 +72,8 @@ export default function CanvasClient() {
   const [idea, setIdea] = useState('');
   const [agentDraft, setAgentDraft] = useState<StudioRuleDraft | null>(null);
   const [toolProposal, setToolProposal] = useState<StudioAgentPatch | null>(null);
+  const [agentJson, setAgentJson] = useState('');
+  const [bridgeReview, setBridgeReview] = useState<StudioPlanBridgeReview | null>(null);
   const workflow = useMemo(() => previewStudioWorkflow(project), [project]);
   const drag = useRef<DragState | null>(null);
   const pan = useRef<PanState | null>(null);
@@ -379,6 +382,7 @@ export default function CanvasClient() {
       const instructions = suggestStudioAgentEdits(current, selected, idea);
       const proposal = prepareStudioAgentPatch(current, instructions, newId);
       setToolProposal(proposal);
+      setBridgeReview(null);
       setAgentDraft(null);
       setMessage('已预演 ' + proposal.changes.length + ' 项 Agent 工具操作。请审查差异后再应用。');
     } catch (error) {
@@ -393,11 +397,27 @@ export default function CanvasClient() {
       const next = confirmStudioAgentPatch(projectRef.current, toolProposal);
       apply(next);
       setToolProposal(null);
+      setBridgeReview(null);
       setShowPlan(true);
       setMessage('已应用 Agent 节点操作，可以通过撤销恢复。未调用 AI Provider 或发生费用。');
     } catch (error) {
       setToolProposal(null);
+      setBridgeReview(null);
       setMessage(error instanceof Error ? error.message : '画布已变化，需要重新预演。');
+    }
+  };
+
+  const previewExistingAgentPlan = () => {
+    try {
+      const review = bridgePreexistingVideoAgentPlan(projectRef.current, selected, agentJson, newId);
+      setBridgeReview(review);
+      setToolProposal(review.proposal);
+      setAgentDraft(null);
+      setMessage('已适配已有 Agent 规划。仅提议修改选中视频节点的 Prompt 和创建说明节点，未请求模型。');
+    } catch (error) {
+      setBridgeReview(null);
+      setToolProposal(null);
+      setMessage(error instanceof Error ? error.message : '规划导入失败，未修改画布。');
     }
   };
 
@@ -453,6 +473,22 @@ export default function CanvasClient() {
             {toolProposal && <button type="button" className={styles.agentApprove} onClick={approveToolProposal}>审核通过并应用操作</button>}
             {agentDraft && <button type="button" className={styles.agentApprove} onClick={confirmAgentDraft}>确认添加到画布（不执行生成）</button>}
           </div>
+          <details className={styles.agentReview}>
+            <summary>导入已有 Agent 规划 JSON（不调用 API）</summary>
+            <p>请先选中画布中的视频节点，再粘贴现有 SignalCraft 的 VideoGenerationPlan JSON。不会导入旧镜头动作、修改模型或触发生成。</p>
+            <label className={styles.agentPromptLabel} htmlFor="studio-existing-plan-json">已有 Agent 规划 JSON</label>
+            <textarea id="studio-existing-plan-json" className={styles.agentInput} rows={4} maxLength={40000}
+              placeholder='{"plan":{"kind":"video-generation-plan","autoGenerate":false,"model":"minimax-h3","prompt":"..."}}'
+              value={agentJson} onChange={event => { setAgentJson(event.target.value); setBridgeReview(null); setToolProposal(null); }} />
+            <div className={styles.agentActions}>
+              <button type="button" disabled={!agentJson.trim() || !selected} onClick={previewExistingAgentPlan}>验证并预演已有 Agent 规划</button>
+            </div>
+            {bridgeReview && <div className={styles.agentReview} aria-live="polite">
+              <strong>模型建议：{bridgeReview.modelSuggestion} · {bridgeReview.fallback ? '规则回退' : bridgeReview.director + ' 规划'}</strong>
+              <p>未自动更换模型 · 忽略旧镜头动作 {bridgeReview.ignoredLegacyActions} 项</p>
+              {bridgeReview.warnings.map((warning, index) => <p key={index}>· {warning}</p>)}
+            </div>}
+          </details>
           {toolProposal && <div className={styles.agentReview} aria-live="polite">
             <strong>Agent 画布操作差异（尚未应用）</strong>
             <ol>{toolProposal.changes.map((change, index) => <li key={index}>{change}</li>)}</ol>
