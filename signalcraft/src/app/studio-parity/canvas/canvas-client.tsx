@@ -273,7 +273,7 @@ export default function CanvasClient() {
     drag.current = null;
   };
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-canvas-node]')) return;
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-canvas-node],button,input,textarea,select,a')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pan.current = { startX: event.clientX, startY: event.clientY, x: camera.x, y: camera.y };
     setSelected(null);
