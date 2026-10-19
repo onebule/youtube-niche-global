@@ -234,8 +234,16 @@ assert.equal(await evaluate('(()=>{const key=Object.keys(sessionStorage).find(k=
 await cdp('Page.reload',{ignoreCache:true});
 await until(projectCount,4,'bulk imported project library survives reload');
 await until('document.querySelectorAll("[data-canvas-node]").length',17,'imported active graph survives reload');
+// Mobile layout: project manager remains visible and usable on a 390px phone.
+await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});
+await sleep(250);
+const mobileMetrics=await evaluate('(()=>{const el=document.querySelector("div[aria-label=\\"本地项目管理\\"]");const rect=el.getBoundingClientRect();const heading=el.querySelector("h3");return {width:rect.width,viewport:window.innerWidth,headingDisplay:getComputedStyle(heading).display,buttonCount:el.querySelectorAll("button").length};})()');
+assert.ok(mobileMetrics.width >= Math.min(280,mobileMetrics.viewport-30),'phone layout cannot shrink project manager to an unreadable side column');
+assert.equal(mobileMetrics.headingDisplay!=='none',true,'phone layout project manager title must be visible');
+assert.ok(mobileMetrics.buttonCount>=10,'phone library should expose project controls');
+await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
 const dir=process.env.STUDIO_BROWSER_ARTIFACT_DIR||'/tmp';await fs.mkdir(dir,{recursive:true});
 const screenshot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
 await fs.writeFile(dir+'/studio-browser-validated.png',Buffer.from(screenshot.data,'base64'));
-console.log('PASS: pointer drag, Agent bridge, Mock replay, project CRUD, sanitized duplication, full JSON export and bulk import, reload persistence');
+console.log('PASS: pointer drag, Agent bridge, Mock replay, project CRUD, safe import/export, phone layout, persisted gallery');
 ws.close();
