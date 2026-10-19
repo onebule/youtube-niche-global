@@ -32,6 +32,14 @@ const STEP_LABELS: Record<WorkflowStepState, string> = {
   READY_FOR_MANUAL_PREFLIGHT: '待人工预检', NEEDS_MODEL: '未选模型',
   NEEDS_PROMPT: '缺少提示词', NEEDS_ASSETS: '素材未就绪', INVALID_INPUT: '输入不兼容',
 };
+const PREVIEW_MODELS = [
+  { id: 'minimax-h3', name: 'MiniMax H3' },
+  { id: 'seedance-2', name: 'Seedance 2' },
+  { id: 'seedance-2-5', name: 'Seedance 2.5' },
+  { id: 'kling-3', name: 'Kling 3' },
+  { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite' },
+] as const;
+const PREVIEW_DURATIONS = ['4s','5s','8s','10s','15s'] as const;
 const NODE_WIDTH = 264;
 const NODE_HEIGHT = 204;
 const BOARD_WIDTH = 5000;
@@ -437,6 +445,27 @@ export default function CanvasClient() {
                 if (activeNode.kind !== 'video' && e.target.value !== activeNode.text) patchNode(activeNode.id, { text: e.target.value });
               }} /></label>
           {activeNode.kind === 'video' && activeNode.video && <>
+            <label>视频模型（仅选择，不会调用）
+              <select value={activeNode.video.model || ''} onChange={e => {
+                const candidate = PREVIEW_MODELS.find(item => item.id === e.target.value);
+                patchNode(activeNode.id, { video: { ...activeNode.video!, model: candidate?.id || null } });
+              }}>
+                <option value="">未选择模型</option>
+                {PREVIEW_MODELS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </label>
+            <label>生成时长
+              <select value={activeNode.video.duration} onChange={e => patchNode(activeNode.id, { video: { ...activeNode.video!, duration: e.target.value } })}>
+                {[...new Set([activeNode.video.duration, ...PREVIEW_DURATIONS])].map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>画面比例
+              <select value={activeNode.video.aspectRatio} onChange={e => patchNode(activeNode.id, { video: { ...activeNode.video!, aspectRatio: e.target.value as '9:16' | '16:9' | '1:1' } })}>
+                <option value="9:16">9:16 竖屏</option>
+                <option value="16:9">16:9 横屏</option>
+                <option value="1:1">1:1 正方形</option>
+              </select>
+            </label>
             <label>参考模式<select value={activeNode.video.mode} onChange={e => patchNode(activeNode.id, { video: { ...activeNode.video!, mode: e.target.value as 'text' | 'start-end' | 'omni', modeSelection: 'manual' } })}>
               <option value="text">文生视频</option><option value="start-end">首尾帧</option><option value="omni">全能参考</option>
             </select></label>
