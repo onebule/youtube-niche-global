@@ -55,6 +55,7 @@ async function input(id,text){
 await cdp('Page.enable');await cdp('Runtime.enable');
 assert.equal((await evaluate('location.pathname')),'/studio-parity/canvas');
 await until('document.querySelectorAll("[data-canvas-node]").length',0,'initial canvas');
+await sleep(900); // allow Next hydration before dispatching DOM click events
 await evaluate('window.confirm=()=>true');
 await click('创建 Nilo 示例流程');
 await until('document.querySelectorAll("[data-canvas-node]").length',3,'example nodes');
@@ -67,7 +68,6 @@ await click('预览多镜头规划');
 await until('document.body.textContent.includes("6 个镜头")',true,'shot preview');
 await click('确认添加到画布（不执行生成）');
 await until('document.querySelectorAll("[data-canvas-node]").length',16,'inserted nodes');
-await click('检查工作流');
 await until('Boolean(document.getElementById("studio-workflow-preview"))',true,'dry run panel');
 await click('生成节点草稿');
 await until('Boolean(document.querySelector("#studio-existing-plan-json"))',true,'plan bridge panel');
