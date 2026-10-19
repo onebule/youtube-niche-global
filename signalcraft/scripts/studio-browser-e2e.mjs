@@ -106,6 +106,23 @@ await until('document.querySelector("aside[aria-label=\\"节点属性面板\\"] 
 await click('重做');
 await until('document.querySelector("aside[aria-label=\\"节点属性面板\\"] input").value',rename,'inspector shows redone title');
 
+const edgePath='document.querySelector("[class*=edges] path").getAttribute("d")';
+const initialEdge=await evaluate(edgePath);
+assert.equal(await evaluate('(()=>{document.querySelector("[data-canvas-node][data-kind=storyboard] button").click();return true;})()'),true);
+assert.equal(await evaluate('(()=>{document.querySelector("[data-canvas-node][data-kind=video] button:last-child").click();return true;})()'),true);
+await until('Boolean([...document.querySelectorAll("aside[aria-label=\\"节点属性面板\\"] button")].find(b=>b.textContent.includes("提示词")&&!b.disabled))',true,'prompt port ready');
+await click('提示词');
+await until(edgePath+' !== '+JSON.stringify(initialEdge),true,'connection replaced by storyboard edge');
+const connectedEdge=await evaluate(edgePath);
+await click('撤销');await until(edgePath,initialEdge,'connection undo');
+await click('重做');await until(edgePath,connectedEdge,'connection redo');
+
+const cameraBeforeFit=await evaluate(panTransform);
+await click('适配全部节点');
+await until(panTransform+' !== '+JSON.stringify(cameraBeforeFit),true,'fit-to-content camera');
+assert.ok((await evaluate(zoomText)).includes('%'),'fit zoom output must remain readable');
+
+
 await click('生成节点草稿');
 await until('Boolean(document.getElementById("studio-agent-idea"))',true,'agent panel');
 await input('studio-agent-idea','制作一条30秒英文 Shorts，分成6个镜头，9:16，机器人 Nilo 角色保持一致。');
@@ -130,5 +147,5 @@ await until('document.querySelectorAll("[data-canvas-node]").length',17,'draft p
 const dir=process.env.STUDIO_BROWSER_ARTIFACT_DIR||'/tmp';await fs.mkdir(dir,{recursive:true});
 const screenshot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
 await fs.writeFile(dir+'/studio-browser-validated.png',Buffer.from(screenshot.data,'base64'));
-console.log('PASS: pointer node drag, pan, wheel zoom, inspector undo/redo sync, Agent JSON bridge and persisted graph');
+console.log('PASS: pointer drag, pan, wheel zoom, inspector sync, port reconnection, fit-to-content, Agent bridge, persisted graph');
 ws.close();
