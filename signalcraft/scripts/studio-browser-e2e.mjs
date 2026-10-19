@@ -112,6 +112,9 @@ assert.equal(await evaluate('(()=>{document.querySelector("[data-canvas-node][da
 assert.equal(await evaluate('(()=>{document.querySelector("[data-canvas-node][data-kind=video] button:last-child").click();return true;})()'),true);
 await until('Boolean([...document.querySelectorAll("aside[aria-label=\\"节点属性面板\\"] button")].find(b=>b.textContent.includes("提示词")&&!b.disabled))',true,'prompt port ready');
 await click('提示词');
+await sleep(300);
+const edgeDiagnostic=await evaluate('JSON.stringify({path:document.querySelector("[class*=edges] path")?.getAttribute("d"),status:document.querySelector("footer[role=status]")?.textContent,buttons:[...document.querySelectorAll("aside[aria-label=\\\"节点属性面板\\\"] button")].map(x=>({text:x.textContent,disabled:x.disabled}))})');
+console.log('PORT_CONNECT_DIAG',edgeDiagnostic);
 await until(edgePath+' !== '+JSON.stringify(initialEdge),true,'connection replaced by storyboard edge');
 const connectedEdge=await evaluate(edgePath);
 await click('撤销');await until(edgePath,initialEdge,'connection undo');
