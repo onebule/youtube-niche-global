@@ -191,6 +191,7 @@ export default function CanvasClient() {
   };
 
   const addNode = (kind: InfiniteNodeKind) => {
+    if (projectRef.current.nodes.length >= 400) { setMessage('单项目最多保存 400 个节点，请新建项目或导出整理。'); return; }
     const n = createInfiniteNode(newId(), kind, 110 + (projectRef.current.nodes.length % 4) * 320, 125 + Math.floor(projectRef.current.nodes.length / 4) * 260);
     const next = { ...projectRef.current, nodes: [...projectRef.current.nodes, n] };
     apply(next);
@@ -200,6 +201,7 @@ export default function CanvasClient() {
   };
   const addExample = () => {
     const current = projectRef.current;
+    if (current.nodes.length > 397) { setMessage('节点数已接近保存上限，不能再追加三节点示例。'); return; }
     if (current.nodes.length > 0 && !window.confirm('示例将在当前画布添加三个节点，不会删除已有节点。继续？')) return;
     const text = createInfiniteNode(newId(), 'text', 130, 180);
     text.title = '创作需求';
@@ -225,6 +227,7 @@ export default function CanvasClient() {
   };
 
   const connect = (targetId: string, port: InfiniteInputPort) => {
+    if (projectRef.current.edges.length >= 800) { setMessage('单项目连线已达保存上限 800 条。'); return; }
     if (!source) { setMessage('先选择一个节点的「设为连线起点」。'); return; }
     const reason = connectionIssue(projectRef.current, source, targetId, port);
     if (reason) { setMessage(`无法连接：${reason}`); return; }
