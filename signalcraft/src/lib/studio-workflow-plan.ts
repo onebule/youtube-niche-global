@@ -1,4 +1,5 @@
-import type { InfiniteCanvasProject, InfiniteCanvasNode } from './infinite-canvas-graph';
+import type { InfiniteCanvasProject } from './infinite-canvas-graph';
+import { collectInfiniteGenerationInputs } from './infinite-canvas-graph.ts';
 
 /**
  * Pure, deterministic workflow preview. Never reads a credential, writes a
@@ -76,49 +77,27 @@ export function previewStudioWorkflow(project: InfiniteCanvasProject): WorkflowD
   const hasCycle = ordered.length !== videoNodes.length;
   for (const node of videoNodes) if (!visited.has(node.id)) ordered.push(node.id);
 
-  function checkInputs(node: InfiniteCanvasNode) {
-    const issues: string[] = [];
-    const incoming = project.edges.filter(edge => edge.target === node.id);
-    const source = (id: string) => nodes.get(id);
-    const texts = incoming.filter(edge => edge.port === 'prompt')
-      .map(edge => source(edge.source)?.text?.trim() || '').filter(Boolean);
-    const settings = node.video;
-    const mode = settings?.modeSelection === 'manual' ? settings.mode :
-      incoming.some(edge => ['start', 'end'].includes(edge.port)) ? 'start-end' :
-      incoming.some(edge => edge.port === 'reference') ? 'omni' : 'text';
-    const prompt = [settings?.prompt?.trim() || '', ...texts].filter(Boolean).join('\n\n');
-
-    if (!settings?.model) issues.push('尚未选择视频模型');
-    if (!prompt) issues.push('缺少视频生成提示词');
-    if (prompt.length > 1200) issues.push('组合提示词超过 1200 字符');
-
-    if (mode === 'start-end') {
-      const starts = incoming.filter(edge => edge.port === 'start' ||
-        (edge.port === 'reference' && source(edge.source)?.kind === 'image'));
-      const validStart = starts.some(edge => source(edge.source)?.kind === 'image'
-        && Boolean(source(edge.source)?.assetId));
-      if (!validStart) issues.push('首尾帧模式缺少已上传的首帧图片');
-      if (incoming.some(edge => edge.port === 'end' && !source(edge.source)?.assetId)) issues.push('尾帧尚未上传');
-    } else if (mode === 'omni') {
-      const references = incoming.filter(edge => edge.port === 'reference');
-      const usable = references.some(edge => Boolean(source(edge.source)?.assetId));
-      if (!usable) issues.push('全能参考模式缺少已上传或已生成的素材');
-      if (references.some(edge => !source(edge.source)?.assetId)) issues.push('部分参考素材尚未就绪');
-      if (references.some(edge => ['audio','video-result'].includes(source(edge.source)?.kind || '')) &&
-        settings?.model !== 'minimax-h3') issues.push('音频和视频参考当前仅支持 MiniMax H3');
-    }
-
+  function checkInputs(nodeId: string) {
+    // Reuse the production graph's input collector to avoid disagreement
+    // about auto mode, reference ports, missing assets or prompt limits.
+    const node = nodes.get(nodeId)!;
+    const input = collectInfiniteGenerationInputs(project, nodeId);
+    const issues = [
+      ...(!node.video?.model ? ['尚未选择视频模型'] : []),
+      ...(!input.prompt.trim() ? ['缺少视频生成提示词'] : []),
+      ...input.errors,
+    ];
     let state: WorkflowStepState = 'READY_FOR_MANUAL_PREFLIGHT';
     if (issues.some(item => item.includes('超过') || item.includes('仅支持'))) state = 'INVALID_INPUT';
-    else if (issues.some(item => item.includes('未选择'))) state = 'NEEDS_MODEL';
-    else if (issues.some(item => item.includes('提示词'))) state = 'NEEDS_PROMPT';
+    else if (!node.video?.model) state = 'NEEDS_MODEL';
+    else if (!input.prompt.trim()) state = 'NEEDS_PROMPT';
     else if (issues.length) state = 'NEEDS_ASSETS';
-    return { mode, issues, state };
+    return { mode: input.mode, issues: unique(issues), state };
   }
 
   const videos = ordered.map(id => {
     const node = nodes.get(id)!;
-    const { issues, state, mode } = checkInputs(node);
+    const { issues, state, mode } = checkInputs(id);
     return {
       nodeId: id,
       title: node.title,
