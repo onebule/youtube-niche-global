@@ -123,7 +123,7 @@ export function studioDuplicateProject(
   if (!source) throw new Error('待复制的项目不存在。');
   if (workspace.projects.length >= STUDIO_MAX_PROJECTS) throw new Error('最多可创建 40 个本地项目。');
   if (workspace.projects.some(project => project.id === copyId)) throw new Error('复制项目 ID 冲突。');
-  const title = projectTitle(copyTitle ?? (source.title + ' · 副本'));
+  const title = projectTitle(copyTitle ?? (source.title.slice(0, 80) + ' · 副本'));
   const allIds = new Set(workspace.projects.flatMap(project => [
     ...project.nodes.map(node => node.id),
     ...project.edges.map(edge => edge.id),
@@ -201,7 +201,7 @@ export function studioImportWorkspaceTemplates(
     const staged = studioDuplicateProject(
       studioWorkspaceFromProject(imported),
       imported.id, newProjectId, makeNodeId,
-      imported.title + ' · 导入',
+      imported.title.slice(0, 80) + ' · 导入',
     );
     const copy = studioActiveProject(staged);
     const addedIds = [copy.id, ...copy.nodes.map(node => node.id), ...copy.edges.map(edge => edge.id)];
