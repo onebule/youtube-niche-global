@@ -62,6 +62,22 @@ export default function StudioParityClient() {
     setCopyState('');
   };
 
+  const openCanvasWithPrompt = () => {
+    if (!prompt.trim()) {
+      setCopyState('请先输入创作需求，或选择下方预设。');
+      return;
+    }
+    try {
+      // User-initiated, local handoff only. Never triggers model requests.
+      sessionStorage.setItem('signalcraft-studio-parity-intent-v1', JSON.stringify({
+        prompt: prompt.trim().slice(0, 4000), mode,
+      }));
+      window.location.assign('/studio-parity/canvas');
+    } catch {
+      setCopyState('浏览器不允许临时保存，建议先复制文本，再进入画布。');
+    }
+  };
+
   const usePreset = (id: string) => {
     const preset = PRESETS.find(item => item.id === id);
     if (!preset) return;
@@ -156,9 +172,10 @@ export default function StudioParityClient() {
               />
               <div className={styles.composerBottom}>
                 <span className={styles.helper}>预览模式：仅保存于当前输入框，不会执行生成或产生费用</span>
-                <button type="button" className={styles.primaryButton} onClick={() => { void copyPrompt(); }}>
-                  复制创作需求 ↗
-                </button>
+                <div className={styles.composerButtons}>
+                  <button type="button" className={styles.secondaryButton} onClick={() => { void copyPrompt(); }}>复制需求</button>
+                  <button type="button" className={styles.primaryButton} onClick={openCanvasWithPrompt}>添加到实验画布 ↗</button>
+                </div>
               </div>
               {copyState && <p className={styles.inlineStatus} role="status">{copyState}</p>}
             </div>
