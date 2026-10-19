@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   studioActiveProject, studioWorkspaceFromProject,
   studioCreateProject, studioSwitchProject, studioRenameProject,
-  studioDuplicateProject, studioRemoveProject, STUDIO_MAX_PROJECTS,
+  studioDuplicateProject, studioRemoveProject, studioImportWorkspaceTemplates, STUDIO_MAX_PROJECTS,
 } from '../src/lib/studio-project-workspace.ts';
 import {
   createInfiniteNode, createInfiniteProject, connectInfiniteNodes,
@@ -152,4 +152,60 @@ test('clone rejects malformed dangling project graph rather than pretending conn
   const malformed=workspace();
   malformed.projects[0].edges.push({id:'bad-edge',source:'missing',target:'video-original',port:'prompt'});
   assert.throws(()=>studioDuplicateProject(malformed,'alpha','copy',idFactory()),/不兼容/);
+});
+
+
+test('external workspace imports ALL projects as independent sanitized templates, leaving current intact',()=>{
+  const current=studioCreateProject(workspace(),'beta','Keep My Beta');
+  const source=studioCreateProject(workspace(),'other','Another Source');
+  const bytes=JSON.stringify(current);
+  let count=0;
+  let countNodes=0;
+  const merged=studioImportWorkspaceTemplates(current,source,
+    ()=> 'imported-project-'+(++count),
+    ()=> 'imported-node-'+(++countNodes));
+  assert.equal(merged.projects.length,4);
+  assert.equal(merged.activeProjectId,'imported-project-2');
+  assert.equal(merged.projects[0].id,'alpha');
+  assert.equal(merged.projects[1].id,'beta');
+  assert.equal(merged.projects[2].nodes.length,3);
+  assert.equal(merged.projects[2].edges.length,2);
+  assert.ok(!JSON.stringify(merged.projects[2]).includes('previous-provider-task'));
+  assert.ok(!JSON.stringify(merged.projects[2]).includes('secret-account-scope-media'));
+  assert.equal(JSON.stringify(current),bytes);
+});
+
+test('bulk import failure remains atomic, never partly appends projects',()=>{
+  const current=workspace();
+  const source=studioCreateProject(workspace(),'other','Second Imported');
+  const before=JSON.stringify(current);
+  let i=0;
+  assert.throws(()=>studioImportWorkspaceTemplates(current,source,
+    ()=> 'new-project-'+(++i),
+    ()=> 'text-original'),/无效|重复/);
+  assert.equal(JSON.stringify(current),before);
+});
+
+test('bulk import capacity is enforced before any imported IDs are generated',()=>{
+  let current=workspace();
+  for(let i=1;i<40;i++)current=studioCreateProject(current,'p-'+i,'Existing '+i);
+  let idCalls=0;
+  assert.throws(()=>studioImportWorkspaceTemplates(current,workspace(),
+    ()=>{idCalls++;return 'new';},()=> 'id'),/40/);
+  assert.equal(idCalls,0);
+});
+
+test('cross-project imported ID collisions do not leak or mutate any existing project',()=>{
+  const current=workspace();
+  assert.throws(()=>studioImportWorkspaceTemplates(current,workspace(),
+    ()=> 'text-original',()=> 'another'),/冲突/);
+  assert.equal(current.projects.length,1);
+});
+
+test('max-length project titles are truncated safely for duplicate/import labels',()=>{
+  const current=studioRenameProject(workspace(),'alpha','N'.repeat(85));
+  const copied=studioDuplicateProject(current,'alpha','copy-id',idFactory());
+  assert.equal(studioActiveProject(copied).title.length,85);
+  const merged=studioImportWorkspaceTemplates(workspace(),current,()=> 'import-id',idFactory());
+  assert.equal(studioActiveProject(merged).title.length,85);
 });
