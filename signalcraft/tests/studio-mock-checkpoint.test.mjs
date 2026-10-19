@@ -7,7 +7,7 @@ import {
   serializeStudioMockJournal,
   mockGraphToken,
 } from '../src/lib/studio-mock-checkpoint.ts';
-import { createInfiniteProject, createInfiniteNode } from '../src/lib/infinite-canvas-graph.ts';
+import { createInfiniteProject, createInfiniteNode, normalizeInfiniteWorkspace } from '../src/lib/infinite-canvas-graph.ts';
 
 function project(...ids) {
   const p = createInfiniteProject('mock-checkpoint-project');
@@ -174,4 +174,22 @@ test('replay refuses unavailable graph after failed original preflight',()=>{
   const original=createStudioMockJournal(p,scope,{runId:'mock-run'}).journal;
   const modified={...p,nodes:p.nodes.map(n=>({...n,video:{...n.video,prompt:''}}))};
   assert.throws(()=>restoreStudioMockJournal(original,modified,scope),/图版本/);
+});
+
+
+test('checkpoint graph token survives canonical Graph v1 draft normalization on reload',()=>{
+  const p=project('alpha','beta');
+  const hydrated=normalizeInfiniteWorkspace({
+    version:1, activeProjectId:p.id, projects:[p],
+  }).projects[0];
+  // Restored nodes gain canonical optional fields, even without semantic edits.
+  assert.notEqual(JSON.stringify(p.nodes),JSON.stringify(hydrated.nodes));
+  assert.equal(mockGraphToken(p),mockGraphToken(hydrated));
+  let state=createStudioMockJournal(p,scope,{runId:'roundtrip'});
+  state=issue(state,p,'STEP','first-start');
+  const recovered=restoreStudioMockJournal(JSON.stringify(state.journal),hydrated,scope);
+  assert.equal(recovered.run.tasks[0].status,'RUNNING');
+  const finished=issue(recovered,hydrated,'FINISH','finish');
+  assert.equal(finished.run.status,'COMPLETED');
+  assert.equal(finished.run.generatedAssets,0);
 });
