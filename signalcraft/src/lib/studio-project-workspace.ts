@@ -123,6 +123,11 @@ export function studioDuplicateProject(
   if (!source) throw new Error('待复制的项目不存在。');
   if (workspace.projects.length >= STUDIO_MAX_PROJECTS) throw new Error('最多可创建 40 个本地项目。');
   if (workspace.projects.some(project => project.id === copyId)) throw new Error('复制项目 ID 冲突。');
+  const existingSourceNodeIds = new Set(source.nodes.map(node => node.id));
+  if (source.edges.some(edge => !existingSourceNodeIds.has(edge.source) ||
+      !existingSourceNodeIds.has(edge.target))) {
+    throw new Error('原项目包含悬空连线或不兼容结构，已拒绝复制。');
+  }
   const title = projectTitle(copyTitle ?? (source.title.slice(0, 80) + ' · 副本'));
   const allIds = new Set(workspace.projects.flatMap(project => [
     ...project.nodes.map(node => node.id),
@@ -196,7 +201,7 @@ export function studioImportWorkspaceTemplates(
   for (const imported of source.projects) {
     const newProjectId = makeProjectId();
     if (typeof newProjectId !== 'string' || existingIds.has(newProjectId)) {
-      throw new Error('导入新项目 ID 无效或重复。');
+      throw new Error('导入新项目 ID 无效或与现有项目和节点冲突。');
     }
     const staged = studioDuplicateProject(
       studioWorkspaceFromProject(imported),
