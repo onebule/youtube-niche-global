@@ -44,6 +44,9 @@ export function planStudioRequest(raw: string): StudioRuleDraft {
   const aspectRatio = brief.includes('16:9') ? '16:9' :
     brief.includes('1:1') ? '1:1' : '9:16';
   const shotCount = count ?? (durationSeconds ? clamp(Math.ceil(durationSeconds / 5), MIN_SHOTS, MAX_SHOTS) : 4);
+  if (durationSeconds !== null && (durationSeconds < shotCount * 4 || durationSeconds > shotCount * 15)) {
+    throw new Error('时长与镜头数不匹配：规则草稿要求每镜头 4–15 秒，请增加镜头数或调整时长。');
+  }
   const caveats = [
     '这是离线规则生成的可编辑结构，不是大模型生成的专业剧本。',
     '每个镜头均需确认 Prompt、选择模型和检查素材后才能人工执行。',
@@ -125,8 +128,9 @@ export function appendStudioRuleDraft(
       modeSelection: 'manual',
       prompt: '',
       aspectRatio: draft.aspectRatio,
-      duration: draft.durationSeconds
-        ? String(clamp(Math.round(draft.durationSeconds / draft.shotCount), 4, 15)) + 's'
+      duration: draft.durationSeconds !== null
+        ? String(Math.floor(draft.durationSeconds / draft.shotCount)
+          + (shot.index <= draft.durationSeconds % draft.shotCount ? 1 : 0)) + 's'
         : '5s',
     };
     nodes.push(storyboard, video);
