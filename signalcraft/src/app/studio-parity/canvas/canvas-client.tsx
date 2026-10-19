@@ -8,13 +8,18 @@ import { getSession } from '@/src/lib/auth';
 import {
   createInfiniteNode, createInfiniteProject, normalizeInfiniteWorkspace,
   connectionIssue, connectInfiniteNodes,
-  type InfiniteCanvasProject, type InfiniteNodeKind, type InfiniteInputPort,
+  type InfiniteCanvasProject, type InfiniteCanvasWorkspace, type InfiniteNodeKind, type InfiniteInputPort,
 } from '@/src/lib/infinite-canvas-graph';
 import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-workflow-plan';
 import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
 import { suggestStudioAgentEdits, prepareStudioAgentPatch, confirmStudioAgentPatch, type StudioAgentPatch } from '@/src/lib/studio-agent-tools';
 import { bridgePreexistingVideoAgentPlan, type StudioPlanBridgeReview } from '@/src/lib/studio-agent-plan-bridge';
 import { mockGraphFingerprint, type StudioMockRun } from '@/src/lib/studio-mock-runtime';
+import {
+  studioActiveProject, studioCreateProject, studioDuplicateProject,
+  studioRemoveProject, studioRenameProject, studioSwitchProject,
+  STUDIO_MAX_PROJECTS,
+} from '@/src/lib/studio-project-workspace';
 import {
   createStudioMockJournal, appendStudioMockCommand,
   restoreStudioMockJournal, serializeStudioMockJournal,
@@ -25,6 +30,8 @@ import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
 const MOCK_JOURNAL_PREFIX = 'signalcraft-studio-parity-mock-journal-v1';
+const mockJournalStorageKey = (accountKey: string, projectId: string) =>
+  accountKey + ':' + encodeURIComponent(projectId);
 const NODE_KINDS: { kind: InfiniteNodeKind; name: string; description: string }[] = [
   { kind: 'text', name: '文本', description: '脚本、提示词和创作方向' },
   { kind: 'storyboard', name: '分镜', description: '单镜头脚本或构图草图' },
@@ -67,6 +74,8 @@ const describe = (kind: InfiniteNodeKind) => NODE_KINDS.find(item => item.kind =
 export default function CanvasClient() {
   const [project, setProject] = useState<InfiniteCanvasProject>(() => createInfiniteProject('sandbox'));
   const projectRef = useRef(project);
+  const [projectCatalog, setProjectCatalog] = useState<InfiniteCanvasProject[]>([project]);
+  const catalogRef = useRef<InfiniteCanvasProject[]>([project]);
   const [camera, setCamera] = useState<Camera>(defaultCamera);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -139,6 +148,8 @@ export default function CanvasClient() {
         if (parsed?.version === 1 && Array.isArray(parsed.projects)) {
           const restored = normalizeInfiniteWorkspace(parsed);
           const next = restored.projects.find(item => item.id === restored.activeProjectId) || restored.projects[0];
+          catalogRef.current = restored.projects;
+          setProjectCatalog(restored.projects);
           projectRef.current = next;
           setProject(next);
           setCamera(next.view);
@@ -186,7 +197,8 @@ export default function CanvasClient() {
         return;
       }
       const next = { ...project, view: camera, updatedAt: new Date().toISOString() };
-      const payload = { version: 1, activeProjectId: next.id, projects: [next] };
+      const projects = catalogRef.current.map(item => item.id === next.id ? next : item);
+      const payload: InfiniteCanvasWorkspace = { version: 1, activeProjectId: next.id, projects };
       (authenticated ? localStorage : sessionStorage).setItem(key, JSON.stringify(payload));
     } catch {
       setMessage('浏览器草稿保存失败。请使用导出 JSON 备份当前项目。');
@@ -203,10 +215,14 @@ export default function CanvasClient() {
       return;
     }
     try {
-      const key = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+      const baseKey = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
       const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
-      const raw = storage.getItem(key);
+      const scopedRaw = storage.getItem(mockJournalStorageKey(baseKey, projectRef.current.id));
+      // Backward compatible with the previous single-project Mock journal key.
+      const raw = scopedRaw || storage.getItem(baseKey);
       if (!raw) return;
+      const parsed = JSON.parse(raw) as { projectId?: unknown };
+      if (parsed.projectId !== projectRef.current.id) return;
       const restored = restoreStudioMockJournal(raw, projectRef.current, storageScope);
       mockJournalRef.current = restored.journal;
       setMockJournal(restored.journal);
@@ -218,7 +234,7 @@ export default function CanvasClient() {
     } catch {
       setMessage('Mock 检查点无法恢复：图版本或账号可能已变化。旧日志保留，创建新运行前请检查。');
     }
-  }, [ready, storageScope]);
+  }, [ready, storageScope, project.id]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -463,6 +479,89 @@ export default function CanvasClient() {
     }
   };
 
+  const performWorkspaceChange = (next: InfiniteCanvasWorkspace, messageText: string) => {
+    const identity = getSession();
+    if (!ready || !storageScope || accountStorageScope(identity) !== storageScope) {
+      throw new Error('账号已切换，不能修改其他账号的项目。');
+    }
+    const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+    // The latest unsaved projectRef snapshot wins over catalog metadata.
+    // Write all projects before changing React/UI state: storage quota failures
+    // never silently discard the current working project.
+    storage.setItem(accountStorageKey(DRAFT_PREFIX, identity), JSON.stringify(next));
+    const nextActive = studioActiveProject(next);
+    catalogRef.current = next.projects;
+    setProjectCatalog(next.projects);
+    projectRef.current = nextActive;
+    setProject(nextActive);
+    setCamera(nextActive.view);
+    writeHistory({ past: [], future: [] }); // no undo crossing projects
+    setSelected(null);
+    setSource(null);
+    setAgentDraft(null);
+    setToolProposal(null);
+    setBridgeReview(null);
+    mockJournalRef.current = null;
+    setMockJournal(null);
+    setMockRun(null);
+    setMockFailNode('');
+    setMessage(messageText + '。已保存完整工作区；切换项目后撤销历史独立清空。');
+  };
+  const currentWorkspace = (): InfiniteCanvasWorkspace => ({
+    version: 1,
+    activeProjectId: projectRef.current.id,
+    projects: catalogRef.current.map(item => item.id === projectRef.current.id
+      ? { ...projectRef.current, view: camera } : item),
+  });
+  const performProjectAction = (action: 'create' | 'switch' | 'rename' | 'duplicate' | 'delete', targetId?: string) => {
+    try {
+      if (!ready) throw new Error('正在加载项目数据。');
+      const current = currentWorkspace();
+      const target = current.projects.find(item => item.id === (targetId || current.activeProjectId));
+      if (!target) throw new Error('项目已不存在，请重新加载。');
+      let next: InfiniteCanvasWorkspace;
+      let info: string;
+      let removedId: string | null = null;
+      if (action === 'create') {
+        const name = window.prompt('新项目名称（仅本地保存）', '新创作项目 ' + (current.projects.length + 1));
+        if (name === null) return;
+        next = studioCreateProject(current, newId(), name);
+        info = '已创建本地项目「' + studioActiveProject(next).title + '」';
+      } else if (action === 'switch') {
+        if (target.id === current.activeProjectId) return;
+        next = studioSwitchProject(current, target.id);
+        info = '已打开项目「' + target.title + '」';
+      } else if (action === 'rename') {
+        const name = window.prompt('新的项目名称', target.title);
+        if (name === null) return;
+        next = studioRenameProject(current, target.id, name);
+        info = '已重命名项目「' + target.title + '」';
+      } else if (action === 'duplicate') {
+        if (!window.confirm('复制为独立结构模板？会保留脚本与有效连线，但会移除素材资产、付费任务历史和视频结果节点。')) return;
+        next = studioDuplicateProject(current, target.id, newId(), newId);
+        info = '已安全复制项目「' + target.title + '」；未复制付费结果或私有素材引用';
+      } else {
+        if (current.projects.length < 2) throw new Error('至少需要保留一个项目。');
+        if (!window.confirm('确认永久删除本地项目「' + target.title + '」？' +
+          '包含 ' + target.nodes.length + ' 个节点；此操作不会进入画布撤销历史。建议先导出 JSON 备份。')) return;
+        next = studioRemoveProject(current, target.id);
+        removedId = target.id;
+        info = '已从本地工作区删除项目「' + target.title + '」';
+      }
+      performWorkspaceChange(next, info);
+      if (removedId) {
+        const identity = getSession();
+        const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+        try {
+          const baseKey = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+          storage.removeItem(mockJournalStorageKey(baseKey, removedId));
+        } catch { setMessage(info + '；项目已删除，但关联 Mock 日志未能清理。'); }
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '本地项目操作失败，现有工作区未修改。');
+    }
+  };
+
   const mockStale = Boolean(mockRun && mockRun.graphFingerprint !== mockGraphFingerprint(project));
   const commitMockCheckpoint = (
     state: StudioMockJournalState, previous: StudioMockJournal | null = null,
@@ -475,9 +574,10 @@ export default function CanvasClient() {
     // conflicts before writing; true atomicity requires a future server CAS.
     // A deliberate "create new Mock run" may overwrite the previous journal.
     const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
-    const key = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+    const baseKey = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+    const key = mockJournalStorageKey(baseKey, projectRef.current.id);
     if (previous) {
-      const raw = storage.getItem(key);
+      const raw = storage.getItem(key) || storage.getItem(baseKey);
       if (!raw) throw new Error('Mock 检查点已在其他标签删除，请重新加载。');
       const persisted = restoreStudioMockJournal(raw, projectRef.current, storageScope).journal;
       if (JSON.stringify(persisted) !== JSON.stringify(previous)) {
@@ -529,7 +629,15 @@ export default function CanvasClient() {
         throw new Error('账号发生变化，不能清空其他账号的 Mock 数据。');
       }
       const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
-      storage.removeItem(accountStorageKey(MOCK_JOURNAL_PREFIX, identity));
+      const baseKey = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+      storage.removeItem(mockJournalStorageKey(baseKey, projectRef.current.id));
+      const legacy = storage.getItem(baseKey);
+      if (legacy) {
+        try {
+          const parsed = JSON.parse(legacy) as { projectId?: string };
+          if (parsed.projectId === projectRef.current.id) storage.removeItem(baseKey);
+        } catch { /* Preserve an invalid legacy record instead of deleting unknown data. */ }
+      }
       mockJournalRef.current = null;
       setMockJournal(null);
       setMockRun(null);
@@ -605,6 +713,26 @@ export default function CanvasClient() {
           onClick={() => addNode(item.kind)}><b>＋ {item.name}</b><small>{item.description}</small></button>)}
         <button className={styles.exampleButton} type="button" onClick={addExample}>✦ 创建 Nilo 示例流程</button>
         <div className={styles.toolDivider} />
+        <div className={styles.projectManager} aria-label="本地项目管理">
+          <div className={styles.projectManagerHead}><h3>我的本地项目</h3><span>{projectCatalog.length}/{STUDIO_MAX_PROJECTS}</span></div>
+          <div className={styles.projectManagerActions}>
+            <button type="button" onClick={() => performProjectAction('create')} disabled={!ready || projectCatalog.length >= STUDIO_MAX_PROJECTS}>＋ 新建项目</button>
+            <button type="button" onClick={() => performProjectAction('duplicate')} disabled={!ready || projectCatalog.length >= STUDIO_MAX_PROJECTS}>复制当前</button>
+          </div>
+          <ul className={styles.projectList}>{projectCatalog.map(meta => {
+            const item = meta.id === project.id ? project : meta;
+            return <li key={item.id} className={item.id === project.id ? styles.projectActive : styles.projectListItem}>
+              <div className={styles.projectItemTitle}><strong title={item.title}>{item.title}</strong>{item.id === project.id && <span>当前</span>}</div>
+              <small>{item.nodes.length} 个节点 · {item.edges.length} 条连线</small>
+              <div className={styles.projectItemButtons}>
+                <button type="button" disabled={!ready || item.id === project.id} onClick={() => performProjectAction('switch', item.id)}>打开</button>
+                <button type="button" disabled={!ready} onClick={() => performProjectAction('rename', item.id)}>改名</button>
+                <button type="button" disabled={!ready || projectCatalog.length < 2} onClick={() => performProjectAction('delete', item.id)}>删除</button>
+              </div>
+            </li>;
+          })}</ul>
+          <p>浏览器本地保存。删除需确认；复制项目不携带私有素材、历史生成记录。</p>
+        </div>
         <h3>项目状态</h3>
         <p>{project.nodes.length} 个节点 · {project.edges.length} 条连线</p>
         <p className={styles.storageInfo}>浏览器独立草稿；{scope ? (scope.startsWith('signalcraft-') ? '当前账号隔离' : scope) : '读取中'}</p>
