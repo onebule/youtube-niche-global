@@ -157,9 +157,10 @@ assert.equal(await evaluate('document.querySelectorAll("[data-canvas-node]").len
 // Deliberate one-time failure, explicit retry, then all steps completed.
 const chosenFail=await evaluate('document.querySelector("select[aria-label=\\"Mock 故障注入节点\\"] option:nth-child(2)")?.value');
 assert.ok(chosenFail,'Mock test needs a video node');
-const selectFailure='(()=>{const el=document.querySelector("select[aria-label=\\"Mock 故障注入节点\\"]");el.value='+JSON.stringify('PLACEHOLDER')+';el.dispatchEvent(new Event("change",{bubbles:true}));return true;})()'.replace('PLACEHOLDER',chosenFail);
+const selectFailure='(()=>{const el=document.querySelector("select[aria-label=\\"Mock 故障注入节点\\"]");el.value='+JSON.stringify(chosenFail)+';el.dispatchEvent(new Event("change",{bubbles:true}));return true;})()';
 assert.equal(await evaluate(selectFailure),true);
 await click('创建 Mock 运行');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("READY")',true,'fault-run initialized');
 await click('模拟运行全部');
 await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("PAUSED")',true,'Mock expected fail');
 await click('重试失败节点');
