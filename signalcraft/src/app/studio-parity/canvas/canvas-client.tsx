@@ -14,6 +14,11 @@ import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-
 import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
 import { suggestStudioAgentEdits, prepareStudioAgentPatch, confirmStudioAgentPatch, type StudioAgentPatch } from '@/src/lib/studio-agent-tools';
 import { bridgePreexistingVideoAgentPlan, type StudioPlanBridgeReview } from '@/src/lib/studio-agent-plan-bridge';
+import {
+  createStudioMockRun, stepStudioMockRun, finishStudioMockRun,
+  retryStudioMockRun, cancelStudioMockRun, mockGraphFingerprint,
+  type StudioMockRun,
+} from '@/src/lib/studio-mock-runtime';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
@@ -68,6 +73,9 @@ export default function CanvasClient() {
   const historyRef = useRef(history);
   const [scope, setScope] = useState('');
   const [showPlan, setShowPlan] = useState(false);
+  const [showMock, setShowMock] = useState(false);
+  const [mockRun, setMockRun] = useState<StudioMockRun | null>(null);
+  const [mockFailNode, setMockFailNode] = useState('');
   const [showAgent, setShowAgent] = useState(false);
   const [idea, setIdea] = useState('');
   const [agentDraft, setAgentDraft] = useState<StudioRuleDraft | null>(null);
@@ -421,6 +429,47 @@ export default function CanvasClient() {
     }
   };
 
+  const mockStale = Boolean(mockRun && mockRun.graphFingerprint !== mockGraphFingerprint(project));
+  const createMockSession = () => {
+    try {
+      const next = createStudioMockRun(projectRef.current, {
+        id: newId(), failOnceNodeId: mockFailNode || null,
+      });
+      setMockRun(next);
+      setMessage('已建立 Mock 运行：' + next.tasks.length + ' 个视频任务。尚未向任何模型发起请求。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mock 预检失败，未启动。');
+    }
+  };
+  const transitionMock = (action: 'step' | 'finish' | 'retry' | 'cancel') => {
+    if (!mockRun) return;
+    try {
+      const next = action === 'step' ? stepStudioMockRun(mockRun, projectRef.current)
+        : action === 'finish' ? finishStudioMockRun(mockRun, projectRef.current)
+        : action === 'retry' ? retryStudioMockRun(mockRun, projectRef.current)
+        : cancelStudioMockRun(mockRun, projectRef.current);
+      setMockRun(next);
+      setMessage('Mock Runtime：' + next.status + '。事件 ' + next.events.length + ' 条，真实生成 0 次。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mock 状态更新失败，运行记录未变化。');
+    }
+  };
+  const exportMockSession = () => {
+    if (!mockRun) return;
+    const payload = {
+      schemaVersion: 1, mode: 'MOCK_ONLY', projectId: mockRun.projectId,
+      runId: mockRun.id, status: mockRun.status, events: mockRun.events,
+      tasks: mockRun.tasks, providerCalls: 0, paidJobs: 0, generatedAssets: 0,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'signalcraft-mock-run-audit.json';
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+    setMessage('已导出本次 Mock 审计记录，无真实资产内容。');
+  };
+
   const activeNode = project.nodes.find(item => item.id === selected) || null;
   const resetView = () => setCamera(defaultCamera);
   const fitView = () => {
@@ -458,6 +507,7 @@ export default function CanvasClient() {
         <button type="button" disabled={!history.past.length} onClick={undo}>↶ 撤销</button>
         <button type="button" disabled={!history.future.length} onClick={redo}>↷ 重做</button>
         <button type="button" onClick={() => setShowPlan(value => !value)} aria-expanded={showPlan} aria-controls="studio-workflow-preview">{showPlan ? '收起检查' : '检查工作流'}</button>
+        <button type="button" onClick={() => setShowMock(value => !value)} aria-expanded={showMock} aria-controls="studio-mock-runtime">{showMock ? '收起 Mock' : 'Mock Runtime'}</button>
         <button type="button" onClick={exportProject}>导出 JSON</button>
         <label className={styles.importButton}>导入 JSON <input type="file" accept=".json,application/json" onChange={event => { void importProject(event); }} /></label>
       </div>
@@ -538,6 +588,44 @@ export default function CanvasClient() {
             </li>)}</ol>}
           {workflow.issues.length > 0 && <div className={styles.planIssues} role="status">{workflow.issues.map((issue, i) => <p key={i}>· {issue}</p>)}</div>}
           {workflow.videos.length > 0 && workflow.issues.length === 0 && <p>所有节点的静态检查已通过；不代表模型可用或实际生成成功。</p>}
+        </section>}
+        {showMock && <section id="studio-mock-runtime" className={styles.mockPanel} aria-label="Mock 工作流执行器">
+          <div className={styles.mockTop}>
+            <strong>Workflow Runtime V1 · Mock Only</strong>
+            <span>0 付费调用 · 0 生成素材 · 无服务器任务</span>
+          </div>
+          <p>通过手动按钮模拟依赖排序、任务状态、失败重试和取消。缺少真实模型选择不影响 Mock，缺少提示词或素材仍会阻止启动。</p>
+          <div className={styles.mockActions}>
+            <label>模拟一次性故障
+              <select aria-label="Mock 故障注入节点" value={mockFailNode}
+                onChange={event => setMockFailNode(event.target.value)}>
+                <option value="">不注入故障</option>
+                {workflow.videos.map(step => <option key={step.nodeId} value={step.nodeId}>{step.title}</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={createMockSession}>创建 Mock 运行</button>
+            <button type="button" disabled={!mockRun || mockStale || mockRun.status === 'PAUSED' || mockRun.status === 'CANCELLED' || mockRun.status === 'COMPLETED'}
+              onClick={() => transitionMock('step')}>单步推进</button>
+            <button type="button" disabled={!mockRun || mockStale || mockRun.status === 'PAUSED' || mockRun.status === 'CANCELLED' || mockRun.status === 'COMPLETED'}
+              onClick={() => transitionMock('finish')}>模拟运行全部</button>
+            <button type="button" disabled={!mockRun || mockStale || mockRun.status !== 'PAUSED'}
+              onClick={() => transitionMock('retry')}>重试失败节点</button>
+            <button type="button" disabled={!mockRun || mockStale || mockRun.status === 'CANCELLED' || mockRun.status === 'COMPLETED'}
+              onClick={() => transitionMock('cancel')}>取消 Mock</button>
+            <button type="button" disabled={!mockRun} onClick={exportMockSession}>导出审计 JSON</button>
+            <button type="button" disabled={!mockRun} onClick={() => { setMockRun(null); setMessage('已清除本地 Mock 记录；画布节点未更改。'); }}>清空记录</button>
+          </div>
+          {mockStale && <p className={styles.mockWarning} role="alert">画布节点或连线已变化，旧运行不能继续。可导出旧日志，然后创建新的 Mock 运行。</p>}
+          {mockRun && <div className={styles.mockStatus} aria-live="polite">
+            <strong>当前运行：{mockRun.status} · {mockRun.tasks.filter(task => task.status === 'SUCCEEDED').length}/{mockRun.tasks.length} 已模拟完成</strong>
+            <ol className={styles.mockTasks}>{mockRun.tasks.map(task =>
+              <li key={task.nodeId}><b>{task.title}</b><span>{task.status} · 尝试 {task.attempts} 次</span>
+                {task.error && <small>{task.error}</small>}</li>)}</ol>
+            <details><summary>查看事件日志（{mockRun.events.length}）</summary>
+              <ol className={styles.mockEvents}>{mockRun.events.map(event =>
+                <li key={event.sequence}>{event.sequence}. {event.type} · {event.message}</li>)}</ol>
+            </details>
+          </div>}
         </section>}
         <div className={styles.viewport} ref={canvasRef}
           onPointerDown={startPan}
