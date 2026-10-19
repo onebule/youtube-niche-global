@@ -580,6 +580,15 @@ export default function CanvasClient() {
         try {
           const baseKey = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
           storage.removeItem(mockJournalStorageKey(baseKey, removedId));
+          // Only remove the legacy single-project journal when its projectId
+          // matches the project explicitly deleted by the user.
+          const legacy = storage.getItem(baseKey);
+          if (legacy) {
+            try {
+              const parsed = JSON.parse(legacy) as { projectId?: unknown };
+              if (parsed.projectId === removedId) storage.removeItem(baseKey);
+            } catch { /* Unknown legacy data is left untouched. */ }
+          }
         } catch { setMessage(info + '；项目已删除，但关联 Mock 日志未能清理。'); }
       }
     } catch (error) {
