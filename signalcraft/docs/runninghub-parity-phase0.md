@@ -76,3 +76,14 @@
 - 当前针对性静态检查可以验证代码引用、门禁与无付费调用路径；**尚未完成** next build、TypeScript 类型检查、Playwright/浏览器端到端验收，因此不得发布。
 - UI 参考以 rhTV 创作入口、作品与工作流展示的公开页面为依据；画布内精确像素和登录态操作暂没有授权截图，不能标为 1:1 视觉完成。
 - 下一操作：在具备可访问的本地开发机和已安装依赖的工作树中运行 `pnpm --dir signalcraft typecheck`、`pnpm --dir signalcraft test`、`pnpm --dir signalcraft build`，再测试移动端触屏、指针捕获、账号切换、导入失败、撤销重做及完整恢复流程。
+
+
+## 七、继续开发：安全执行计划预览（2026-10-19）
+
+- 新增 `src/lib/studio-workflow-plan.ts`：在现有 Graph v1 上做纯函数 Dry Run，按视频节点依赖进行稳定拓扑排序，识别循环依赖、失效连线、模型、提示词、素材等问题。
+- 复用 `collectInfiniteGenerationInputs` 的模式与资产验证规则，避免预览与实际画布出现同一节点两个判断。
+- 画布右侧可配置模型、时长、比例、参考模式；「检查工作流」显示依赖、阻塞原因和待人工预检状态。
+- 新增 `tests/studio-workflow-plan.test.mjs` 六个测试案例，并注册到现有 `pnpm test` 命令。
+- 所有 Dry Run 输出必须固定：`executionEnabled=false`、`estimatedCredits=null`、`paidJobs=0`。这不是生产执行许可，也不说明模型已配置。
+- 已通过 GitHub 分支静态检查：两个预览入口均默认关闭；两套页面 CSS class 引用存在；新增 UI 与工作流规划函数没有服务端请求调用。**尚未运行 Node 单测、tsc、Next build 或浏览器端到端测试，不能宣称 PASS。**
+- 本批提交只在 `codex/runninghub-parity-phase0-20261019`，不合并至 `main`，没有任何数据库迁移、生产部署或付费生成。
