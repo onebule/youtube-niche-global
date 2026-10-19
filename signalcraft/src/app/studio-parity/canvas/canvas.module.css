@@ -196,3 +196,27 @@
 
 /* Display browser-only mock journal metadata without implying cloud durability. */
 .mockCheckpointLabel { font-size: 10px; line-height: 1.5; color: #53728e; font-weight: 600; margin: 8px 0; }
+
+
+/* Isolated local project library. No image/media thumbnails are copied. */
+.projectManager { padding: 12px 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 19px; }
+.projectManagerHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.projectManagerHead h3 { margin: 0; }
+.projectManagerHead span { color: #8679c7; font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.projectManagerActions { display: flex; gap: 5px; margin-bottom: 10px; }
+.projectManagerActions button { min-width: 0; flex: 1; padding: 9px 5px; font-size: 10px; font-weight: 750; background: #f3f1fd; color: #6056c8; border: 1px solid #dedaf7; border-radius: 7px; }
+.projectManagerActions button:disabled { opacity: .4; cursor: not-allowed; }
+.projectList { max-height: 282px; overflow-y: auto; list-style: none; padding: 0 2px 0 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.projectListItem, .projectActive { background: white; border: 1px solid #e8e8f0; border-radius: 9px; padding: 10px 9px; }
+.projectActive { background: #f7f5ff; border-color: #bdb4ef; }
+.projectItemTitle { display: flex; gap: 4px; justify-content: space-between; align-items: center; }
+.projectItemTitle strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #353a52; font-size: 11px; }
+.projectItemTitle span { color: #6c5ed3; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.projectList small { display: block; margin-top: 5px; color: #9195a8; font-size: 9px; }
+.projectItemButtons { display: flex; gap: 4px; margin-top: 8px; }
+.projectItemButtons button { flex: 1; min-width: 0; border-radius: 5px; background: #fff; border: 1px solid #e4e2f1; color: #6a6686; font-size: 10px; padding: 6px 3px; }
+.projectItemButtons button:hover:not(:disabled) { background: #edeafa; border-color: #aba4e2; }
+.projectItemButtons button:disabled { opacity: .4; cursor: not-allowed; }
+.projectItemButtons button:last-child:not(:disabled) { color: #ba626a; }
+.projectManager > p { font-size: 10px; line-height: 1.55; }
+@media (max-width: 760px) { .projectList { max-height: 180px; } }
