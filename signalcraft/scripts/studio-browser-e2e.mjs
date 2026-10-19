@@ -143,10 +143,37 @@ await click('审核通过并应用操作');
 await until('document.querySelectorAll("[data-canvas-node]").length',17,'approved patch');
 assert.equal(await evaluate('[...document.querySelectorAll("[data-canvas-node][data-kind=video]")].some(n=>n.textContent.includes("Nilo repairs the brass farewell bell"))'),true,'Agent prompt applied');
 assert.equal(await evaluate('document.querySelector("aside[aria-label=\\"节点属性面板\\"] textarea")?.value.includes("Nilo repairs the brass farewell bell")'),true,'inspector reflects Agent prompt');
+// Phase 3: mock-only workflow runs must not create new graph nodes/assets.
+await click('Mock Runtime');
+await until('Boolean(document.getElementById("studio-mock-runtime"))',true,'Mock panel');
+await click('创建 Mock 运行');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("READY")',true,'Mock initialized');
+await click('单步推进');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("RUNNING")',true,'Mock first step');
+await click('模拟运行全部');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("COMPLETED")',true,'Mock all finished');
+assert.equal(await evaluate('document.querySelectorAll("[data-canvas-node]").length'),17,'Mock must not create real nodes');
+
+// Deliberate one-time failure, explicit retry, then all steps completed.
+const chosenFail=await evaluate('document.querySelector("select[aria-label=\\"Mock 故障注入节点\\"] option:nth-child(2)")?.value');
+assert.ok(chosenFail,'Mock test needs a video node');
+const selectFailure='(()=>{const el=document.querySelector("select[aria-label=\\"Mock 故障注入节点\\"]");el.value='+JSON.stringify('PLACEHOLDER')+';el.dispatchEvent(new Event("change",{bubbles:true}));return true;})()'.replace('PLACEHOLDER',chosenFail);
+assert.equal(await evaluate(selectFailure),true);
+await click('创建 Mock 运行');
+await click('模拟运行全部');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("PAUSED")',true,'Mock expected fail');
+await click('重试失败节点');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("READY")',true,'Mock retry approved');
+await click('模拟运行全部');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("COMPLETED")',true,'Mock retried finished');
+await click('创建 Mock 运行');
+await click('取消 Mock');
+await until('document.querySelector("#studio-mock-runtime [aria-live=polite]")?.textContent.includes("CANCELLED")',true,'Mock cancelled');
+assert.equal(await evaluate('document.querySelectorAll("[data-canvas-node]").length'),17,'Mock never writes generated outputs');
 await sleep(550);await cdp('Page.reload',{ignoreCache:true});
 await until('document.querySelectorAll("[data-canvas-node]").length',17,'draft persistence');
 const dir=process.env.STUDIO_BROWSER_ARTIFACT_DIR||'/tmp';await fs.mkdir(dir,{recursive:true});
 const screenshot=await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
 await fs.writeFile(dir+'/studio-browser-validated.png',Buffer.from(screenshot.data,'base64'));
-console.log('PASS: pointer drag, pan, wheel zoom, inspector sync, port reconnection, fit-to-content, Agent bridge, persisted graph');
+console.log('PASS: pointer drag, canvas editing, Agent bridge, mock start/finish/fail/retry/cancel, no outputs, persisted graph');
 ws.close();
