@@ -17,7 +17,7 @@ import { bridgePreexistingVideoAgentPlan, type StudioPlanBridgeReview } from '@/
 import { mockGraphFingerprint, type StudioMockRun } from '@/src/lib/studio-mock-runtime';
 import {
   studioActiveProject, studioCreateProject, studioDuplicateProject,
-  studioRemoveProject, studioRenameProject, studioSwitchProject,
+  studioImportWorkspaceTemplates, studioRemoveProject, studioRenameProject, studioSwitchProject,
   STUDIO_MAX_PROJECTS,
 } from '@/src/lib/studio-project-workspace';
 import {
@@ -368,40 +368,65 @@ export default function CanvasClient() {
     setCamera(prev => ({ ...prev, x: p.x + event.clientX - p.startX, y: p.y + event.clientY - p.startY }));
   };
 
-  const exportProject = () => {
-    const current = { ...projectRef.current, view: camera, updatedAt: new Date().toISOString() };
-    const payload = { version: 1, activeProjectId: current.id, projects: [current] };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  const downloadLocalJson = (value: unknown, name: string) => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'signalcraft-parity-canvas.json';
+    anchor.download = name;
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 3000);
-    setMessage('JSON 项目已导出。仅包含结构和已有资产 ID，不导出私有生成素材。');
+  };
+  const exportProject = () => {
+    const current = { ...projectRef.current, view: camera, updatedAt: new Date().toISOString() };
+    const payload: InfiniteCanvasWorkspace = { version: 1, activeProjectId: current.id, projects: [current] };
+    downloadLocalJson(payload, 'signalcraft-parity-current-project.json');
+    setMessage('当前项目 JSON 已导出。只保存节点结构和资产 ID，不包含私有素材文件。');
+  };
+  const exportWorkspace = () => {
+    const current = currentWorkspace();
+    downloadLocalJson(current, 'signalcraft-parity-all-projects.json');
+    setMessage('已导出完整本地项目工作区（' + current.projects.length +
+      ' 个项目）。文件可能包含创作提示词和资产 ID，请妥善保存。');
   };
   const importProject = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (file.size > 1024 * 1024) { setMessage('JSON 不能超过 1 MB。'); return; }
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage('本地 JSON 导入上限为 5 MB，请分批导入或精简素材节点。');
+      return;
+    }
     try {
+      if (!ready) throw new Error('请等项目加载完成后再导入。');
       const data: unknown = JSON.parse(await file.text());
-      if (!data || typeof data !== 'object' || (data as { version?: unknown }).version !== 1 || !Array.isArray((data as { projects?: unknown }).projects)
-        || !(data as { projects: unknown[] }).projects.some(p => p && typeof p === 'object'
-          && typeof (p as { id?: unknown }).id === 'string' && Array.isArray((p as { nodes?: unknown }).nodes)
-          && Array.isArray((p as { edges?: unknown }).edges))) {
-        throw new Error('版本不兼容');
+      if (!data || typeof data !== 'object' ||
+          (data as { version?: unknown }).version !== 1 ||
+          !Array.isArray((data as { projects?: unknown }).projects)) {
+        throw new Error('导入文件不是 SignalCraft Graph v1 工作区。');
       }
-      const workspace = normalizeInfiniteWorkspace(data);
-      if (!workspace.projects.length) throw new Error('没有可恢复的项目');
-      const imported = workspace.projects.find(p => p.id === workspace.activeProjectId) || workspace.projects[0];
-      if (!window.confirm('导入会替换当前隔离画布。请先导出需要保留的项目。确认导入？')) return;
-      apply(imported);
-      setCamera(imported.view);
-      setSelected(null);
-      setSource(null);
-      setMessage('项目已按 SignalCraft v1 数据契约校验并导入。没有上传文件或调用服务端。');
-    } catch { setMessage('导入失败：JSON 无效或不是可识别的 SignalCraft v1 项目。'); }
+      const rawProjects = (data as { projects: unknown[] }).projects;
+      if (!rawProjects.length || rawProjects.length > STUDIO_MAX_PROJECTS ||
+          !rawProjects.every(item => item && typeof item === 'object' &&
+            typeof (item as { id?: unknown }).id === 'string' &&
+            Array.isArray((item as { nodes?: unknown }).nodes) &&
+            Array.isArray((item as { edges?: unknown }).edges))) {
+        throw new Error('项目列表为空、超过 40 个或含有非法节点结构。');
+      }
+      const imported = normalizeInfiniteWorkspace(data);
+      if (imported.projects.length !== rawProjects.length) {
+        throw new Error('导入时检测到被丢弃的项目，已拒绝整次导入。');
+      }
+      const existing = currentWorkspace();
+      if (existing.projects.length + imported.projects.length > STUDIO_MAX_PROJECTS) {
+        throw new Error('导入后将超过 40 个项目上限。');
+      }
+      if (!window.confirm('将添加 ' + imported.projects.length +
+        ' 个独立结构模板，不覆盖任何已有项目。导入会清除外部文件中的素材资产 ID、历史任务和视频结果节点。确定继续？')) return;
+      const next = studioImportWorkspaceTemplates(existing, imported, newId, newId);
+      performWorkspaceChange(next, '已安全导入 ' + imported.projects.length + ' 个项目模板');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '导入失败，现有本地工作区未变更。');
+    }
   };
 
   const planFromIdea = () => {
@@ -701,8 +726,9 @@ export default function CanvasClient() {
         <button type="button" disabled={!history.future.length} onClick={redo}>↷ 重做</button>
         <button type="button" onClick={() => setShowPlan(value => !value)} aria-expanded={showPlan} aria-controls="studio-workflow-preview">{showPlan ? '收起检查' : '检查工作流'}</button>
         <button type="button" onClick={() => setShowMock(value => !value)} aria-expanded={showMock} aria-controls="studio-mock-runtime">{showMock ? '收起 Mock' : 'Mock Runtime'}</button>
-        <button type="button" onClick={exportProject}>导出 JSON</button>
-        <label className={styles.importButton}>导入 JSON <input type="file" accept=".json,application/json" onChange={event => { void importProject(event); }} /></label>
+        <button type="button" onClick={exportProject}>导出当前</button>
+        <button type="button" onClick={exportWorkspace}>导出全部项目</button>
+        <label className={styles.importButton}>导入工作区 <input type="file" accept=".json,application/json" onChange={event => { void importProject(event); }} /></label>
       </div>
     </header>
     <div className={styles.layout}>
