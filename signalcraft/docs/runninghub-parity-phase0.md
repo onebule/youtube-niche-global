@@ -63,3 +63,16 @@
 3. 用户已有 Agent/画布/账单数据不能丢；先制定 Graph v1→v2 的兼容读和回滚方案。
 4. 模型调用先做 dry-run/Mock 测试；真实付费/API 凭证、生产 Supabase 和部署均需另行明确批准。
 5. 所有发布必须独立评审、Typecheck、测试和安全检查通过；禁止自动合并。
+
+## 六、Phase 1 隔离画布切片（2026-10-19）
+
+已加入 `/studio-parity/canvas`，仅当服务端 `STUDIO_PARITY_PREVIEW=enabled` 时返回页面；与生产 `/app/canvas` 路由及原有 localStorage 命名空间完全分离。
+
+- 复用现有 `createInfiniteNode` / `createInfiniteProject` / `connectionIssue` / `connectInfiniteNodes` / `normalizeInfiniteWorkspace`。
+- 真实本地操作：添加节点、画布拖动和缩放、连接/断开、属性编辑、删除、撤销/重做、JSON 导入/导出、Nilo 示例工作流。
+- 从创作首页明确点击“添加到实验画布”后，将原始描述作为本地文本节点追加到当前项目，不覆盖已有画布；**不调用大模型，不能算 Agent 工作流成功**。
+- 有登录身份时按账户命名空间保存于 localStorage；未登录时只保存于当前标签的 sessionStorage。与原 `signalcraft-infinite-canvas-v5` 草稿隔离。
+- 模型与媒体：节点仍为结构预览。图片/音频上传、真实生成、自动 DAG 执行、远程数据库保存、跨设备同步、ComfyUI、剪辑与开放 API **未实现**。
+- 当前针对性静态检查可以验证代码引用、门禁与无付费调用路径；**尚未完成** next build、TypeScript 类型检查、Playwright/浏览器端到端验收，因此不得发布。
+- UI 参考以 rhTV 创作入口、作品与工作流展示的公开页面为依据；画布内精确像素和登录态操作暂没有授权截图，不能标为 1:1 视觉完成。
+- 下一操作：在具备可访问的本地开发机和已安装依赖的工作树中运行 `pnpm --dir signalcraft typecheck`、`pnpm --dir signalcraft test`、`pnpm --dir signalcraft build`，再测试移动端触屏、指针捕获、账号切换、导入失败、撤销重做及完整恢复流程。
