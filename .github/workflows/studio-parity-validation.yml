@@ -44,7 +44,7 @@ jobs:
       - name: Install lockfile dependencies
         run: pnpm install --frozen-lockfile
       - name: Run no-network Studio contract tests
-        run: node --experimental-strip-types --test tests/studio-agent-draft.test.mjs tests/studio-workflow-plan.test.mjs tests/infinite-canvas.test.mjs
+        run: node --experimental-strip-types --test tests/studio-agent-draft.test.mjs tests/studio-agent-tools.test.mjs tests/studio-workflow-plan.test.mjs tests/infinite-canvas.test.mjs
       - name: Run existing full test suite
         run: pnpm test
       - name: TypeScript check
