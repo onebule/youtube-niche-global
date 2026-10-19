@@ -109,7 +109,8 @@ export default function StudioParityClient() {
         </div>
         <p className={styles.sideLabel}>已有能力</p>
         <nav className={styles.sideLinks} aria-label="SignalCraft 已有工具">
-          <Link href="/app/canvas">无限画布 <span>↗</span></Link>
+          <Link href="/studio-parity/canvas">交互实验画布 <span>↗</span></Link>
+          <Link href="/app/canvas">现有无限画布 <span>↗</span></Link>
           <Link href="/app/image-to-video">图生视频 <span>↗</span></Link>
           <Link href="/app/ideas">选题项目 <span>↗</span></Link>
         </nav>
@@ -123,8 +124,9 @@ export default function StudioParityClient() {
         <header className={styles.topbar}>
           <div className={styles.breadcrumb}>创作工作室 <span>/</span> 对标实验台</div>
           <div className={styles.topActions}>
-            <span className={styles.previewPill}>Phase 0 · 预览</span>
-            <Link className={styles.backLink} href="/app/canvas">打开现有工作室 ↗</Link>
+            <span className={styles.previewPill}>Phase 1 · 隔离画布预览</span>
+            <Link className={styles.backLink} href="/studio-parity/canvas">进入实验画布 ↗</Link>
+            <Link className={styles.backLink} href="/app/canvas">现有工作室 ↗</Link>
           </div>
         </header>
 
@@ -174,9 +176,9 @@ export default function StudioParityClient() {
               <Link href="/app/canvas" className={styles.textLink}>所有项目 →</Link>
             </div>
             <div className={styles.projectGrid}>
-              <Link href="/app/canvas" className={styles.newProject}>
-                <span className={styles.plus}>＋</span><strong>新建画布项目</strong>
-                <small>在现有 SignalCraft 画布中继续创作</small>
+              <Link href="/studio-parity/canvas" className={styles.newProject}>
+                <span className={styles.plus}>＋</span><strong>进入实验画布</strong>
+                <small>拖拽节点、建立连线、撤销重做与本地保存</small>
               </Link>
               <div className={styles.projectNote}>
                 <span className={styles.infoIcon} aria-hidden="true">i</span>
@@ -217,7 +219,7 @@ export default function StudioParityClient() {
             <div><strong>后续对标：Agent 执行、画布、快捷创作、AI Apps、ComfyUI</strong>
               <p>这些模块需逐项进行真实交互验收；目前尚未以预览页替代原有系统。</p>
             </div>
-            <Link href="/app/canvas">进入现有画布 →</Link>
+            <Link href="/studio-parity/canvas">打开交互实验画布 →</Link>
           </section>
         </div>
       </div>
