@@ -12,6 +12,7 @@ import {
 } from '@/src/lib/infinite-canvas-graph';
 import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-workflow-plan';
 import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
+import { suggestStudioAgentEdits, prepareStudioAgentPatch, confirmStudioAgentPatch, type StudioAgentPatch } from '@/src/lib/studio-agent-tools';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
@@ -69,6 +70,7 @@ export default function CanvasClient() {
   const [showAgent, setShowAgent] = useState(false);
   const [idea, setIdea] = useState('');
   const [agentDraft, setAgentDraft] = useState<StudioRuleDraft | null>(null);
+  const [toolProposal, setToolProposal] = useState<StudioAgentPatch | null>(null);
   const workflow = useMemo(() => previewStudioWorkflow(project), [project]);
   const drag = useRef<DragState | null>(null);
   const pan = useRef<PanState | null>(null);
@@ -371,6 +373,34 @@ export default function CanvasClient() {
     }
   };
 
+  const previewToolProposal = () => {
+    try {
+      const current = projectRef.current;
+      const instructions = suggestStudioAgentEdits(current, selected, idea);
+      const proposal = prepareStudioAgentPatch(current, instructions, newId);
+      setToolProposal(proposal);
+      setAgentDraft(null);
+      setMessage('已预演 ' + proposal.changes.length + ' 项 Agent 工具操作。请审查差异后再应用。');
+    } catch (error) {
+      setToolProposal(null);
+      setMessage(error instanceof Error ? error.message : 'Agent 工具预演失败。');
+    }
+  };
+  const approveToolProposal = () => {
+    if (!toolProposal) return;
+    if (!window.confirm('确认应用 ' + toolProposal.changes.length + ' 项节点操作？不会提交付费生成，应用后可撤销。')) return;
+    try {
+      const next = confirmStudioAgentPatch(projectRef.current, toolProposal);
+      apply(next);
+      setToolProposal(null);
+      setShowPlan(true);
+      setMessage('已应用 Agent 节点操作，可以通过撤销恢复。未调用 AI Provider 或发生费用。');
+    } catch (error) {
+      setToolProposal(null);
+      setMessage(error instanceof Error ? error.message : '画布已变化，需要重新预演。');
+    }
+  };
+
   const activeNode = project.nodes.find(item => item.id === selected) || null;
   const resetView = () => setCamera(defaultCamera);
 
@@ -412,15 +442,23 @@ export default function CanvasClient() {
         </div>
         {showAgent && <section id="studio-agent-draft" className={styles.agentPanel} aria-label="离线创作需求规划">
           <div className={styles.agentTitle}><strong>从创作需求搭建节点图</strong><span>LOCAL_RULES_ONLY · 非大模型 Agent</span></div>
-          <p>自动建立分镜、文本和视频占位节点。此阶段只生成结构，不会产出视频、执行工作流或发生费用。</p>
+          <p>创建一组分镜节点，或对当前选中节点预演安全工具操作。此阶段仅支持离线规则建议，不会产出视频或发生费用。</p>
           <label className={styles.agentPromptLabel} htmlFor="studio-agent-idea">创作需求（最多 2000 字）</label>
           <textarea id="studio-agent-idea" className={styles.agentInput} rows={3} maxLength={2000} value={idea}
             placeholder="例：制作一条30秒英文 Shorts，分成6个镜头，9:16，角色 Nilo 保持一致。"
-            onChange={event => { setIdea(event.target.value); setAgentDraft(null); }} />
+            onChange={event => { setIdea(event.target.value); setAgentDraft(null); setToolProposal(null); }} />
           <div className={styles.agentActions}>
-            <button type="button" onClick={planFromIdea} disabled={!idea.trim()}>预览节点规划</button>
+            <button type="button" onClick={planFromIdea} disabled={!idea.trim()}>预览多镜头规划</button>
+            <button type="button" onClick={previewToolProposal} disabled={!idea.trim()}>预演所选节点的 Agent 操作</button>
+            {toolProposal && <button type="button" className={styles.agentApprove} onClick={approveToolProposal}>审核通过并应用操作</button>}
             {agentDraft && <button type="button" className={styles.agentApprove} onClick={confirmAgentDraft}>确认添加到画布（不执行生成）</button>}
           </div>
+          {toolProposal && <div className={styles.agentReview} aria-live="polite">
+            <strong>Agent 画布操作差异（尚未应用）</strong>
+            <ol>{toolProposal.changes.map((change, index) => <li key={index}>{change}</li>)}</ol>
+            <p>已限制为节点创建、修改、移动及提示词连线；禁止删除结果、改动资产或调用模型。</p>
+            <p>画布在审核期间变化时，本提案自动失效并需要重新预演。</p>
+          </div>}
           {agentDraft && <div className={styles.agentReview} aria-live="polite">
             <strong>{agentDraft.shotCount} 个镜头 · {agentDraft.durationSeconds ? agentDraft.durationSeconds + ' 秒' : '时长未设'} · {agentDraft.aspectRatio}</strong>
             <ol>{agentDraft.shots.map(shot => <li key={shot.index}>{shot.title}：{shot.storyboard.split('\n')[0]}</li>)}</ol>
