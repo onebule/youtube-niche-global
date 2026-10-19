@@ -14,14 +14,17 @@ import { previewStudioWorkflow, type WorkflowStepState } from '@/src/lib/studio-
 import { planStudioRequest, appendStudioRuleDraft, type StudioRuleDraft } from '@/src/lib/studio-agent-draft';
 import { suggestStudioAgentEdits, prepareStudioAgentPatch, confirmStudioAgentPatch, type StudioAgentPatch } from '@/src/lib/studio-agent-tools';
 import { bridgePreexistingVideoAgentPlan, type StudioPlanBridgeReview } from '@/src/lib/studio-agent-plan-bridge';
+import { mockGraphFingerprint, type StudioMockRun } from '@/src/lib/studio-mock-runtime';
 import {
-  createStudioMockRun, stepStudioMockRun, finishStudioMockRun,
-  retryStudioMockRun, cancelStudioMockRun, mockGraphFingerprint,
-  type StudioMockRun,
-} from '@/src/lib/studio-mock-runtime';
+  createStudioMockJournal, appendStudioMockCommand,
+  restoreStudioMockJournal, serializeStudioMockJournal,
+  type StudioMockJournal, type StudioMockJournalState,
+  type StudioMockCommandType,
+} from '@/src/lib/studio-mock-checkpoint';
 import styles from './canvas.module.css';
 
 const DRAFT_PREFIX = 'signalcraft-studio-parity-canvas-sandbox-v1';
+const MOCK_JOURNAL_PREFIX = 'signalcraft-studio-parity-mock-journal-v1';
 const NODE_KINDS: { kind: InfiniteNodeKind; name: string; description: string }[] = [
   { kind: 'text', name: '文本', description: '脚本、提示词和创作方向' },
   { kind: 'storyboard', name: '分镜', description: '单镜头脚本或构图草图' },
@@ -72,9 +75,12 @@ export default function CanvasClient() {
   const [history, setHistory] = useState<History>({ past: [], future: [] });
   const historyRef = useRef(history);
   const [scope, setScope] = useState('');
+  const [storageScope, setStorageScope] = useState('');
   const [showPlan, setShowPlan] = useState(false);
   const [showMock, setShowMock] = useState(false);
   const [mockRun, setMockRun] = useState<StudioMockRun | null>(null);
+  const [mockJournal, setMockJournal] = useState<StudioMockJournal | null>(null);
+  const mockJournalRef = useRef<StudioMockJournal | null>(null);
   const [mockFailNode, setMockFailNode] = useState('');
   const [showAgent, setShowAgent] = useState(false);
   const [idea, setIdea] = useState('');
@@ -125,6 +131,7 @@ export default function CanvasClient() {
     const authenticated = accountStorageScope(session) !== 'anonymous';
     const storage = authenticated ? localStorage : sessionStorage;
     setScope(authenticated ? key : '仅当前浏览器标签（未登录）');
+    setStorageScope(accountStorageScope(session));
     try {
       const raw = storage.getItem(key);
       if (raw) {
@@ -185,6 +192,33 @@ export default function CanvasClient() {
       setMessage('浏览器草稿保存失败。请使用导出 JSON 备份当前项目。');
     }
   }, [project, camera, ready, scope]);
+
+  // Restore a replayable, account-scoped Mock command log after the graph is
+  // hydrated. A corrupt, cross-account or stale record is never executed.
+  useEffect(() => {
+    if (!ready || !storageScope) return;
+    const identity = getSession();
+    if (accountStorageScope(identity) !== storageScope) {
+      setMessage('账号已切换，拒绝恢复之前的 Mock 记录。');
+      return;
+    }
+    try {
+      const key = accountStorageKey(MOCK_JOURNAL_PREFIX, identity);
+      const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+      const raw = storage.getItem(key);
+      if (!raw) return;
+      const restored = restoreStudioMockJournal(raw, projectRef.current, storageScope);
+      mockJournalRef.current = restored.journal;
+      setMockJournal(restored.journal);
+      setMockRun(restored.run);
+      setMockFailNode(restored.journal.failOnceNodeId || '');
+      setShowMock(true);
+      setMessage('已从隔离浏览器检查点重放 ' + restored.journal.revision +
+        ' 条 Mock 命令。无模型或付费请求。');
+    } catch {
+      setMessage('Mock 检查点无法恢复：图版本或账号可能已变化。旧日志保留，创建新运行前请检查。');
+    }
+  }, [ready, storageScope]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -430,36 +464,73 @@ export default function CanvasClient() {
   };
 
   const mockStale = Boolean(mockRun && mockRun.graphFingerprint !== mockGraphFingerprint(project));
+  const commitMockCheckpoint = (state: StudioMockJournalState) => {
+    const identity = getSession();
+    if (!ready || !storageScope || accountStorageScope(identity) !== storageScope) {
+      throw new Error('账号状态发生变化，已拒绝写入 Mock 检查点。');
+    }
+    // Synchronous persistence happens before updating React state. A failed
+    // browser write does not advance the visible Mock execution state.
+    const payload = serializeStudioMockJournal(state.journal, projectRef.current, storageScope);
+    const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+    storage.setItem(accountStorageKey(MOCK_JOURNAL_PREFIX, identity), payload);
+    mockJournalRef.current = state.journal;
+    setMockJournal(state.journal);
+    setMockRun(state.run);
+  };
   const createMockSession = () => {
     try {
-      const next = createStudioMockRun(projectRef.current, {
-        id: newId(), failOnceNodeId: mockFailNode || null,
+      const next = createStudioMockJournal(projectRef.current, storageScope, {
+        runId: newId(), failOnceNodeId: mockFailNode || null,
       });
-      setMockRun(next);
-      setMessage('已建立 Mock 运行：' + next.tasks.length + ' 个视频任务。尚未向任何模型发起请求。');
+      commitMockCheckpoint(next);
+      setMessage('已建立可恢复的 Mock 运行：' + next.run.tasks.length +
+        ' 个视频任务。浏览器日志修订号 0；真实模型调用 0。');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Mock 预检失败，未启动。');
+      setMessage(error instanceof Error ? error.message : 'Mock 预检或浏览器保存失败，未启动。');
     }
   };
   const transitionMock = (action: 'step' | 'finish' | 'retry' | 'cancel') => {
-    if (!mockRun) return;
+    const current = mockJournalRef.current;
+    if (!current) return;
     try {
-      const next = action === 'step' ? stepStudioMockRun(mockRun, projectRef.current)
-        : action === 'finish' ? finishStudioMockRun(mockRun, projectRef.current)
-        : action === 'retry' ? retryStudioMockRun(mockRun, projectRef.current)
-        : cancelStudioMockRun(mockRun, projectRef.current);
-      setMockRun(next);
-      setMessage('Mock Runtime：' + next.status + '。事件 ' + next.events.length + ' 条，真实生成 0 次。');
+      const commandType: Record<typeof action, StudioMockCommandType> = {
+        step: 'STEP', finish: 'FINISH', retry: 'RETRY', cancel: 'CANCEL',
+      };
+      const next = appendStudioMockCommand(current, projectRef.current, storageScope, {
+        action: commandType[action], requestId: newId(),
+        expectedRevision: current.revision,
+      });
+      commitMockCheckpoint(next);
+      setMessage('Mock Runtime：' + next.run.status + '。已持久保存第 ' +
+        next.journal.revision + ' 条命令，真实生成 0 次。');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Mock 状态更新失败，运行记录未变化。');
+      setMessage(error instanceof Error ? error.message : 'Mock 状态更新失败，旧检查点未变化。');
+    }
+  };
+  const clearMockCheckpoint = () => {
+    try {
+      const identity = getSession();
+      if (!ready || accountStorageScope(identity) !== storageScope) {
+        throw new Error('账号发生变化，不能清空其他账号的 Mock 数据。');
+      }
+      const storage = storageScope === 'anonymous' ? sessionStorage : localStorage;
+      storage.removeItem(accountStorageKey(MOCK_JOURNAL_PREFIX, identity));
+      mockJournalRef.current = null;
+      setMockJournal(null);
+      setMockRun(null);
+      setMessage('已清除当前账号的本地 Mock 检查点；原画布节点未变化。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mock 清空失败。');
     }
   };
   const exportMockSession = () => {
-    if (!mockRun) return;
+    if (!mockRun || !mockJournal) return;
     const payload = {
       schemaVersion: 1, mode: 'MOCK_ONLY', projectId: mockRun.projectId,
       runId: mockRun.id, status: mockRun.status, events: mockRun.events,
-      tasks: mockRun.tasks, providerCalls: 0, paidJobs: 0, generatedAssets: 0,
+      tasks: mockRun.tasks, journal: mockJournal,
+      providerCalls: 0, paidJobs: 0, generatedAssets: 0,
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a');
@@ -467,7 +538,7 @@ export default function CanvasClient() {
     anchor.download = 'signalcraft-mock-run-audit.json';
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 3000);
-    setMessage('已导出本次 Mock 审计记录，无真实资产内容。');
+    setMessage('已导出本地 Mock 审计及命令日志，未包含模型密钥或真实资产。');
   };
 
   const activeNode = project.nodes.find(item => item.id === selected) || null;
@@ -591,10 +662,10 @@ export default function CanvasClient() {
         </section>}
         {showMock && <section id="studio-mock-runtime" className={styles.mockPanel} aria-label="Mock 工作流执行器">
           <div className={styles.mockTop}>
-            <strong>Workflow Runtime V1 · Mock Only</strong>
+            <strong>Workflow Runtime V2 · 可恢复 Mock</strong>
             <span>0 付费调用 · 0 生成素材 · 无服务器任务</span>
           </div>
-          <p>通过手动按钮模拟依赖排序、任务状态、失败重试和取消。缺少真实模型选择不影响 Mock，缺少提示词或素材仍会阻止启动。</p>
+          <p>手动模拟依赖排序、失败重试和取消；每次操作会先写入当前账号的浏览器命令日志，刷新后可安全重放。无云端任务持久化或真实状态轮询。</p>
           <div className={styles.mockActions}>
             <label>模拟一次性故障
               <select aria-label="Mock 故障注入节点" value={mockFailNode}
@@ -613,11 +684,12 @@ export default function CanvasClient() {
             <button type="button" disabled={!mockRun || mockStale || mockRun.status === 'CANCELLED' || mockRun.status === 'COMPLETED'}
               onClick={() => transitionMock('cancel')}>取消 Mock</button>
             <button type="button" disabled={!mockRun} onClick={exportMockSession}>导出审计 JSON</button>
-            <button type="button" disabled={!mockRun} onClick={() => { setMockRun(null); setMessage('已清除本地 Mock 记录；画布节点未更改。'); }}>清空记录</button>
+            <button type="button" disabled={!mockRun} onClick={clearMockCheckpoint}>清空记录</button>
           </div>
           {mockStale && <p className={styles.mockWarning} role="alert">画布节点或连线已变化，旧运行不能继续。可导出旧日志，然后创建新的 Mock 运行。</p>}
           {mockRun && <div className={styles.mockStatus} aria-live="polite">
             <strong>当前运行：{mockRun.status} · {mockRun.tasks.filter(task => task.status === 'SUCCEEDED').length}/{mockRun.tasks.length} 已模拟完成</strong>
+            <p className={styles.mockCheckpointLabel}>Mock Journal · 第 {mockJournal?.revision ?? 0} 版 · 当前账号浏览器隔离保存 · 请求 ID 幂等保护</p>
             <ol className={styles.mockTasks}>{mockRun.tasks.map(task =>
               <li key={task.nodeId}><b>{task.title}</b><span>{task.status} · 尝试 {task.attempts} 次</span>
                 {task.error && <small>{task.error}</small>}</li>)}</ol>
