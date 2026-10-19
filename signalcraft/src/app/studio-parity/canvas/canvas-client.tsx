@@ -563,10 +563,10 @@ export default function CanvasClient() {
         <h2>节点检查器</h2>
         {!activeNode ? <div className={styles.placeholder}><span>◎</span><strong>选择画布节点</strong><p>点击任意节点的「参数」，即可修改名称、内容和连线。</p></div> : <>
           <p className={styles.subheading}>{describe(activeNode.kind)} · {activeNode.id.slice(0, 8)}</p>
-          <label>节点名称<input key={activeNode.id + '-title'} defaultValue={activeNode.title}
+          <label>节点名称<input key={activeNode.id + '-title-' + activeNode.title} defaultValue={activeNode.title}
             maxLength={70} onBlur={e => { if (e.target.value.trim() && e.target.value !== activeNode.title) patchNode(activeNode.id, { title: e.target.value.trim() }); }}/></label>
           <label>{activeNode.kind === 'video' ? '运动提示词' : '节点内容'}
-            <textarea key={activeNode.id + '-body'} rows={6} defaultValue={activeNode.kind === 'video' ? activeNode.video?.prompt || '' : activeNode.text}
+            <textarea key={activeNode.id + '-body-' + (activeNode.kind === 'video' ? activeNode.video?.prompt || '' : activeNode.text)} rows={6} defaultValue={activeNode.kind === 'video' ? activeNode.video?.prompt || '' : activeNode.text}
               maxLength={12000} onBlur={e => {
                 if (activeNode.kind === 'video' && activeNode.video && e.target.value !== activeNode.video.prompt)
                   patchNode(activeNode.id, { video: { ...activeNode.video, prompt: e.target.value.slice(0, 1200) } });
