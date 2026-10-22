@@ -1,6 +1,11 @@
 name: Build Creator OS desktop installers
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish tested installers and update feed as a formal Release'
+        type: boolean
+        default: false
   push:
     branches: [creator-os-desktop-build]
     paths: ['creator-os-desktop/**', '.github/workflows/build-desktop.yml']
@@ -51,3 +56,22 @@ jobs:
             creator-os-desktop/desktop-dist/*.dmg
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - run: node creator-os-desktop/scripts/release-desktop.mjs release
+        env:
+          GH_TOKEN: ${{ github.token }}

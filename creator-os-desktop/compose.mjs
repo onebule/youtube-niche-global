@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {createReadStream,createWriteStream} from 'node:fs';
 import {tmpdir} from 'node:os';import path from 'node:path';import {randomUUID} from 'node:crypto';import {pipeline} from 'node:stream/promises';import {Transform} from 'node:stream';
 const clips=new Map(),jobs=new Map(),children=new Set();
+export function localWorkActive(){return active||uploads>0}
 export function stopLocalWork(){for(const child of children)child.kill()}
 let active=false,uploads=0;let rootPromise;
 const root=()=>rootPromise||=(mkdtemp(path.join(tmpdir(),'creator-os-')));
