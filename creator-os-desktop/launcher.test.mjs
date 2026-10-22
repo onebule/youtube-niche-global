@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {chooseServer} from './launcher.mjs';
 const product='creator-os-local';
-test('repeated launch reopens the current app without a second server',async()=>{let bound=0,opened='';const result=await chooseServer({probe:async()=>({product,version:'0.10.1'}),listen:async()=>bound++,open:u=>opened=u});assert.equal(bound,0);assert.equal(result.reused,true);assert.equal(opened,'http://127.0.0.1:4173')});
+test('repeated launch reopens the current app without a second server',async()=>{let bound=0,opened='';const result=await chooseServer({probe:async()=>({product,version:'0.11.0'}),listen:async()=>bound++,open:u=>opened=u});assert.equal(bound,0);assert.equal(result.reused,true);assert.equal(opened,'http://127.0.0.1:4173')});
 test('busy unrelated port falls back to the next port',async()=>{const attempted=[];const r=await chooseServer({probe:async()=>null,listen:async p=>{attempted.push(p);if(p===4173)throw Object.assign(Error(),{code:'EADDRINUSE'})}});assert.deepEqual(attempted,[4173,4174]);assert.equal(r.port,4174)});
 test('an old running version must be stopped before upgrading',async()=>{await assert.rejects(chooseServer({probe:async()=>({product,version:'0.4'}),listen:async()=>assert.fail()}),/older/)});
 test('permissions errors are surfaced instead of cycling through more ports',async()=>{await assert.rejects(chooseServer({probe:async()=>null,listen:async()=>{throw Object.assign(Error('access denied'),{code:'EACCES'})}}),/access denied/)});
