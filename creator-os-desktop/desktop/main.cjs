@@ -16,7 +16,7 @@ async function openWindow(){
  window.webContents.setWindowOpenHandler(({url})=>{external(url);return {action:'deny'}});
  window.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith('creator://app/')){event.preventDefault();external(url)}});
  window.webContents.session.setPermissionRequestHandler((contents,permission,callback)=>callback(contents.getURL().startsWith('creator://app/')&&permission==='clipboard-sanitized-write'));
- window.once('ready-to-show',()=>window.show());
+ window.once('ready-to-show',()=>{if(!app.commandLine.hasSwitch('smoke-test'))window.show()});
  window.webContents.on('will-prevent-unload',event=>{const choice=dialog.showMessageBoxSync(window,{type:'question',buttons:['继续使用','退出应用'],defaultId:0,cancelId:0,title:'正在进行生成任务',message:'退出后不再提交后续任务，已提交到原站的任务会继续运行。确定退出？'});if(choice===1)event.preventDefault()});
  window.on('closed',()=>window=null);
  await window.loadURL('creator://app/');
@@ -47,7 +47,8 @@ if(single)app.whenReady().then(async()=>{
   {label:'视图',submenu:[{role:'reload'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{role:'togglefullscreen'}]}
  ]));
  await openWindow();
+ if(app.commandLine.hasSwitch('smoke-test')){const response=await net.fetch('creator://app/local/environment');const state=await response.json();if(!response.ok||!state.desktop)throw Error('Desktop protocol smoke test failed');console.log('Desktop window and local protocol ready.');window.destroy();server.close(()=>app.exit(0));return}
  app.on('activate',()=>{if(!window)void openWindow()});
-}).catch(e=>{dialog.showErrorBox('Creator OS 启动失败',e.message);app.quit()});
+}).catch(e=>{if(app.commandLine.hasSwitch('smoke-test')){console.error(e);app.exit(1);return}dialog.showErrorBox('Creator OS 启动失败',e.message);app.quit()});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
 app.on('will-quit',()=>{stopLocalWork?.();server?.close()});

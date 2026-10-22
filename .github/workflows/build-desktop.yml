@@ -4,6 +4,9 @@ on:
   push:
     branches: [creator-os-desktop-build]
     paths: ['creator-os-desktop/**', '.github/workflows/build-desktop.yml']
+concurrency:
+  group: creator-os-desktop-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -33,6 +36,8 @@ jobs:
       - run: npm ci
       - run: node scripts/prepare-desktop.mjs
       - run: npm test
+      - run: npx electron . --smoke-test --disable-gpu
+        timeout-minutes: 2
       - run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
