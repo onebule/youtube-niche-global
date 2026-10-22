@@ -1,0 +1,65 @@
+name: Publish verified Creator OS installers
+on:
+  push:
+    branches: [creator-os-desktop-build]
+    paths: ['.github/workflows/publish-tested-desktop.yml']
+  workflow_dispatch:
+    inputs:
+      tested_run_id:
+        description: Successful desktop installer build run
+        required: true
+        default: '39751189858'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: creator-os-publish-verified
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify build provenance
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED_RUN: ${{ inputs.tested_run_id || '39751189858' }}
+        run: |
+          node --input-type=module <<'JS'
+          import {spawnSync} from 'node:child_process';import fs from 'node:fs';
+          const run=process.env.TESTED_RUN;if(!/^\d+$/.test(run))throw Error('Invalid run ID');
+          function api(resource){const r=spawnSync('gh',['api','repos/onebule/youtube-niche-global/'+resource],{encoding:'utf8'});if(r.status!==0)throw Error('Cannot verify build');return JSON.parse(r.stdout)}
+          const info=api('actions/runs/'+run),jobs=api('actions/runs/'+run+'/jobs').jobs.filter(x=>x.name.startsWith('build ('));
+          if(info.conclusion!=='success'||info.head_branch!=='creator-os-desktop-build'||info.path!=='.github/workflows/build-desktop.yml'||jobs.length!==3||jobs.some(x=>x.conclusion!=='success'))throw Error('Build is not verified');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'sha='+info.head_sha+'\nrun='+run+'\n');
+          JS
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.verified.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.verified.outputs.run }}
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+      - name: Prepare verified update manifest
+        run: node creator-os-desktop/scripts/release-desktop.mjs release --manifest-only
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ steps.verified.outputs.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import {spawnSync} from 'node:child_process';import fs from 'node:fs';
+          const repository='onebule/youtube-niche-global',manifest=JSON.parse(fs.readFileSync('release/creator-update.json')),tag='creator-os-v'+manifest.version;
+          function gh(args){const r=spawnSync('gh',[...args,'--repo',repository],{stdio:'inherit'});if(r.status!==0)throw Error('Publication failed')}
+          const result=spawnSync('gh',['release','view',tag,'--repo',repository,'--json','isDraft,targetCommitish'],{encoding:'utf8'});
+          if(result.status===0){const existing=JSON.parse(result.stdout);if(!existing.isDraft||existing.targetCommitish!==process.env.VERIFIED_SHA)throw Error('Refusing to overwrite a published or unrelated release')}
+          else gh(['release','create',tag,'--target',process.env.VERIFIED_SHA,'--title','Creator OS '+manifest.version,'--draft','--notes-file','release/release-notes.txt']);
+          const files=Object.values(manifest.assets).map(x=>'release/'+new URL(x.url).pathname.split('/').pop());
+          gh(['release','upload',tag,...files,'release/creator-update.json','release/SHA256SUMS.txt','--clobber']);
+          gh(['release','edit',tag,'--draft=false','--latest']);
+          JS
