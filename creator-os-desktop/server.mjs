@@ -7,6 +7,8 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const root=path.dirname(fileURLToPath(import.meta.url));
+let upstreamFetch=(...args)=>globalThis.fetch(...args);let upstreamTransport='node';
+export function setUpstreamFetch(fn){upstreamFetch=fn||((...args)=>globalThis.fetch(...args));upstreamTransport=fn?'system':'node'}
 const operations=new Set(['canvas-text-models','canvas-text-generate','models','capabilities','image-models','image-generate','image-status','upload-intent','generate','status','cancel','history','asset-url']);
 export async function handleRequest(req,res){
  const u=new URL(req.url,'http://localhost');
@@ -14,6 +16,10 @@ export async function handleRequest(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');
  if(u.pathname==='/local/backups'){await backupRoute(req,res,u);return}
  if(u.pathname==='/local/environment'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({version:APP_VERSION,product:APP_ID,desktop:!!process.env.CREATOR_DESKTOP_TOKEN,dataDirectory:process.env.CREATOR_DATA_DIR||null,node:process.versions.node,platform:process.platform,localOnly:true}));return}
+ if(u.pathname==='/local/connection-check'&&req.method==='GET'){
+  if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`||req.headers['sec-fetch-site']==='cross-site'){res.writeHead(403);res.end();return}
+  let result;try{const response=await upstreamFetch('https://youtube-niche-global-api.vercel.app/api/auth',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({action:'login'}),signal:AbortSignal.timeout(15000),credentials:'omit',redirect:'error'});const data=await response.json().catch(()=>null);const ready=response.status===400&&data?.code==='AUTH_EMAIL_INVALID';result={reachable:true,ready,status:response.status,transport:upstreamTransport,message:ready?'认证服务可达。连接正常不代表账号密码已验证。':`认证服务返回 HTTP ${response.status}，请稍后重试或检查原站服务。`}}catch{result={reachable:false,ready:false,transport:upstreamTransport,message:'连接认证服务失败。请检查系统网络或代理，再点击重试。'}}res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(result));return;
+ }
  if(u.pathname.startsWith('/local/')){await localRoute(req,res,u);return}
  if(u.pathname.startsWith('/gateway/')){
   res.setHeader('Cache-Control','no-store');
@@ -24,9 +30,9 @@ export async function handleRequest(req,res){
   if(!['GET','POST'].includes(req.method)||auth&&req.method!=='POST'){res.writeHead(405);res.end();return}
   try{
    const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>1024*1024){res.writeHead(413);res.end();return}chunks.push(c)}
-   const response=await fetch(`https://youtube-niche-global-api.vercel.app/api/${auth?'auth':signals?'youtube-signals':'video/'+op}${u.search}`,{method:req.method,headers:{accept:'application/json',...(req.headers.authorization?{authorization:req.headers.authorization}:{}),...(req.headers['idempotency-key']?{'idempotency-key':req.headers['idempotency-key']}:{}),...(req.method==='POST'?{'content-type':'application/json'}:{})},body:req.method==='POST'?Buffer.concat(chunks):undefined,signal:AbortSignal.timeout(60000)});
+   const response=await upstreamFetch(`https://youtube-niche-global-api.vercel.app/api/${auth?'auth':signals?'youtube-signals':'video/'+op}${u.search}`,{method:req.method,headers:{accept:'application/json',...(req.headers.authorization?{authorization:req.headers.authorization}:{}),...(req.headers['idempotency-key']?{'idempotency-key':req.headers['idempotency-key']}:{}),...(req.method==='POST'?{'content-type':'application/json'}:{})},body:req.method==='POST'?Buffer.concat(chunks):undefined,signal:AbortSignal.timeout(auth?20000:60000),credentials:'omit',redirect:'error'});
    const text=await response.text();let data;try{data=JSON.parse(text)}catch{data={error:'上游服务返回了非 JSON 响应，请稍后查询任务状态。'}}res.writeHead(response.status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));
-  }catch{res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'连接原站服务失败；若已提交生成，请查询已有任务，避免重复提交。'}))}return;
+  }catch{res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:auth?'连接认证服务失败，请先检测连接，并检查系统网络或代理。':'连接原站服务失败；若已提交生成，请查询已有任务，避免重复提交。',code:auth?'AUTH_CONNECTION_FAILED':'UPSTREAM_CONNECTION_FAILED'}))}return;
  }
  const files={'/composition-options.mjs':'composition-options.mjs','/updates.js':'updates.js','/research.html':'research.html','/research.js':'research.js','/research-model.js':'research-model.js','/library.html':'library.html','/library.js':'library.js','/library-model.mjs':'library-model.mjs','/':'index.html','/index.html':'index.html','/generation.html':'generation.html','/compose.html':'compose.html','/setup.html':'setup.html','/setup.js':'setup.js','/compose.js':'compose.js','/generation.js':'generation.js','/workspace.js':'workspace.js','/analytics.js':'analytics.js','/queue.mjs':'queue.mjs','/generation-config.mjs':'generation-config.mjs'};
  if(/^\/vendor\/(tabler-icons\.min\.css|fonts\/tabler-icons\.(woff2?|ttf|eot|svg))$/.test(u.pathname)){try{const data=await readFile(path.join(root,u.pathname.slice(1)));res.setHeader('Content-Type',u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.woff2')?'font/woff2':'application/octet-stream');res.end(data)}catch{res.writeHead(404);res.end()}return}
