@@ -18,16 +18,17 @@ export async function handleRequest(req,res){
  if(u.pathname.startsWith('/gateway/')){
   res.setHeader('Cache-Control','no-store');
   if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`){res.writeHead(403);res.end();return}
-  const op=u.pathname.slice('/gateway/'.length);const auth=op==='auth';
-  if(!auth&&!operations.has(op)){res.writeHead(404);res.end();return}
+  const op=u.pathname.slice('/gateway/'.length);const auth=op==='auth',signals=op==='youtube-signals';
+  if(!auth&&!signals&&!operations.has(op)){res.writeHead(404);res.end();return}
+  if(signals&&req.method!=='GET'){res.writeHead(405);res.end();return}
   if(!['GET','POST'].includes(req.method)||auth&&req.method!=='POST'){res.writeHead(405);res.end();return}
   try{
    const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>1024*1024){res.writeHead(413);res.end();return}chunks.push(c)}
-   const response=await fetch(`https://youtube-niche-global-api.vercel.app/api/${auth?'auth':'video/'+op}${u.search}`,{method:req.method,headers:{accept:'application/json',...(req.headers.authorization?{authorization:req.headers.authorization}:{}),...(req.headers['idempotency-key']?{'idempotency-key':req.headers['idempotency-key']}:{}),...(req.method==='POST'?{'content-type':'application/json'}:{})},body:req.method==='POST'?Buffer.concat(chunks):undefined,signal:AbortSignal.timeout(60000)});
+   const response=await fetch(`https://youtube-niche-global-api.vercel.app/api/${auth?'auth':signals?'youtube-signals':'video/'+op}${u.search}`,{method:req.method,headers:{accept:'application/json',...(req.headers.authorization?{authorization:req.headers.authorization}:{}),...(req.headers['idempotency-key']?{'idempotency-key':req.headers['idempotency-key']}:{}),...(req.method==='POST'?{'content-type':'application/json'}:{})},body:req.method==='POST'?Buffer.concat(chunks):undefined,signal:AbortSignal.timeout(60000)});
    const text=await response.text();let data;try{data=JSON.parse(text)}catch{data={error:'上游服务返回了非 JSON 响应，请稍后查询任务状态。'}}res.writeHead(response.status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));
   }catch{res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'连接原站服务失败；若已提交生成，请查询已有任务，避免重复提交。'}))}return;
  }
- const files={'/library.html':'library.html','/library.js':'library.js','/library-model.mjs':'library-model.mjs','/':'index.html','/index.html':'index.html','/generation.html':'generation.html','/compose.html':'compose.html','/setup.html':'setup.html','/setup.js':'setup.js','/compose.js':'compose.js','/generation.js':'generation.js','/workspace.js':'workspace.js','/analytics.js':'analytics.js','/queue.mjs':'queue.mjs','/generation-config.mjs':'generation-config.mjs'};
+ const files={'/research.html':'research.html','/research.js':'research.js','/research-model.js':'research-model.js','/library.html':'library.html','/library.js':'library.js','/library-model.mjs':'library-model.mjs','/':'index.html','/index.html':'index.html','/generation.html':'generation.html','/compose.html':'compose.html','/setup.html':'setup.html','/setup.js':'setup.js','/compose.js':'compose.js','/generation.js':'generation.js','/workspace.js':'workspace.js','/analytics.js':'analytics.js','/queue.mjs':'queue.mjs','/generation-config.mjs':'generation-config.mjs'};
  if(/^\/vendor\/(tabler-icons\.min\.css|fonts\/tabler-icons\.(woff2?|ttf|eot|svg))$/.test(u.pathname)){try{const data=await readFile(path.join(root,u.pathname.slice(1)));res.setHeader('Content-Type',u.pathname.endsWith('.css')?'text/css':u.pathname.endsWith('.woff2')?'font/woff2':'application/octet-stream');res.end(data)}catch{res.writeHead(404);res.end()}return}
  if(!files[u.pathname]){res.writeHead(404);res.end();return}
  try{const file=files[u.pathname];res.setHeader('Content-Type',(file.endsWith('.js')||file.endsWith('.mjs'))?'text/javascript; charset=utf-8':'text/html; charset=utf-8');res.end(await readFile(path.join(root,file)))}catch{res.writeHead(500);res.end('页面读取失败')}

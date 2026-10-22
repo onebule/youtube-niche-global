@@ -48,7 +48,7 @@ if(single)app.whenReady().then(async()=>{
   {label:'视图',submenu:[{role:'reload'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{role:'togglefullscreen'}]}
  ]));
  await openWindow();
- if(app.commandLine.hasSwitch('smoke-test')){const response=await net.fetch('creator://app/local/environment');const state=await response.json();if(!response.ok||!state.desktop)throw Error('Desktop protocol smoke test failed');await window.loadURL('creator://app/library.html#ideas');const smoke=require('./library-smoke.cjs');await window.webContents.executeJavaScript('('+smoke.toString()+')()');console.log('Desktop window, library tasks and backup restore ready.');window.destroy();server.close(()=>app.exit(0));return}
+ if(app.commandLine.hasSwitch('smoke-test')){const response=await net.fetch('creator://app/local/environment');const state=await response.json();if(!response.ok||!state.desktop)throw Error('Desktop protocol smoke test failed');await window.loadURL('creator://app/library.html#ideas');const smoke=require('./library-smoke.cjs');await window.webContents.executeJavaScript('('+smoke.toString()+')()');await window.loadURL('creator://app/research.html');const researchSmoke=require('./research-smoke.cjs');await window.webContents.executeJavaScript('('+researchSmoke.toString()+')()');console.log('Desktop window, libraries, research and backup restore ready.');window.destroy();server.close(()=>app.exit(0));return}
  app.on('activate',()=>{if(!window)void openWindow()});
 }).catch(e=>{if(app.commandLine.hasSwitch('smoke-test')){console.error(e);app.exit(1);return}dialog.showErrorBox('Creator OS 启动失败',e.message);app.quit()});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
