@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validateLibrary,mergeLibrary,promptFor} from './library-model.mjs';import {validateBackup} from './backups.mjs';
+const item={id:'a',kind:'characters',name:'主角',content:'蓝色外套',tags:'人物',status:'待评估'};const lib={version:1,items:[item]};
+test('library imports reject malformed and duplicate records',()=>{assert.throws(()=>validateLibrary({version:1,items:[item,item]}));assert.throws(()=>validateLibrary({version:1,items:[{...item,content:42}]}));assert.throws(()=>validateLibrary({version:1,items:[{...item,name:' '}]}))});
+test('merge is idempotent and never silently overwrites conflicts',()=>{assert.deepEqual(mergeLibrary(lib,lib),lib);assert.throws(()=>mergeLibrary(lib,{version:1,items:[{...item,content:'红外套'}]}));assert.equal(mergeLibrary(lib,{version:1,items:[{...item,id:'b'}]}).items.length,2)});
+test('shared prompt includes character identity and skill instructions',()=>{assert.equal(promptFor([item]),'角色设定：主角\n蓝色外套')});
+test('disk backup validates library contents',()=>{const b={format:'creator-os-backup',version:2,workspace:{scenes:[],meta:[],metrics:[]},extra:{'creator-library':lib}};assert.equal(validateBackup(b),b);assert.throws(()=>validateBackup({...b,extra:{'creator-library':{version:1,items:[{...item,kind:'invalid'}]}}}))});
