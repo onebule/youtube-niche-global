@@ -1,0 +1,45 @@
+appId: top.niqivo.creatoros.desktop
+productName: Creator OS
+copyright: Copyright © 2026 Creator OS
+asar: true
+npmRebuild: false
+compression: normal
+directories:
+  output: desktop-dist
+files:
+  - desktop/**
+  - '*.html'
+  - '*.js'
+  - '*.mjs'
+  - '!*.test.mjs'
+  - '!launcher.mjs'
+  - vendor/**
+  - package.json
+extraResources:
+  - from: tools
+    to: tools
+    filter:
+      - '**/*'
+artifactName: 'Creator-OS-${version}-${os}-${arch}.${ext}'
+win:
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+linux:
+  category: Office
+  target: AppImage

@@ -1,0 +1,1 @@
+将 FFmpeg 与 ffprobe 可执行文件放在这里。Windows 文件名为 ffmpeg.exe 和 ffprobe.exe；Mac/Linux 为 ffmpeg 和 ffprobe，且需要有执行权限。请使用适合本机系统和 CPU 的版本。此目录不自带视频工具。官方入口：https://ffmpeg.org/download.html

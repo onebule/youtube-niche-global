@@ -1,0 +1,28 @@
+{
+  "name": "creator-os-workbench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node launcher.mjs",
+    "dev": "node launcher.mjs --no-open",
+    "test": "node scripts/run-tests.mjs",
+    "desktop:dev": "node scripts/prepare-desktop.mjs && electron .",
+    "desktop:build": "node scripts/prepare-desktop.mjs && electron-builder --publish never",
+    "desktop:dir": "node scripts/prepare-desktop.mjs && electron-builder --dir --publish never"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "version": "0.6.0",
+  "description": "Creator OS desktop production workspace",
+  "main": "desktop/main.cjs",
+  "author": "Creator OS",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3",
+    "@tabler/icons-webfont": "3.31.0",
+    "ffmpeg-static": "5.3.0",
+    "@ffprobe-installer/ffprobe": "2.1.2"
+  }
+}

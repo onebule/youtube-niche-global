@@ -1,0 +1,7 @@
+node_modules/
+desktop-dist/
+runtime/
+data/
+vendor/
+tools/*
+!tools/*.txt
