@@ -11,3 +11,5 @@ test('forwards login and text generation to original endpoints',async()=>{await 
 test('environment check reports runtime without calling upstream generation services',async()=>{const n=calls.length;const result=await request('/local/environment');assert.equal(result.status,200);assert.equal(JSON.parse(result.body).version,'0.6');assert.equal(calls.length,n)});
 
 test('disk backup routes reject cross-origin writes and path traversal',async()=>{assert.equal((await request('/local/backups','POST',{origin:'https://untrusted.invalid'},'{}')).status,403);assert.equal((await request('/local/backups?id=../secret.json')).status,400)});
+
+test('desktop local service requires its per-launch secret',async()=>{const previous=process.env.CREATOR_DESKTOP_TOKEN;try{process.env.CREATOR_DESKTOP_TOKEN='desktop-test-secret';assert.equal((await request('/local/environment')).status,403);assert.equal((await request('/local/environment','GET',{'x-creator-desktop':'desktop-test-secret'})).status,200)}finally{if(previous===undefined)delete process.env.CREATOR_DESKTOP_TOKEN;else process.env.CREATOR_DESKTOP_TOKEN=previous}});

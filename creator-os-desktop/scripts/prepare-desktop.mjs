@@ -1,4 +1,4 @@
-import {mkdir,copyFile,cp,readFile,writeFile} from 'node:fs/promises';import {fileURLToPath} from 'node:url';import path from 'node:path';import {createRequire} from 'node:module';
+import {mkdir,copyFile,cp,readFile,writeFile,chmod} from 'node:fs/promises';import {fileURLToPath} from 'node:url';import path from 'node:path';import {createRequire} from 'node:module';
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const dist=path.join(root,'node_modules','@tabler','icons-webfont','dist');
 await mkdir(path.join(root,'vendor'),{recursive:true});
@@ -8,7 +8,7 @@ console.log('Desktop assets prepared locally.');
 
 const require=createRequire(import.meta.url);
 await mkdir(path.join(root,'tools'),{recursive:true});
-for(const [name,source] of [['ffmpeg',require('ffmpeg-static')],['ffprobe',require('@ffprobe-installer/ffprobe').path]]){await copyFile(source,path.join(root,'tools',name+(process.platform==='win32'?'.exe':'')))}
+for(const [name,source] of [['ffmpeg',require('ffmpeg-static')],['ffprobe',require('@ffprobe-installer/ffprobe').path]]){await copyFile(source,path.join(root,'tools',name+(process.platform==='win32'?'.exe':'')));if(process.platform!=='win32')await chmod(path.join(root,'tools',name),0o755)}
 console.log('Bundled local video tools for '+process.platform+'/'+process.arch);
 
 const ffmpegDir=path.join(root,'node_modules','ffmpeg-static');

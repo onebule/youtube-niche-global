@@ -13,7 +13,7 @@ export async function handleRequest(req,res){
  if(process.env.CREATOR_DESKTOP_TOKEN&&req.headers['x-creator-desktop']!==process.env.CREATOR_DESKTOP_TOKEN){res.writeHead(403);res.end();return}
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');
  if(u.pathname==='/local/backups'){await backupRoute(req,res,u);return}
- if(u.pathname==='/local/environment'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({version:APP_VERSION,product:APP_ID,node:process.versions.node,platform:process.platform,localOnly:true}));return}
+ if(u.pathname==='/local/environment'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({version:APP_VERSION,product:APP_ID,desktop:!!process.env.CREATOR_DESKTOP_TOKEN,dataDirectory:process.env.CREATOR_DATA_DIR||null,node:process.versions.node,platform:process.platform,localOnly:true}));return}
  if(u.pathname.startsWith('/local/')){await localRoute(req,res,u);return}
  if(u.pathname.startsWith('/gateway/')){
   res.setHeader('Cache-Control','no-store');
