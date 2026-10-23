@@ -1,0 +1,3 @@
+export const speeds={slow:{windows:-3,mac:130},normal:{windows:0,mac:175},fast:{windows:3,mac:220}};
+export function validateSpeech(value){if(!value||typeof value.text!=='string'||!value.text.trim()||value.text.length>5000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value.text))throw Error('配音正文不能为空，单次最多 5000 字');if(typeof value.voice!=='string'||!value.voice||value.voice.length>200)throw Error('请选择可用的系统语音');const speed=value.speed??'normal';if(!Object.hasOwn(speeds,speed))throw Error('配音语速不正确');return {text:value.text.trim(),voice:value.voice,speed}}
+export function parseMacVoices(text){return text.split(/\r?\n/).flatMap(line=>{const m=/^(.+?)\s+([a-z]{2,3}[_-][A-Za-z0-9_-]+)\s+#/.exec(line);return m?[{id:m[1].trim(),name:m[1].trim(),language:m[2]}]:[]})}
